@@ -1,38 +1,35 @@
 # CounselConnect — Current Task
 
-**Status:** ACTIVE
+**Status:** COMPLETED
 
 ## Objective
 
-Publish the whole project as an initial backup to a new GitHub repository with zero secrets and zero applicant data in the commit.
+Publish the current working project as the GitHub backup at https://github.com/jekjek29/CounselConnect (private), with zero secrets and zero applicant data tracked.
 
-## Scope
+## Outcome
 
-**In:**
-- Sanitize `backend/.env.example` (it currently duplicates the real `.env`, including the MySQL password, Gmail SMTP app password, and dev admin key).
-- Extend root `.gitignore` (`.opencode/`, `.kilocode/`, `desktop.ini`).
-- Initialize git on `main`, create the initial commit, connect the GitHub remote, push, and record completion (second commit).
+- Repo initialized on `main`; initial commit `7a1925e` (188 files) + cleanup commit.
+- Remote `origin` = https://github.com/jekjek29/CounselConnect.git. Its old reverted scaffold history (8 commits) was replaced with the current project by explicit user decision (2026-09-04).
+- Verified excluded from tracking: `backend/.env`, `frontend/.env`, `backend/var/**` (applicant CORs), `backend/.venv/`, `frontend/node_modules/`.
+- Secret scan over tracked tree (DB password, Gmail address, app password, dev admin key): no matches.
+- Removed from tracking: stray `backend/package-lock.json` stub, `frontend/tsconfig.tsbuildinfo` build artifact.
+- `backend/.env.example` was already clean (placeholder values only); no leak existed.
 
-**Out:**
-- Any application behavior change, refactors, renames, CI, or docs-contract edits.
-- Moving the project out of OneDrive; GitHub account/repo settings beyond this push.
+## Verification (executed)
 
-## Acceptance criteria
+- `git check-ignore` confirmed all sensitive paths ignored.
+- `git grep --cached` secret scan: clean.
+- Full staged list reviewed manually (189 → 188 files).
+- Push verified via `git ls-remote origin main`.
 
-1. `backend/.env`, `frontend/.env`, `backend/var/**` (applicant CORs), `backend/.venv/**`, `frontend/node_modules/**` are untracked (verified with `git check-ignore`).
-2. A secret-pattern scan (DB password, Gmail address, app password, dev admin key) over files git would track returns no matches.
-3. Both `.env.example` files are tracked with placeholder values only.
-4. Initial commit is pushed to `origin/main`; `git ls-remote origin main` shows the ref.
+## Remaining limitations
 
-## Verification (planned)
+- Remote history rewrite: old scaffold commits are unrecoverable from GitHub (user-approved).
+- OneDrive path means `git` performance is occasionally slow; unrelated to repo correctness.
 
-- `git status --short` + `git ls-files` full staged-tree review.
-- `git check-ignore` on every sensitive path.
-- rg secret scan excluding ignored trees.
-- Push output + `git ls-remote origin main`.
+## Human decisions recorded
 
-## Human decisions needed (asked this session)
-
-- Repo visibility (private recommended).
-- GitHub repo URL (user creates the empty repo on github.com; gh CLI is not installed).
-- Commit author name (git `user.name` is currently unset locally).
+- Repo visibility: private.
+- Remote: jekjek29/CounselConnect (replaced jaderickaustria57 guess; user provided URL).
+- Author identity: jaderickaustria57@gmail.com (repo-local config).
+- Old remote scaffold replaced entirely (user choice).

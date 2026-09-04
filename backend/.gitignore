@@ -16,6 +16,11 @@ htmlcov/
 var/
 *.sqlite3
 
+# Stray npm artifacts (Python backend)
+package.json
+package-lock.json
+node_modules/
+
 # OS noise
 .DS_Store
 Thumbs.db
