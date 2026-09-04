@@ -1,0 +1,36 @@
+# CounselConnect — Registration and Enrollment Verification
+
+## Contract
+
+Student registers with Student Number, personal email, required account/academic data, and **current COR only**. A new account is `PENDING_VERIFICATION` and has no normal Student access.
+
+```text
+validate input/file → pending account + private temporary COR
+→ assigned Guidance Staff or Counselor review
+→ APPROVED / NEEDS_RESUBMISSION / REJECTED
+→ record decision + delete COR
+```
+
+If still pending after seven days: delete COR, set verification `EXPIRED`, and keep the account restricted. Approval sets account `ACTIVE` plus `valid_until`. When that date passes, set `VERIFICATION_EXPIRED`; Student may submit a new current COR to renew. Never infer graduation from year level.
+
+## File controls
+
+- Allowlist type/size; inspect signature/MIME; randomize storage key.
+- Keep outside public/static paths; authorize every review fetch; never expose storage paths.
+- Delete after every decision, replacement, or expiry. Record/retry/alert cleanup failure.
+- Exclude temporary files from long-lived backups where feasible.
+- MySQL keeps status, timestamps, reviewer/reason, `valid_until`, and cleanup metadata—not document bytes.
+
+## Authorization
+
+- Guidance Staff: assigned cases only.
+- Counselor: authorized queue, decisions, and permitted academic corrections.
+- Pending/expired Student: own account and COR re-verification only.
+
+## Required tests
+
+Pending/expired access block; unauthorized/cross-assignment read; malicious name/MIME/size; each state transition; delete/retry; seven-day cleanup; renewal/`valid_until`; no public/direct path.
+
+## Pending
+
+Accepted formats/size, exact rejection/appeal/privacy wording, and audit field set.

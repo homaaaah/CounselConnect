@@ -1,0 +1,163 @@
+COUNSELCONNECT MARKDOWN UPDATE GUIDE
+====================================
+
+Purpose
+-------
+Use this list to keep AI context accurate without rewriting every document after
+every code change. Update a file only when its stated trigger occurs.
+
+
+1. UPDATE MOST OF THE TIME / EVERY ACTIVE TASK
+----------------------------------------------
+
+.ai/CURRENT_TASK.md
+  Update before a substantial task and at handoff/completion.
+  Keep the objective, context route, scope, acceptance criteria, verification,
+  and unresolved human decisions current. Clear or replace stale task details
+  before starting unrelated work.
+
+
+2. UPDATE SOMETIMES
+-------------------
+
+Update these only when their behavior, contract, decision, or routing actually
+changes. Routine implementation progress does not qualify.
+
+.ai/CONTEXT_MAP.md
+  When files/routes are added, renamed, removed, or the minimum task context changes.
+
+.ai/DECISIONS.md
+  When a durable decision is approved, superseded, or newly marked pending.
+
+.ai/REQUIREMENTS.md
+  When an accepted functional, privacy, security, safety, or non-functional
+  requirement changes.
+
+docs/API_CONTRACT.md
+  When shared HTTP conventions, response/error shapes, OpenAPI handoff, API
+  compatibility, or the frontend/backend contract-testing workflow changes.
+  Do not duplicate every feature's business rules or hand-edit generated OpenAPI.
+
+docs/DATABASE.md
+  When the ERD, canonical tables, persistence boundary, retention job, or database
+  tooling changes.
+
+docs/REGISTRATION_VERIFICATION.md
+  When registration, COR validation/storage/cleanup, review states, validity, or
+  renewal behavior changes.
+
+docs/APPOINTMENT_SCHEDULING.md
+  When availability, booking, status transitions, rescheduling, cancellation,
+  reminders, or appointment authorization changes.
+
+docs/REAL_TIME_MESSAGING.md
+  When participants, transport behavior, message lifecycle, retention, or chat
+  authorization changes.
+
+docs/SOS_TRIAGE.md
+  When the approved questions, rules, case states, Counselor response, fallback,
+  or retention changes.
+
+docs/AI_EMOTIONAL_BASELINE.md
+  When the local expression model, label set, device behavior, session cue, or
+  privacy boundary changes.
+
+docs/WELLNESS_RESOURCE_DISCOVERY.md
+  When discovery, source controls, metadata, manual-resource types, review,
+  publication, categories, or attachments change.
+
+docs/VIRTUAL_GUIDANCE_ASSISTANT.md
+  When supported requests, grounding sources, provider/model, safety boundaries,
+  or history policy changes.
+
+docs/CONTENT_MANAGEMENT.md
+  When CMS fields, FAQs, announcements, emergency contacts, publication behavior,
+  or Counselor permissions change.
+
+docs/COUNSELOR_DASHBOARD.md
+  When Counselor/Guidance Staff modules, queues, actions, or dashboard access changes.
+
+docs/USER_ROLES.md
+  When a role, capability, assignment rule, ownership rule, or authorization
+  boundary changes.
+
+docs/SECURITY.md
+  When a cross-cutting security/privacy control, sensitive-data rule, retention
+  rule, or priority security test changes.
+
+docs/WORKFLOWS.md
+  When a sequence joining two or more feature modules changes.
+
+
+3. UPDATE RARELY
+----------------
+
+These define stable project structure or agent behavior. Change them only for a
+project-wide shift, not for ordinary feature work.
+
+AGENTS.md
+  Only when the agent-loading protocol, hard project boundaries, or Graphify
+  workflow changes.
+
+.kilo/rules/01-workflow.md
+  Only when the Kilo task lifecycle, risk-based review, or required context-loading
+  behavior changes.
+
+.ai/RULES.md
+  Only when a cross-project development, privacy, testing, or documentation rule changes.
+
+.ai/PROJECT.md
+  Only when project identity, users, approved stack, architecture style, major
+  feature scope, or stable system behavior changes.
+
+.ai/ARCHITECTURE.md
+  Only when system layers, module boundaries, storage boundaries, or architectural
+  non-goals change.
+
+.ai/NAMING_CONVENTIONS.md
+  Only when the team intentionally adopts a new naming/API/database convention or
+  changes a canonical identifier/state. Do not edit it merely to accommodate one
+  inconsistent implementation; fix the implementation instead unless the team
+  approves a convention change.
+
+.ai/README.md
+  Only when the .ai file set or each file's purpose changes.
+
+docs/README.md
+  Only when documentation files are added, renamed, removed, or repurposed.
+
+docs/SYSTEM_OVERVIEW.md
+  Only when the user model, technology stack, main feature map, or global system
+  boundary changes.
+
+
+GENERATED CONTRACT — DO NOT MANUALLY UPDATE
+-------------------------------------------
+
+contracts/openapi.json
+  Generate from FastAPI routes and Pydantic schemas after an agreed API change.
+  Commit its diff for frontend handoff and review; never repair it by hand.
+
+
+GENERATED MARKDOWN — DO NOT MANUALLY UPDATE
+-------------------------------------------
+
+.opencode/skills/graphify/SKILL.md
+.opencode/skills/graphify/references/**/*.md
+
+These are generated/tool-owned Graphify files. Regenerate them through the proper
+Graphify workflow when required; do not treat them as CounselConnect specifications.
+
+
+QUICK RULE
+----------
+
+For a normal coding task:
+  1. Update CURRENT_TASK.md.
+  2. Implement and test the task.
+  3. Update one owning feature document only if its observable contract changed.
+  4. Update API_CONTRACT for shared API conventions or handoff behavior; regenerate
+     openapi.json for exact implemented endpoint changes.
+  5. Update DECISIONS, REQUIREMENTS, DATABASE, ROLES, SECURITY, or WORKFLOWS only
+     when the change genuinely affects that shared contract.
+  6. Do not rewrite every Markdown file after every task.

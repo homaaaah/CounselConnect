@@ -1,0 +1,19 @@
+# Node / build artifacts
+node_modules/
+dist/
+*.local
+*.tsbuildinfo
+
+# Environment files (only .env.example is committed)
+.env
+.env.*
+!.env.example
+
+# Native platform folders added by Capacitor sync (regenerated)
+android/
+ios/
+
+# Logs / OS noise
+npm-debug.log*
+.DS_Store
+Thumbs.db

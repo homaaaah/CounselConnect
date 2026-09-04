@@ -1,0 +1,21 @@
+# CounselConnect backend ignores
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Real environment files (only .env.example is committed)
+.env
+.env.*
+!.env.example
+
+# Local private file stores (COR files must never be committed)
+var/
+*.sqlite3
+
+# OS noise
+.DS_Store
+Thumbs.db

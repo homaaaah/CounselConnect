@@ -1,0 +1,21 @@
+# CounselConnect backend dependencies.
+# Stack is fixed by ADR-001/ADR-002 (docs/SYSTEM_OVERVIEW.md, .ai/DECISIONS.md):
+# FastAPI + SQLAlchemy 2.0 + PyMySQL (sync) + Alembic on MySQL 8.4 LTS.
+# Install with: python -m pip install -r requirements.txt
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy>=2.0
+pymysql>=1.1
+cryptography>=42.0        # required by PyMySQL for caching_sha2_password (MySQL 8.x)
+alembic>=1.13
+pydantic>=2.6
+pydantic-settings>=2.2
+bcrypt>=4.1               # password hashing primitives (app.core.security)
+email-validator>=2.1      # pydantic EmailStr in account schemas
+tzdata>=2024.1            # zoneinfo on Windows: alembic.ini timezone = UTC
+python-multipart>=0.0.9  # FastAPI multipart/form-data (COR upload)
+
+# Dev / test
+pytest>=8.0
+httpx>=0.27

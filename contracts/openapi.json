@@ -1,0 +1,10 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CounselConnect API",
+    "version": "0.1.0",
+    "description": "Placeholder snapshot. Regenerate from the FastAPI application (app.main:app /openapi.json) once real endpoints are implemented; do not hand-edit."
+  },
+  "paths": {},
+  "_note": "This file is a bookmark placeholder per docs/API_CONTRACT.md. The committed snapshot will be generated from the backend; empty paths mean no endpoint contracts have been implemented yet."
+}
