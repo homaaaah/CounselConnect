@@ -19,5 +19,6 @@ Load one owning feature doc plus shared docs only when needed.
 | Assistant | `VIRTUAL_GUIDANCE_ASSISTANT.md` |
 | CMS/announcements | `CONTENT_MANAGEMENT.md` |
 | Counselor operations | `COUNSELOR_DASHBOARD.md` |
+| Full local setup for new teammates | `TEAM_SETUP_GUIDE.md` |
 
 API/database/source naming lives in `.ai/NAMING_CONVENTIONS.md`. Exact implemented endpoint schemas live in generated `contracts/openapi.json`; do not hand-edit that snapshot. Update one owning contract and only affected cross-references; avoid copying global rules into every feature file.
