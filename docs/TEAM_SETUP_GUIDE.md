@@ -45,14 +45,12 @@ Open `backend\.env` and fill in **your own** values:
 ```env
 COUNSELCONNECT_DB_HOST=localhost
 COUNSELCONNECT_DB_PORT=3306
-COUNNELCONNECT_DB_NAME=counselconnect
+COUNSELCONNECT_DB_NAME=counselconnect
 COUNSELCONNECT_DB_USER=your_mysql_user
 COUNSELCONNECT_DB_PASSWORD=your_mysql_password
 
 COUNSELCONNECT_DEV_ADMIN_KEY=dev-review-key-2026
 ```
-
-> ⚠️ Fix the typo above when editing: `COUNSELCONNECT_DB_NAME` (double S in CONNECT). 
 
 Optional (real emails; without it, decisions report "email not sent" honestly):
 ```env
