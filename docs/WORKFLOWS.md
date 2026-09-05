@@ -2,6 +2,18 @@
 
 Detail lives in feature docs; this file only joins modules.
 
+## Authentication session
+
+```text
+verify Student Number or staff email + password
+→ create revocable hashed opaque session in MySQL
+→ secure HttpOnly web cookie + CSRF protection
+→ one-hour idle / 12-hour absolute limit
+→ logout, reset, restriction, disable, or expiry → revoke/deny
+```
+
+A five-minute warning permits explicit continuation. Genuine CounselConnect actions renew idle time; background polling and WebSocket heartbeats do not. `Remember Me` is excluded from v1.
+
 ## Account lifecycle
 
 ```text
@@ -36,11 +48,12 @@ An `APPOINTMENT` conversation requires a confirmed online appointment at its sch
 
 ```text
 five answers → approved rules → bounded result or OPEN case
+→ generic alert to authenticated, connected, recently confirmed AVAILABLE Counselor
 → Counselor response / approved emergency-contact fallback
 → RESPONDED → CLOSED
 ```
 
-Expression cue runs beside this flow and never enters the rule calculation.
+Counselor `AVAILABLE` / `BUSY` / `UNAVAILABLE` presence is separate from login. Logout, session expiry, or lost connection makes the Counselor unavailable. Expression cue runs beside this flow and never enters the rule calculation.
 
 ## Resources and assistant
 

@@ -1,0 +1,7 @@
+{
+    // CounselConnect workspace: backend Python interpreter lives in
+    // backend/.venv (created per docs/TEAM_SETUP_GUIDE.md).
+    // Without this, the Python extension picks the global interpreter and
+    // reports "import sqlalchemy could not be resolved" (Pylance).
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe"
+}

@@ -22229,7 +22229,7 @@ Exact `mermaidData` attribute:
 
 ```json
 {
-  "data": "flowchart TB\n    STUDENT[Student]\n\n    P61([6.1 Interpret Supported Request Type])\n    P62([6.2 Retrieve Navigation Guidance])\n    P63([6.3 Retrieve Approved FAQ Answer])\n    P64([6.4 Retrieve Published Resource Recommendations])\n    P65([6.5 Enforce Assistant Scope and Safety Boundaries])\n    P66([6.6 Return Bounded Assistant Response])\n\n    D7[(D7 Wellness Resource Data and Files)]\n    D8[(D8 CMS, FAQ, and Emergency Contact Data)]\n\n    STUDENT -->|Navigation, FAQ, resource, or unsupported query| P61\n    P61 -->|System-navigation request| P62\n    P61 -->|Approved-FAQ request| P63\n    P61 -->|Wellness-resource request| P64\n    P61 -->|Clinical, confidential, unknown, or unsupported request| P65\n\n    D8 -->|Approved system-navigation content| P62\n    P62 -->|Candidate navigation response| P65\n\n    D8 -->|Approved FAQ content| P63\n    P63 -->|Candidate FAQ response| P65\n\n    D7 -->|PUBLISHED resource metadata only| P64\n    P64 -->|Candidate resource cards and canonical links| P65\n\n    P65 -->|Approved answer or bounded limitation| P66\n    P66 -->|Navigation, FAQ, resource recommendation, or limitation response| STUDEN",
+  "data": "flowchart TB\n    STUDENT[Student]\n\n    P61([6.1 Interpret Supported Request Type])\n    P62([6.2 Retrieve Navigation Guidance])\n    P63([6.3 Retrieve Approved FAQ Answer])\n    P64([6.4 Retrieve Published Resource Recommendations])\n    P65([6.5 Enforce Assistant Scope and Safety Boundaries])\n    P66([6.6 Return Bounded Assistant Response])\n\n    D7[(D7 Wellness Resource Data and Files)]\n    D8[(D8 CMS, FAQ, and Emergency Contact Data)]\n\n    STUDENT -->|Navigation, FAQ, resource, or unsupported query| P61\n    P61 -->|System-navigation request| P62\n    P61 -->|Approved-FAQ request| P63\n    P61 -->|Wellness-resource request| P64\n    P61 -->|Clinical, confidential, unknown, or unsupported request| P65\n\n    D8 -->|Approved system-navigation content| P62\n    P62 -->|Candidate navigation response| P65\n\n    D8 -->|Approved FAQ content| P63\n    P63 -->|Candidate FAQ response| P65\n\n    D7 -->|PUBLISHED resource metadata only| P64\n    P64 -->|Candidate resource cards and canonical links| P65\n\n    P65 -->|Approved answer or bounded limitation| P66\n    P66 -->|Navigation, FAQ, resource recommendation, or limitation response| STUDENT",
   "config": null
 }
 ```
@@ -22266,7 +22266,7 @@ flowchart TB
     P64 -->|Candidate resource cards and canonical links| P65
 
     P65 -->|Approved answer or bounded limitation| P66
-    P66 -->|Navigation, FAQ, resource recommendation, or limitation response| STUDEN
+    P66 -->|Navigation, FAQ, resource recommendation, or limitation response| STUDENT
 ```
 
 ## Nodes / processes / actors / data stores
@@ -22282,7 +22282,7 @@ flowchart TB
 | 7 | `O9_D-8-RrO-jLHxAk3l_-8` | `n:P66` | 6.6 Return Bounded Assistant Response | `O9_D-8-RrO-jLHxAk3l_-1` | height=39, width=303, x=2975, y=62.2, as=geometry |
 | 8 | `O9_D-8-RrO-jLHxAk3l_-9` | `n:D7` | D7 Wellness Resource Data and Files | `O9_D-8-RrO-jLHxAk3l_-1` | height=67, width=275, x=824, y=30, as=geometry |
 | 9 | `O9_D-8-RrO-jLHxAk3l_-10` | `n:D8` | D8 CMS, FAQ, and Emergency Contact Data | `O9_D-8-RrO-jLHxAk3l_-1` | height=67, width=322, x=777, y=271.17, as=geometry |
-| 10 | `O9_D-8-RrO-jLHxAk3l_-11` | `n:STUDEN` | STUDENT | `O9_D-8-RrO-jLHxAk3l_-1` | height=54, width=116, x=3803, y=54.7, as=geometry |
+| 10 | `O9_D-8-RrO-jLHxAk3l_-11` | `n:STUDENT` | STUDENT | `O9_D-8-RrO-jLHxAk3l_-1` | height=54, width=116, x=3803, y=54.7, as=geometry |
 
 ## Data flows / edges
 
@@ -22300,7 +22300,7 @@ flowchart TB
 | 10 | `O9_D-8-RrO-jLHxAk3l_-21` | `e:D7->P64#0` | PUBLISHED resource metadata only | `O9_D-8-RrO-jLHxAk3l_-9` | `O9_D-8-RrO-jLHxAk3l_-6` |
 | 11 | `O9_D-8-RrO-jLHxAk3l_-22` | `e:P64->P65#0` | Candidate resource cards and canonical links | `O9_D-8-RrO-jLHxAk3l_-6` | `O9_D-8-RrO-jLHxAk3l_-7` |
 | 12 | `O9_D-8-RrO-jLHxAk3l_-23` | `e:P65->P66#0` | Approved answer or bounded limitation | `O9_D-8-RrO-jLHxAk3l_-7` | `O9_D-8-RrO-jLHxAk3l_-8` |
-| 13 | `O9_D-8-RrO-jLHxAk3l_-24` | `e:P66->STUDEN#0` | Navigation, FAQ, resource recommendation, or limitation response | `O9_D-8-RrO-jLHxAk3l_-8` | `O9_D-8-RrO-jLHxAk3l_-11` |
+| 13 | `O9_D-8-RrO-jLHxAk3l_-24` | `e:P66->STUDENT#0` | Navigation, FAQ, resource recommendation, or limitation response | `O9_D-8-RrO-jLHxAk3l_-8` | `O9_D-8-RrO-jLHxAk3l_-11` |
 
 ## Exhaustive page object structure
 

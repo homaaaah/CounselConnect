@@ -4,7 +4,7 @@
 
 ```text
 React/Vite/Tailwind (+ Capacitor)
-          │ HTTPS / transport TBD
+          │ HTTPS; web cookie session
        FastAPI modular monolith
           │ routes → schemas → services → repositories
  SQLAlchemy 2.0 + PyMySQL + Alembic
@@ -12,7 +12,7 @@ React/Vite/Tailwind (+ Capacitor)
       MySQL 8.4 LTS
 ```
 
-Routes own transport, schemas validate contracts, services own authorization/business rules, repositories own persistence. Do not duplicate business rules in React.
+Routes own transport, schemas validate contracts, services own authorization/business rules, repositories own persistence. Web authentication uses a secure HttpOnly opaque-session cookie with CSRF protection; real-time messaging transport and Capacitor credential transport remain separately pending. Do not duplicate business rules in React.
 
 ## Modules
 
@@ -28,6 +28,8 @@ The `appointments` module may request creation or reuse of an appointment-linked
 
 ## Critical flows
 
+- Authentication: verify identifier/password → create hashed opaque `user_sessions` record → secure web cookie → authorize every protected request → revoke on logout/reset/restriction/disable; one-hour idle and 12-hour absolute limits apply.
+- Counselor SOS presence: explicit `AVAILABLE`/`BUSY`/`UNAVAILABLE` + valid connection/recent confirmation; background generic alert; logout/expiry/disconnect → unavailable.
 - Registration: validate → pending account + temporary COR → Staff/Counselor decision → set `valid_until`/state → delete COR.
 - Appointment availability: Counselor selects campus, concrete time, and `ONLINE`/`FACE_TO_FACE`/`BOTH`; face-to-face-capable slots require the Counselor-managed campus Guidance Office location.
 - Appointment booking: validate active Student, slot availability, and mode compatibility → reserve slot and create `PENDING` appointment → copy the campus location for face-to-face → Counselor decision/outcome.

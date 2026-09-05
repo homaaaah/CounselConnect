@@ -48,7 +48,11 @@ Use `GET` to read, `POST` to create or perform an explicit state transition, `PA
 - Every non-public operation requires authentication and server-side authorization.
 - Authorization must enforce role, ownership, assignment, appointment status/mode/time, and conversation purpose where applicable.
 - A hidden or disabled frontend control is not an authorization control.
-- The authentication/session mechanism, refresh behavior, recovery policy, and final auth headers remain pending under `ADR-P01`. Do not invent Bearer-token, cookie, or refresh-token behavior until approved.
+- Authentication uses revocable opaque sessions stored in MySQL. For the web client, send the random session credential only in a `Secure`, `HttpOnly`, `SameSite=Lax` cookie; store only its cryptographic hash. Do not use JWT refresh tokens or browser `localStorage` for authentication.
+- State-changing cookie-authenticated requests require CSRF protection.
+- All roles use a one-hour idle timeout and a 12-hour absolute timeout, with a five-minute warning and explicit continuation. Genuine CounselConnect user actions renew idle activity; background polling and WebSocket heartbeats do not. `Remember Me` is excluded from v1.
+- Passwords use Argon2id. Password-reset credentials are hashed, single-use, expire after 30 minutes, and successful reset revokes active sessions.
+- Exact Capacitor credential transport and production reset-email delivery remain pending under `ADR-P09`.
 - Never place credentials, tokens, COR links, message bodies, SOS answers, or other sensitive values in URLs or routine logs.
 
 ## Request semantics
@@ -237,11 +241,12 @@ Never make an undocumented response-field or enum change solely to satisfy one s
 
 ## Pending project-wide API decisions
 
-- `ADR-P01`: authentication/session mechanism and recovery policy.
+
 - `ADR-P02`: real-time messaging transport and delivery semantics.
 - `ADR-P03`: final SOS instrument, thresholds, availability/fallback rule, and retention.
 - `ADR-P04`: appointment duration/buffer, cutoffs, reminders, blocked periods, and any join window.
 - `ADR-P05`: COR upload limits and exact audit fields.
 - `ADR-P07`: internal-resource attachment limits and manual publication rule.
+- `ADR-P09`: Capacitor session-credential transport and production password-reset email delivery/fallback.
 
 Until approved, these items must remain absent, optional, or explicitly marked `PLANNED` in endpoint work.

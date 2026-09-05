@@ -8,6 +8,9 @@ Use IDs in tasks/tests. Owning feature docs contain detail.
 | FR-REG-02 | Assigned Guidance Staff or Counselor decides `APPROVED`, `NEEDS_RESUBMISSION`, or `REJECTED`; seven-day timeout becomes `EXPIRED`. |
 | FR-REG-03 | Approval sets `ACTIVE` and `valid_until`; expired enrollment locks normal Student features until renewed. |
 | FR-AUTH-01 | Authentication and backend role/ownership authorization protect every non-public operation. |
+| FR-AUTH-02 | Web authentication uses revocable MySQL-backed opaque sessions in secure HttpOnly cookies with CSRF protection; passwords use Argon2id and raw credentials are never persisted or logged. |
+| FR-AUTH-03 | Every role uses a one-hour idle and 12-hour absolute session limit with a five-minute warning; genuine activity may renew idle time, heartbeats may not, and v1 has no Remember Me. |
+| FR-AUTH-04 | Password-reset credentials are hashed, single-use, expire after 30 minutes, and successful reset revokes active sessions without revealing account existence. |
 | FR-APPT-01 | Counselor creates concrete availability; Student requests a slot; Counselor confirms/rejects and records outcomes. |
 | FR-APPT-02 | Counselor assigns `ONLINE`, `FACE_TO_FACE`, or `BOTH` support to each concrete slot; Student selects `ONLINE` or `FACE_TO_FACE` only when compatible with the slot. |
 | FR-APPT-03 | Counselor alone configures each campus Guidance Office location. Face-to-face-capable availability requires that location, and a face-to-face appointment stores it as a booking-time snapshot. |
@@ -15,6 +18,7 @@ Use IDs in tasks/tests. Owning feature docs contain detail.
 | FR-MSG-01 | An authorized Student and Counselor exchange secure real-time text in a one-to-one conversation. |
 | FR-MSG-02 | The system distinguishes `GENERAL`, `APPOINTMENT`, and `SOS` conversations and enforces their source-specific authorization and linkage rules. |
 | FR-SOS-01 | SOS validates five approved answers, applies approved rules, creates/alerts cases when required, and shows approved fallback contacts under the final availability rule. |
+| FR-SOS-02 | Counselor SOS availability is separate from authentication, uses `AVAILABLE`, `BUSY`, or `UNAVAILABLE` plus connection/recent-confirmation signals, and background alerts disclose no Student or SOS details. |
 | FR-CUE-01 | Live Chat/SOS may offer an optional local ~3-second expression scan producing session-only read-only Counselor context. |
 | FR-RES-01 | Students search `PUBLISHED` internal/external wellness resources by text/category. |
 | FR-RES-02 | Automated discovery retrieves bounded metadata from allowlisted sources, normalizes/deduplicates it, and requires Counselor review. |

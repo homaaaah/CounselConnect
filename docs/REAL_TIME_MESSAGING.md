@@ -10,7 +10,7 @@ Approved conversation types are:
 - `APPOINTMENT`: dedicated to one confirmed online appointment.
 - `SOS`: dedicated to one authorized SOS case.
 
-A conversation must not be linked to both an appointment and SOS case.
+A conversation must not be linked to both an appointment and SOS case. All participants require a valid approved session. Genuine send/read/navigation actions may renew the one-hour idle timer; WebSocket ping/pong, automatic reconnect, polling, and connection heartbeats do not.
 
 ## Appointment-linked conversations
 
@@ -28,6 +28,7 @@ Optional expression flow: local scan → session-only `observed_expression_cue` 
 - Retain message bodies for 30 days after closure, then delete bodies/rows according to implementation while keeping only permitted minimal conversation/audit metadata.
 - Keep the expression cue only for the active interaction; discard on close.
 - No audio/video recording, generated transcript, or automatic summary.
+- Session expiry closes protected access but must not corrupt persisted messages or falsely mark an appointment/SOS outcome. After reauthentication, reconnect and reauthorize from server state.
 
 ## Required tests
 
@@ -41,6 +42,7 @@ Optional expression flow: local scan → session-only `observed_expression_cue` 
 - Send/retry/idempotency, reconnect, and close behavior.
 - Cue present/absent without raw media.
 - Cleanup deadline and failure handling.
+- One-hour idle and 12-hour absolute session expiry, five-minute continuation warning, revocation, reauthentication, and proof that heartbeat/reconnect traffic does not renew idle activity.
 
 ## Pending
 
