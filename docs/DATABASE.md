@@ -7,6 +7,7 @@
 | Group | Tables |
 |---|---|
 | Identity/academics | `users`, `student_profiles`, `campuses`, `departments`, `programs` |
+| Sessions | `user_sessions` |
 | Enrollment | `enrollment_verifications`, `enrollment_verification_files` |
 | Appointments | `availability_slots`, `appointments` |
 | Messaging | `conversations`, `messages` |
@@ -41,8 +42,9 @@ Application services must enforce cross-table rules that a row-local SQL `CHECK`
 - Use transactions for atomic record changes; external file deletion remains separately detectable/retryable.
 - Booking locks and revalidates the slot, mode compatibility, and location requirements before reserving the slot and inserting the appointment.
 - Index actual query paths: status/queue timestamps, `valid_until`, campus/mode/open-slot searches, Counselor/Student appointment ranges, online-session links, open conversations/SOS cases, resource status/categories/canonical URL.
-- Alembic owns deployed schema changes; no ad-hoc production patches.
+- Alembic owns deployed schema changes; no ad-hoc production patches. The first Alembic revision (`8f0f8c585641`) is a no-op baseline stamped onto the approved v4.1 initialization SQL; schema changes after the baseline are Alembic migrations (the first is `297c92da239d`, adding `user_sessions`).
 - Retention jobs handle seven-day COR expiry and 30-day post-closure message-body purge.
+- `user_sessions` stores only SHA-256 digests (BINARY(32)) of the opaque session credential and its CSRF token — never raw credentials. `user_id` cascades on user deletion (sessions are ephemeral credentials, not history; `audit_events` remains the durable record). `last_activity_at` moves only on genuine user action and is clamped so it can never exceed `absolute_expires_at`; cleanup removes expired/revoked sessions.
 
 ## Forbidden persistence
 

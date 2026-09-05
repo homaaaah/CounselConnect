@@ -8,10 +8,21 @@
 - Keep confidential data out of routine logs, errors, URLs, analytics, and unapproved services.
 - Audit high-impact decisions/outcomes with minimal metadata; do not copy sensitive content into audit records.
 
+## Login sessions
+
+`user_sessions` stores revocable opaque login sessions as a SHA-256 digest (BINARY(32)) of a ≥256-bit random credential plus the digest of its session-bound CSRF token; raw credentials are never stored, logged, or returned by the API. The transport/verification mechanism remains pending under `ADR-P01`; the table is the storage foundation. Policies the mechanism must honor:
+
+- Sessions idle-expire after one hour without genuine user activity (computed from `last_activity_at`) and absolutely expire 12 hours after creation; the absolute window never slides or extends.
+- Only genuine CounselConnect user actions update `last_activity_at`. Background polling, WebSocket ping/pong, connection heartbeats, and open background tabs must not renew authentication.
+- Revoked, idle-expired, and absolute-expired sessions fail authentication.
+- Logout, password reset, account restriction, and account disablement must revoke sessions (one or all for the user).
+- The table stores no IP history, device fingerprints, COR data, message content, or SOS answers.
+
 ## Sensitive data matrix
 
 | Data | Storage/retention | Key restriction |
 |---|---|---|
+| Login sessions | digest-only rows; deleted when expired/revoked or user deleted | no raw credentials in storage/logs/API; heartbeats never renew activity |
 | Current COR | private temporary store; decision or seven-day TTL | no MySQL blob/public URL/backups beyond need |
 | Appointments | authorized durable records | owner/Counselor scope; mode compatibility; Counselor-only campus-location mutation |
 | Messages | authorized store; bodies purged 30 days after close | no recordings/transcripts/summaries/log bodies |
