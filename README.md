@@ -19,6 +19,8 @@ backend/    FastAPI modular monolith (see backend/app/modules/)
 frontend/   React + Vite + Tailwind + Capacitor scaffold
 contracts/  Generated OpenAPI snapshot (placeholder until endpoints exist)
 docs/       READ-ONLY feature contracts and rules (source of truth)
+db/         Approved baseline SQL schemas (v4 design, v4.1 MySQL-8.4 baseline)
+design/     AI-readable design exports (DFD, ERD, Flowchart)
 .ai/        READ-ONLY agent/project context (source of truth)
 ```
 
@@ -28,7 +30,7 @@ docs/       READ-ONLY feature contracts and rules (source of truth)
 2. `.ai/ARCHITECTURE.md` — modular monolith, layering (`routes → schemas → services → repositories`)
 3. `docs/` — one contract per feature (registration, appointments, messaging, SOS, wellness, assistant, CMS, dashboard, database, security, API, workflows)
 4. `.ai/NAMING_CONVENTIONS.md` — API/DB/code naming
-5. `CounselConnect_Initial_Database_v4.sql` — canonical baseline schema
+5. `db/CounselConnect_Initial_Database_v4.1.sql` — canonical baseline schema (v4 design preserved as `v4.sql`)
 
 ## Roles
 
@@ -55,7 +57,7 @@ npm install
 npm run dev
 ```
 
-**Database** — apply the approved baseline `CounselConnect_Initial_Database_v4.sql` to MySQL 8.4, or run `alembic upgrade head` once a baseline migration is added under `backend/migrations/versions/`.
+**Database** — apply the approved baseline `db/CounselConnect_Initial_Database_v4.1.sql` to MySQL 8.4 (see `docs/TEAM_SETUP_GUIDE.md` for the full walkthrough), or run `alembic upgrade head` from `backend/` after the baseline is stamped.
 
 ## Development rules (summary)
 

@@ -14,7 +14,7 @@ Root `AGENTS.md` is authoritative. Keep this rule focused on task execution; do 
    - unresolved human decisions
 2. Read only that context route and affected code/tests. Batch independent reads.
 3. For API/schema/model/migration work, also read `.ai/NAMING_CONVENTIONS.md`.
-4. If documentation or a durable contract may change, read `MARKDOWN_UPDATE_GUIDE.txt` before editing docs. Otherwise do not load it.
+4. If documentation or a durable contract may change, read `docs/MARKDOWN_UPDATE_GUIDE.txt` before editing docs. Otherwise do not load it.
 5. If a material decision is missing, set the task `BLOCKED`, record the decision needed, and ask the user instead of inventing policy.
 
 Read-only questions and trivial explanations do not require updating `CURRENT_TASK.md`.

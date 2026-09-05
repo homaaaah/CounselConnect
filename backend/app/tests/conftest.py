@@ -4,8 +4,9 @@ The project targets MySQL 8.4 (ADR-002); these fixtures build a dedicated
 test schema `counselconnect_test` once per session:
 
 1. drop + create the schema (utf8mb4);
-2. apply the canonical v4.1 baseline SQL (the approved schema the dev DB
-   also uses; the baseline Alembic revision is intentionally a no-op);
+2. apply the canonical v4.1 baseline SQL from db/ (the approved schema
+   the dev DB also uses; the baseline Alembic revision is intentionally
+   a no-op);
 3. stamp the baseline revision, then apply the user_sessions migration by
    calling its own upgrade()/downgrade() functions against the test
    engine — this exercises the real migration code, not just metadata.
@@ -37,7 +38,7 @@ from app.main import create_app
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
-BASELINE_SQL = PROJECT_ROOT / "CounselConnect_Initial_Database_v4.1.sql"
+BASELINE_SQL = PROJECT_ROOT / "db" / "CounselConnect_Initial_Database_v4.1.sql"
 MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20260904_297c92da239d_add_user_sessions_table.py"
 )
