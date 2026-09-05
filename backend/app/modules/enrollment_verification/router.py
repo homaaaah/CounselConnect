@@ -64,7 +64,8 @@ def upload_cor(
     student_user_id: int,  # TODO: from the authenticated student (ADR-P01)
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
-    verification = service.submit_cor(student_user_id, file)
+    content = file.file.read()
+    verification = service.submit_cor(student_user_id, content, file.filename or "cor.pdf")
     return verification
 
 
