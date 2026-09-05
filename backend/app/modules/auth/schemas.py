@@ -1,25 +1,33 @@
-"""auth Pydantic contracts.
+"""auth Pydantic contracts (ADR-019).
 
-Request/response schemas are structural placeholders ONLY. Exact login
-identifier policy and token/session response shape are pending ADR-P01.
-
-# TODO: Implement after authentication/session mechanism is approved (ADR-P01).
+Login accepts one identifier: students use their student number, staff
+use their email (ADR-005). Responses carry the CSRF token (safe to expose
+to the authenticated caller; it must accompany unsafe-method requests)
+and both expiry timestamps so the frontend can render the five-minute
+idle warning (FR-AUTH-03).
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
-    """Placeholder shape; fields may change with ADR-P01."""
+    identifier: str = Field(min_length=1, max_length=320)
+    password: str = Field(min_length=1, max_length=128)
 
-    identifier: str
-    password: str
+
+class SessionUser(BaseModel):
+    user_id: int
+    email: str
+    role_code: str
+    account_status: str
+    first_name: str
+    last_name: str
 
 
 class AuthResponse(BaseModel):
-    """Placeholder shape; fields may change with ADR-P01."""
-
-    # TODO: Define after ADR-P01 (token/session fields unknown yet).
-    pass
+    user: SessionUser
+    csrf_token: str
+    idle_expires_at: str
+    absolute_expires_at: str

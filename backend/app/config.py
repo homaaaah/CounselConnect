@@ -1,8 +1,6 @@
 """Application settings (single definition, re-exported by app.core.config).
 
 Loaded from COUNSELCONNECT_* environment variables per NAMING_CONVENTIONS.md.
-Authentication/session variables are intentionally absent: the mechanism is
-pending decision ADR-P01.
 """
 
 from __future__ import annotations
@@ -30,6 +28,11 @@ class Settings(BaseSettings):
     # --- Application ---
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    # --- Session cookie (ADR-019) ---
+    # True behind HTTPS (deployment); False only for localhost dev where
+    # browsers refuse Secure cookies on plain http://127.0.0.1 in some cases.
+    cookie_secure: bool = False
+
     # --- Non-MySQL storage roots (never inside version control) ---
     cor_storage_root: str = "./var/cor"
     resource_storage_root: str = "./var/resources"
@@ -42,10 +45,6 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""  # Gmail App Password (16 chars), NOT the login password
-
-    # --- Temporary dev guard for reviewer endpoints (until ADR-P01) ---
-    # If set, reviewer endpoints require header X-Admin-Key to match.
-    dev_admin_key: str = ""
 
     @property
     def database_url(self) -> str:

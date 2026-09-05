@@ -37,3 +37,13 @@ INSERT INTO emergency_contacts (name, contact_number, description, is_active, di
   ('Guidance and Counseling Office', '(02) 8123-4567', 'Main office, weekdays 8am-5pm', 1, 1)
   , ('Campus Security', '(02) 8123-4568', '24/7 campus security hotline', 1, 2)
   , ('National Mental Health Hotline', '1553', 'Free 24/7 crisis support (DOH)', 1, 3);
+
+-- Dev counselor account (ADR-005: initial staff accounts are developer-created).
+-- Password: counselor-dev-2026 (dev only — rotate before any real deployment).
+-- Hash below is Argon2id; to regenerate:
+--   python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('new'))"
+INSERT INTO users (email, password_hash, role_code, account_status, first_name, last_name) VALUES
+  ('counselor@ucc.edu.ph',
+   '$argon2id$v=19$m=65536,t=3,p=4$43nTlIUufFh8aMcQiWuBeg$sIpNnGlbCkbgOdcdOEN0gpk8beIvUAkjfkVzVtQ+nuI',
+   'COUNSELOR', 'ACTIVE', 'Guidance', 'Counselor')
+ON DUPLICATE KEY UPDATE email = email;

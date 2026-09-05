@@ -115,15 +115,27 @@ class AuthRepository(BaseRepository[User]):
         )
         return result.rowcount
 
-    def revoke_all_sessions_for_user(self, user_id: int, reason: str, *, revoked_at: datetime | None = None) -> int:
-        """Revoke every live session for one user (account disablement etc.)."""
+    def revoke_all_sessions_for_user(
+        self,
+        user_id: int,
+        reason: str,
+        *,
+        revoked_at: datetime | None = None,
+        keep_session_id: int | None = None,
+    ) -> int:
+        """Revoke every live session for one user (disablement/single-session).
+
+        `keep_session_id` spares one just-issued session (login replaces
+        older sessions but keeps the newest one alive).
+        """
+        stmt = update(UserSession).where(
+            UserSession.user_id == user_id,
+            UserSession.revoked_at.is_(None),
+        )
+        if keep_session_id is not None:
+            stmt = stmt.where(UserSession.session_id != keep_session_id)
         result = self.session.execute(
-            update(UserSession)
-            .where(
-                UserSession.user_id == user_id,
-                UserSession.revoked_at.is_(None),
-            )
-            .values(
+            stmt.values(
                 revoked_at=revoked_at if revoked_at is not None else utcnow(),
                 revocation_reason=reason,
             )

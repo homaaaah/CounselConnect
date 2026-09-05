@@ -8,15 +8,17 @@
 - Keep confidential data out of routine logs, errors, URLs, analytics, and unapproved services.
 - Audit high-impact decisions/outcomes with minimal metadata; do not copy sensitive content into audit records.
 
-## Login sessions
+## Login sessions (ADR-019 — implemented)
 
-`user_sessions` stores revocable opaque login sessions as a SHA-256 digest (BINARY(32)) of a ≥256-bit random credential plus the digest of its session-bound CSRF token; raw credentials are never stored, logged, or returned by the API. The transport/verification mechanism remains pending under `ADR-P01`; the table is the storage foundation. Policies the mechanism must honor:
+Web authentication uses opaque sessions in the HttpOnly `counselconnect_session` cookie. `user_sessions` stores only SHA-256 digests (BINARY(32)) of a ≥256-bit random credential and its session-bound CSRF token; raw credentials are never stored, logged, or returned in response bodies (the CSRF token itself IS returned to the authenticated caller by login/refresh, and must be echoed in the `X-CSRF-Token` header on unsafe methods). Students sign in with their student number; staff with email. Passwords hash with Argon2id; legacy bcrypt hashes verify and upgrade transparently on successful login.
 
-- Sessions idle-expire after one hour without genuine user activity (computed from `last_activity_at`) and absolutely expire 12 hours after creation; the absolute window never slides or extends.
+- Sessions idle-expire after one hour without genuine user activity (computed from `last_activity_at`) and absolutely expire 12 hours after creation; the absolute window never slides or extends. Login and refresh return both expiry timestamps for the frontend's five-minute idle warning.
 - Only genuine CounselConnect user actions update `last_activity_at`. Background polling, WebSocket ping/pong, connection heartbeats, and open background tabs must not renew authentication.
-- Revoked, idle-expired, and absolute-expired sessions fail authentication.
+- Revoked, idle-expired, and absolute-expired sessions fail authentication; a new login revokes the user's other live sessions (single-session policy).
 - Logout, password reset, account restriction, and account disablement must revoke sessions (one or all for the user).
 - The table stores no IP history, device fingerprints, COR data, message content, or SOS answers.
+- Login is allowed for `ACTIVE`, `PENDING_VERIFICATION`, and `VERIFICATION_EXPIRED` accounts (pending/expired students must still reach account/COR re-verification); feature-level authorization still requires `ACTIVE` where the feature docs say so.
+- Password-reset credentials will be hashed, single-use, 30-minute expiry, and a successful reset revokes all active sessions without revealing account existence (flow in its own task; no Remember Me in v1).
 
 ## Sensitive data matrix
 

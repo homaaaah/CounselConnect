@@ -1,10 +1,11 @@
 """enrollment_verification router.
 
-Student route: POST /enrollment-verifications/cor (upload PDF, multipart).
-Reviewer (COUNSELOR) routes — until ADR-P01 lands, protected by the
-temporary dev admin key (X-Admin-Key) instead of real auth:
+Student route (session-authenticated student identity, ADR-019):
+- POST /enrollment-verifications/cor (upload PDF, multipart)
+
+Reviewer routes (COUNSELOR role — the approval authority; no admin role):
 - GET  /enrollment-verifications/pending        (queue with applicant details)
-- GET  /enrollment-verifications/{id}/detail     (full applicant detail)
+- GET  /enrollment-verifications/history        (permanent decision record)
 - GET  /enrollment-verifications/{id}/cor       (in-app PDF preview)
 - POST /enrollment-verifications/{id}/approve
 - POST /enrollment-verifications/{id}/reject     (comment required)
@@ -14,10 +15,10 @@ Action-endpoint names follow NAMING_CONVENTIONS.md.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import Response
 
-from app.config import get_settings
+from app.modules.accounts.models import User
 from app.modules.enrollment_verification.schemas import (
     ApproveRequest,
     PendingItemResponse,
@@ -30,27 +31,9 @@ from app.modules.enrollment_verification.service import (
     EnrollmentVerificationService,
     get_enrollment_verification_service,
 )
+from app.shared.dependencies import get_current_user, require_counselor, require_roles
 
 router = APIRouter(prefix="/enrollment-verifications", tags=["enrollment_verification"])
-
-# Temporary dev reviewer identity until ADR-P01 provides real auth.
-DEV_REVIEWER_USER_ID = 1
-
-
-def _require_reviewer_key(x_admin_key: str | None = Header(default=None)) -> None:
-    """Dev-only guard: reviewer endpoints need the configured key.
-
-    # TODO: Replace with the real COUNSELOR authorization dependency
-    # once ADR-P01 approves the auth mechanism.
-    """
-    key = get_settings().dev_admin_key
-    if not key:
-        raise HTTPException(
-            status_code=503,
-            detail="Reviewer access is disabled until COUNSELCONNECT_DEV_ADMIN_KEY is configured.",
-        )
-    if x_admin_key != key:
-        raise HTTPException(status_code=401, detail="Invalid reviewer key.")
 
 
 @router.post(
@@ -61,19 +44,19 @@ def _require_reviewer_key(x_admin_key: str | None = Header(default=None)) -> Non
 )
 def upload_cor(
     file: UploadFile,
-    student_user_id: int,  # TODO: from the authenticated student (ADR-P01)
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
+    student: User = Depends(require_roles("STUDENT")),
 ):
     content = file.file.read()
-    verification = service.submit_cor(student_user_id, content, file.filename or "cor.pdf")
+    verification = service.submit_cor(student.user_id, content, file.filename or "cor.pdf")
     return verification
 
 
 @router.get(
     "/pending",
     response_model=list[PendingItemResponse],
-    summary="Reviewer: pending queue with applicant details",
-    dependencies=[Depends(_require_reviewer_key)],
+    summary="Counselor: pending queue with applicant details",
+    dependencies=[Depends(require_counselor)],
 )
 def list_pending(service: EnrollmentVerificationService = Depends(get_enrollment_verification_service)):
     items = []
@@ -93,8 +76,8 @@ def list_pending(service: EnrollmentVerificationService = Depends(get_enrollment
 @router.get(
     "/history",
     response_model=list[PendingItemResponse],
-    summary="Reviewer: permanent review record (all applications; optional status filter)",
-    dependencies=[Depends(_require_reviewer_key)],
+    summary="Counselor: permanent review record (all applications; optional status filter)",
+    dependencies=[Depends(require_counselor)],
 )
 def list_history(
     status: str | None = None,
@@ -122,30 +105,14 @@ def list_history(
 
 @router.get(
     "/{verification_id}/cor",
-    summary="Reviewer: view the uploaded COR PDF",
+    summary="Counselor: view the uploaded COR PDF",
 )
 def get_cor_pdf(
     verification_id: int,
-    admin_key: str = Header(default=None, alias="X-Admin-Key"),
-    key: str | None = None,  # query fallback: browsers cannot set headers in new tabs
+    counselor: User = Depends(require_counselor),
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
-    """Serves the PDF for the reviewer's in-app preview.
-
-    Accepts the reviewer key via the X-Admin-Key header OR a `?key=`
-    query parameter — a plain browser tab (the 'View PDF' link) cannot
-    set custom headers, so the link carries the key in the query string.
-    """
-    from fastapi import HTTPException
-
-    expected = get_settings().dev_admin_key
-    if not expected:
-        raise HTTPException(
-            status_code=503,
-            detail="Reviewer access is disabled until COUNSELCONNECT_DEV_ADMIN_KEY is configured.",
-        )
-    if admin_key != expected and key != expected:
-        raise HTTPException(status_code=401, detail="Invalid reviewer key.")
+    """Serves the PDF for the counselor's in-app preview (session cookie)."""
     content = service.read_cor_pdf(verification_id)
     return Response(
         content=content,
@@ -157,17 +124,17 @@ def get_cor_pdf(
 @router.post(
     "/{verification_id}/approve",
     response_model=VerificationResponse,
-    summary="Reviewer: approve the registration application",
-    dependencies=[Depends(_require_reviewer_key)],
+    summary="Counselor: approve the registration application",
 )
 def approve(
     verification_id: int,
     data: ApproveRequest | None = None,
+    counselor: User = Depends(require_counselor),
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
     months = data.valid_months if data is not None else 12
     verification, email_queued = service.approve(
-        verification_id, reviewer_user_id=DEV_REVIEWER_USER_ID, valid_months=months
+        verification_id, reviewer_user_id=counselor.user_id, valid_months=months
     )
     verification.email_queued = email_queued
     return verification
@@ -176,16 +143,16 @@ def approve(
 @router.post(
     "/{verification_id}/reject",
     response_model=VerificationResponse,
-    summary="Reviewer: reject the registration application (comment required)",
-    dependencies=[Depends(_require_reviewer_key)],
+    summary="Counselor: reject the registration application (comment required)",
 )
 def reject(
     verification_id: int,
     data: RejectRequest,
+    counselor: User = Depends(require_counselor),
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
     verification, email_queued = service.reject(
-        verification_id, reviewer_user_id=DEV_REVIEWER_USER_ID, reason=data.comment
+        verification_id, reviewer_user_id=counselor.user_id, reason=data.comment
     )
     verification.email_queued = email_queued
     return verification

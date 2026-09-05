@@ -1,6 +1,7 @@
 /**
- * useCorUpload — submits the registration form (COR) PDF after account
- * registration. multipart/form-data per API_CONTRACT.md.
+ * useCorUpload — submits the registration form (COR) PDF for the signed-in
+ * student. multipart/form-data per API_CONTRACT.md; identity comes from the
+ * session cookie (ADR-019), not a query parameter.
  */
 import { useState } from "react";
 import { request, ApiError } from "../../services/apiClient";
@@ -14,10 +15,7 @@ export interface CorUploadResult {
 export function useCorUpload() {
   const [uploading, setUploading] = useState(false);
 
-  async function uploadCor(
-    studentUserId: number,
-    file: File
-  ): Promise<CorUploadResult> {
+  async function uploadCor(file: File): Promise<CorUploadResult> {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       return { success: false, message: "The registration form must be a PDF file." };
     }
@@ -25,10 +23,8 @@ export function useCorUpload() {
     try {
       const form = new FormData();
       form.append("file", file);
-      // student_user_id travels as a query param in this dev scaffold;
-      // it becomes the authenticated identity after ADR-P01.
       const body = await request<{ verification_id: number; status: string }>(
-        `/enrollment-verifications/cor?student_user_id=${studentUserId}`,
+        "/enrollment-verifications/cor",
         { method: "POST", body: form }
       );
       return {

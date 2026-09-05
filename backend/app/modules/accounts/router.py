@@ -96,22 +96,6 @@ def list_campuses(service: AccountsService = Depends(get_accounts_service)):
     return paginate(items, page=1, page_size=max(len(items), 1))
 
 
-@router.get(
-    "/lookup",
-    summary="Look up the user id for an email (supports the post-registration COR upload step)",
-)
-def lookup_user(email: str, service: AccountsService = Depends(get_accounts_service)):
-    """Dev-scaffold endpoint: returns only {user_id} or 404.
-
-    # TODO: Remove when the COR upload attaches to the authenticated
-    # student session after ADR-P01.
-    """
-    user = service.repository.find_user_by_email(email)
-    if user is None:
-        raise AppError(code="USER_NOT_FOUND", message="No account with that email.", status_code=404)
-    return {"user_id": user.user_id}
-
-
 @router.get("/programs", response_model=ListEnvelope[ProgramResponse],
             summary="Active programs")
 def list_programs(service: AccountsService = Depends(get_accounts_service)):

@@ -38,13 +38,15 @@ def test_register_student_validation_error(client: TestClient):
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_login_returns_pending_adr_p01(client: TestClient):
+def test_login_unknown_identifier_is_401_envelope(client: TestClient):
+    """ADR-019: real login exists; unknown credentials get the same 401
+    error either way (never reveal which part failed)."""
     response = client.post(
         "/api/v1/auth/login",
         json={"identifier": "student1@example.edu", "password": "irrelevant"},
     )
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "AUTH_MECHANISM_PENDING"
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
 
 def test_public_content_endpoints_respond(client: TestClient):

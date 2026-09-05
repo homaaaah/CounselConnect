@@ -24,12 +24,12 @@ Status values: `APPROVED`, `PENDING`, `SUPERSEDED`.
 | ADR-016 | Keep agent context routed and compact; `.ai/NAMING_CONVENTIONS.md` is authoritative for identifiers. |
 | ADR-017 | Concrete availability slots support `ONLINE`, `FACE_TO_FACE`, or `BOTH`. Counselor alone manages each campus Guidance Office location. A campus without a configured location cannot offer `FACE_TO_FACE` or `BOTH`. A face-to-face appointment stores the campus location as a booking-time snapshot. |
 | ADR-018 | A confirmed online appointment may create exactly one dedicated `APPOINTMENT` conversation when its scheduled start is reached. The Student and Counselor must match the appointment. `GENERAL`, `APPOINTMENT`, and `SOS` conversations remain separate, and face-to-face appointments cannot link a conversation. |
+| ADR-019 | Authentication (approved 2026-09-05, formerly pending ADR-P01): Students sign in with student number; staff sign in with email. Passwords hash with Argon2id (existing bcrypt hashes verified and upgraded on next successful login). Web auth uses revocable MySQL-backed opaque sessions in a secure HttpOnly `counselconnect_session` cookie (256-bit random credential, SHA-256-stored) with a session-bound CSRF token (SHA-256-stored; `X-CSRF-Token` header on unsafe methods). Sessions idle-expire after one hour of no genuine user activity and absolutely expire 12 hours after creation with no sliding; background polls/heartbeats never renew activity. Login is allowed for `PENDING_VERIFICATION`, `ACTIVE`, and `VERIFICATION_EXPIRED` accounts (pending/expired students reach only account and re-verification functions); feature-level authorization still requires `ACTIVE` and valid enrollment where the docs say so. Password-reset credentials are hashed, single-use, expire in 30 minutes, and a successful reset revokes all active sessions without revealing account existence (flow implemented in its own task). No Remember Me in v1. |
 
 ## Pending
 
 | ID | Decision needed |
 |---|---|
-| ADR-P01 | Authentication/session mechanism and recovery policy. |
 | ADR-P02 | Real-time messaging transport/delivery semantics. |
 | ADR-P03 | Exact SOS instrument, rule thresholds, availability/fallback rule, and SOS retention. |
 | ADR-P04 | Appointment duration/buffer, cancellation/reschedule cutoffs, reminders, and blocked-period policy. |

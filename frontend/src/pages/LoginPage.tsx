@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLogin } from "../features/auth";
 
-/** Sign-in page. Session mechanism pending ADR-P01 — shown honestly. */
+/** Sign-in page (ADR-019): opaque session cookie + CSRF. */
 export default function LoginPage() {
   const { login, submitting } = useLogin();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [result, setResult] = useState<{ pending: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message: string; role?: string } | null>(null);
+
+  useEffect(() => {
+    if (result?.ok && result.role) {
+      // Route by role: counselors land on the review console.
+      const target = result.role === "COUNSELOR" ? "#review" : "#landing";
+      const t = setTimeout(() => {
+        window.location.hash = target;
+        window.location.reload();
+      }, 700);
+      return () => clearTimeout(t);
+    }
+  }, [result]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const r = await login(identifier, password);
-    setResult(r);
+    setResult({ ok: r.ok, message: r.message, role: r.auth?.user.role_code });
   }
 
   return (
@@ -25,7 +37,7 @@ export default function LoginPage() {
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="identifier" className="text-sm font-medium text-slate-700">
-              Email or student number
+              Student number or email
             </label>
             <input
               id="identifier"
@@ -61,8 +73,8 @@ export default function LoginPage() {
         {result && (
           <p
             className={`mt-4 rounded-md p-3 text-sm ${
-              result.pending
-                ? "bg-amber-50 text-amber-700"
+              result.ok
+                ? "bg-emerald-50 text-emerald-700"
                 : "bg-red-50 text-red-600"
             }`}
           >

@@ -1,6 +1,6 @@
 /**
- * Feature module: auth (login/session UI).
- * Session mechanism pending ADR-P01 — the backend returns a structured
- * AUTH_MECHANISM_PENDING response; the UI shows it instead of faking login.
+ * Feature module: auth (login/session UI, ADR-019).
+ * Opaque HttpOnly session cookie + in-memory CSRF token.
  */
-export { useLogin, type LoginResult } from "./useLogin";
+export { useLogin, type LoginResult, type AuthResult, type SessionUser } from "./useLogin";
+export { useSession, type SessionState } from "./useSession";

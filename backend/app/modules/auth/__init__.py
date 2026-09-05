@@ -1,5 +1,6 @@
-"""auth module: login/refresh/logout endpoints (structure only).
+"""auth module: login/session/CSRF (ADR-019).
 
-The authentication/session mechanism is pending decision ADR-P01.
-Do NOT implement JWT, cookies, Bearer tokens, refresh tokens, or OAuth here.
+Opaque MySQL-backed sessions in a secure HttpOnly cookie with a
+session-bound CSRF token; Argon2id passwords with transparent bcrypt
+upgrade; 1h idle / 12h absolute limits.
 """

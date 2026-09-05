@@ -48,8 +48,6 @@ COUNSELCONNECT_DB_PORT=3306
 COUNSELCONNECT_DB_NAME=counselconnect
 COUNSELCONNECT_DB_USER=your_mysql_user
 COUNSELCONNECT_DB_PASSWORD=your_mysql_password
-
-COUNSELCONNECT_DEV_ADMIN_KEY=dev-review-key-2026
 ```
 
 Optional (real emails; without it, decisions report "email not sent" honestly):
@@ -92,8 +90,8 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 ## 6. Demo flow to verify your setup (5 minutes)
 
 1. **Register** — http://localhost:5173 → *Register* → fill the form, pick a program, attach any PDF (fake is fine, e.g. rename a blank `test.pdf`) → submit. Success = confirmation message.
-2. **Review** — http://localhost:5173/#review → enter key `dev-review-key-2026` → your application appears under *Pending* → click the applicant to see details and the PDF preview → **Approve**.
-   - On a fresh database the first registered student is `user_id 1` — approve/reject need that user to exist, and this is why: the dev flow records reviewer id 1.
+2. **Review** — http://localhost:5173/#login → sign in as the seeded counselor: email `counselor@ucc.edu.ph`, password `counselor-dev-2026` → go to `#review` → your application appears under *Pending* → click the applicant to see details and the PDF preview → **Approve**.
+   - The counselor account comes from `dev_seed.sql` (developer-created per ADR-005). Rotate this password before any real deployment.
 3. **Check result** — *All applications* tab shows `APPROVED` with validity date; your inbox (if SMTP configured) has the decision email.
 
 ## Common problems
@@ -103,8 +101,9 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 | `Access denied for user` on backend start or any DB call | Wrong MySQL user/password in `.env` → fix and **restart uvicorn** (`.env` is read only at startup) |
 | Landing page empty (no hero/FAQs) | Seed not loaded → re-run step 3 (`dev_seed.sql`) |
 | Registration form has no program options | Same seed issue as above |
-| Reviewer page says "Reviewer access is disabled" (503) | `COUNSELCONNECT_DEV_ADMIN_KEY` missing/blank in `.env` → add it, restart uvicorn |
-| Reviewer page says "wrong key" | Key in `.env` doesn't match the key entered in the UI → both must be `dev-review-key-2026` (or your own value, matched) |
+| Login says "Incorrect identifier or password" | Wrong credentials, or the counselor seed row is missing → re-run `dev_seed.sql` (it adds `counselor@ucc.edu.ph` / `counselor-dev-2026`) |
+| Reviewer page says "Only a Guidance Counselor may perform this action" (403) | You signed in as a student account → sign in with the counselor account |
+| Unsafe action says "missing or invalid CSRF token" | Your session expired (1h idle) or you reloaded the page → sign in again |
 | Toast says "email NOT sent (SMTP not configured)" | Expected when SMTP vars are blank — fill them or ignore |
 | Approved but nothing arrives in email | Gmail rejected the app password → confirm it's a fresh App Password (not your login password), 2FA is on, and restart uvicorn |
 | Frontend shows "Request failed" on everything | Backend not running → start it first (step 4), frontend depends on it |
@@ -117,11 +116,11 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 - **Never commit anything under `backend/var/`** — that folder holds real applicant COR PDFs (private data). It is ignored too.
 - Pull before you start working, commit small, push often: `git add -A` → `git commit -m "short message"` → `git push`.
 - `docs/` and `.ai/` are read-only contracts (the "source of truth"). Do not edit them casually — changes go through the team.
-- Login is intentionally a placeholder (the team hasn't approved the auth mechanism, ADR-P01). Don't build auth ahead of that decision.
+- Auth is ADR-019 (opaque HttpOnly session cookie + CSRF + Argon2id). The dev counselor password must be rotated before any real deployment.
 - Don't share the repo link publicly; it's a private capstone repo.
 
 ## Quick reference
 
 - Backend: http://localhost:8000 · API docs: http://localhost:8000/docs · Health: `/api/v1/health`
-- Frontend: http://localhost:5173 · Reviewer console: `#review` (key: `dev-review-key-2026`)
+- Frontend: http://localhost:5173 · Sign in: `#login` (counselor: `counselor@ucc.edu.ph` / `counselor-dev-2026`) · Reviewer console: `#review`
 - Repo: https://github.com/jekjek29/CounselConnect

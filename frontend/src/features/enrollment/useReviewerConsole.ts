@@ -3,8 +3,8 @@
  * (DFD 1.3). Views the pending queue with applicant details, previews the
  * COR PDF, approves, or rejects with a required comment.
  *
- * Dev scaffold: uses the temporary reviewer key (X-Admin-Key) header until
- * ADR-P01 provides real COUNSELOR authentication.
+ * Auth (ADR-019): session cookie via `credentials: "include"` + CSRF
+ * header; requires the COUNSELOR role server-side.
  */
 import { useCallback, useEffect, useState } from "react";
 import { request, ApiError } from "../../services/apiClient";
@@ -34,20 +34,14 @@ export interface PendingApplication {
 
 const API = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-function reviewerHeaders(key: string): Record<string, string> {
-  return { "X-Admin-Key": key };
-}
-
 export function useReviewerConsole() {
-  const [adminKey, setAdminKey] = useState(
-    () => localStorage.getItem("cc_dev_admin_key") ?? ""
-  );
   const [queue, setQueue] = useState<PendingApplication[]>([]);
   const [history, setHistory] = useState<PendingApplication[]>([]);
   const [historyFilter, setHistoryFilter] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
+  const [pdfBlobs, setPdfBlobs] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!toast) return;
@@ -55,27 +49,15 @@ export function useReviewerConsole() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  useEffect(() => {
-    localStorage.setItem("cc_dev_admin_key", adminKey);
-  }, [adminKey]);
-
   const refresh = useCallback(async () => {
-    if (!adminKey) {
-      setQueue([]);
-      setHistory([]);
-      return;
-    }
     setLoading(true);
     try {
       const [pending, all] = await Promise.all([
-        request<PendingApplication[]>("/enrollment-verifications/pending", {
-          headers: reviewerHeaders(adminKey),
-        }),
+        request<PendingApplication[]>("/enrollment-verifications/pending"),
         request<PendingApplication[]>(
           historyFilter
             ? `/enrollment-verifications/history?status=${historyFilter}`
-            : "/enrollment-verifications/history",
-          { headers: reviewerHeaders(adminKey) }
+            : "/enrollment-verifications/history"
         ),
       ]);
       setQueue(pending);
@@ -90,7 +72,7 @@ export function useReviewerConsole() {
     } finally {
       setLoading(false);
     }
-  }, [adminKey, historyFilter]);
+  }, [historyFilter]);
 
   useEffect(() => {
     void refresh();
@@ -100,11 +82,7 @@ export function useReviewerConsole() {
     try {
       const result = await request<{ email_queued?: boolean }>(
         `/enrollment-verifications/${verificationId}/approve`,
-        {
-          method: "POST",
-          headers: reviewerHeaders(adminKey),
-          body: JSON.stringify({ valid_months: 12 }),
-        }
+        { method: "POST", body: JSON.stringify({ valid_months: 12 }) }
       );
       setToast({
         kind: "ok",
@@ -115,7 +93,6 @@ export function useReviewerConsole() {
       await refresh();
     } catch (err) {
       if (err instanceof ApiError && err.code === "DECISION_ALREADY_MADE") {
-        // Someone (or an earlier click) already decided; resync the queue.
         setToast({ kind: "warn", text: `Application #${verificationId} was already decided.` });
         await refresh();
         return;
@@ -132,11 +109,7 @@ export function useReviewerConsole() {
     try {
       const result = await request<{ email_queued?: boolean }>(
         `/enrollment-verifications/${verificationId}/reject`,
-        {
-          method: "POST",
-          headers: reviewerHeaders(adminKey),
-          body: JSON.stringify({ comment }),
-        }
+        { method: "POST", body: JSON.stringify({ comment }) }
       );
       setToast({
         kind: "ok",
@@ -155,15 +128,29 @@ export function useReviewerConsole() {
     }
   }
 
-  function corPdfUrl(verificationId: number): string {
-    // Key travels in the query string: a plain browser tab cannot send
-    // the X-Admin-Key header.
-    return `${API}/enrollment-verifications/${verificationId}/cor?key=${encodeURIComponent(adminKey)}`;
+  async function openCorPdf(verificationId: number): Promise<void> {
+    if (pdfBlobs[verificationId]) {
+      window.open(pdfBlobs[verificationId], "_blank");
+      return;
+    }
+    try {
+      // Fetch with cookies (a plain <a> tag cannot send credentials
+      // cross-origin), then open the blob URL in a new tab.
+      const res = await fetch(
+        `${API}/enrollment-verifications/${verificationId}/cor`,
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("fetch failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setPdfBlobs((prev) => ({ ...prev, [verificationId]: url }));
+      window.open(url, "_blank");
+    } catch {
+      setToast({ kind: "warn", text: `Could not open the COR PDF for #${verificationId}.` });
+    }
   }
 
   return {
-    adminKey,
-    setAdminKey,
     queue,
     history,
     historyFilter,
@@ -174,6 +161,6 @@ export function useReviewerConsole() {
     approve,
     reject,
     refresh,
-    corPdfUrl,
+    openCorPdf,
   };
 }

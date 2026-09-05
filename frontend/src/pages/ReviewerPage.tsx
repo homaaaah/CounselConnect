@@ -14,14 +14,11 @@ const STATUS_STYLES: Record<string, string> = {
  * "Pending" tab: approve / reject-with-comment with COR PDF preview.
  * "History" tab: PERMANENT record of every application and its decision.
  *
- * Dev scaffold: gated by the temporary reviewer key until ADR-P01 lands
- * real COUNSELOR authentication. There is no admin role in CounselConnect —
- * the Counselor is the approval authority.
+ * Auth (ADR-019): requires a signed-in COUNSELOR session (enforced by
+ * the backend). There is no admin role — the Counselor is the authority.
  */
 export default function ReviewerPage() {
   const {
-    adminKey,
-    setAdminKey,
     queue,
     history,
     historyFilter,
@@ -31,7 +28,7 @@ export default function ReviewerPage() {
     toast,
     approve,
     reject,
-    corPdfUrl,
+    openCorPdf,
   } = useReviewerConsole();
   const [tab, setTab] = useState<"pending" | "history">("pending");
   const [comments, setComments] = useState<Record<number, string>>({});
@@ -51,18 +48,6 @@ export default function ReviewerPage() {
       </header>
 
       <div className="mx-auto max-w-4xl px-6 py-8">
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <label className="text-sm font-medium text-amber-800">
-            Reviewer key (dev scaffold — replaced by real sign-in with ADR-P01)
-          </label>
-          <input
-            type="password"
-            value={adminKey}
-            onChange={(e) => setAdminKey(e.target.value)}
-            placeholder="COUNSELCONNECT_DEV_ADMIN_KEY"
-            className="mt-2 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm"
-          />
-        </div>
 
         <div className="mt-6 flex gap-2 border-b border-slate-200">
           <button
@@ -135,14 +120,12 @@ export default function ReviewerPage() {
 
                 {file && (
                   <div className="mt-4">
-                    <a
-                      href={corPdfUrl(verification.verification_id)}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      onClick={() => openCorPdf(verification.verification_id)}
                       className="text-sm font-medium text-emerald-600 hover:underline"
                     >
                       View registration form (COR) PDF ↗
-                    </a>
+                    </button>
                   </div>
                 )}
 

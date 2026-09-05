@@ -1,45 +1,61 @@
 /**
- * useLogin — submits credentials to POST /auth/login.
+ * useLogin — real session-cookie login (ADR-019).
  *
- * Until ADR-P01 is approved, the backend answers with a structured
- * AUTH_MECHANISM_PENDING error; this hook surfaces that honestly.
+ * On success: stores the CSRF token in memory (apiClient) and returns the
+ * authenticated user + expiry timestamps. The session credential itself
+ * lives only in the HttpOnly cookie.
  */
-import { useState } from "react";
-import { request, ApiError } from "../../services/apiClient";
+import { useCallback, useState } from "react";
+import { request, ApiError, setCsrfToken } from "../../services/apiClient";
+
+export interface SessionUser {
+  user_id: number;
+  email: string;
+  role_code: string;
+  account_status: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface AuthResult {
+  user: SessionUser;
+  csrf_token: string;
+  idle_expires_at: string;
+  absolute_expires_at: string;
+}
 
 export interface LoginResult {
-  pending: boolean;
+  ok: boolean;
   message: string;
+  auth?: AuthResult;
 }
 
 export function useLogin() {
   const [submitting, setSubmitting] = useState(false);
 
-  async function login(identifier: string, password: string): Promise<LoginResult> {
+  const login = useCallback(async (identifier: string, password: string): Promise<LoginResult> => {
     setSubmitting(true);
     try {
-      // A successful response is impossible until ADR-P01; typed as never.
-      await request<never>("/auth/login", {
+      const auth = await request<AuthResult>("/auth/login", {
         method: "POST",
         body: JSON.stringify({ identifier, password }),
       });
-      return { pending: false, message: "Logged in." };
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "AUTH_MECHANISM_PENDING") {
-        return {
-          pending: true,
-          message:
-            "Sign-in is not available yet. The team still needs to approve the authentication mechanism (ADR-P01).",
-        };
-      }
+      setCsrfToken(auth.csrf_token);
       return {
-        pending: false,
-        message: err instanceof Error ? err.message : "Login failed.",
+        ok: true,
+        message: `Signed in as ${auth.user.first_name} ${auth.user.last_name}.`,
+        auth,
       };
+    } catch (err) {
+      setCsrfToken(null);
+      if (err instanceof ApiError) {
+        return { ok: false, message: err.message };
+      }
+      return { ok: false, message: "Login failed." };
     } finally {
       setSubmitting(false);
     }
-  }
+  }, []);
 
   return { login, submitting };
 }
