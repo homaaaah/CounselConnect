@@ -15,3 +15,23 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorDetail
+
+
+class ValidationFieldError(BaseModel):
+    loc: list[str | int]
+    type: str
+    message: str
+
+
+class ValidationDetails(BaseModel):
+    fields: list[ValidationFieldError]
+
+
+class ValidationErrorDetail(BaseModel):
+    code: str
+    message: str
+    details: ValidationDetails
+
+
+class ValidationErrorResponse(BaseModel):
+    error: ValidationErrorDetail

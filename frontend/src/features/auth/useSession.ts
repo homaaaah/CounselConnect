@@ -1,19 +1,19 @@
 /**
  * useSession — current-session state (ADR-019).
  *
- * `restore` revalidates the cookie via GET /auth/me (safe), then recovers
- * the CSRF token via GET /auth/csrf after a page reload (the token lives
- * in memory only). `logout` revokes the session server-side.
+ * Restore user and CSRF together before mounting protected pages.
+ * Credentials remain in HttpOnly cookies; CSRF stays in memory.
  */
-import { useCallback, useState } from "react";
-import { request, setCsrfToken } from "../../services/apiClient";
+import { useCallback, useRef, useState } from "react";
+import { ApiError, request, setCsrfToken } from "../../services/apiClient";
 import type { SessionUser, AuthResult } from "./useLogin";
 
 export interface SessionState {
   user: SessionUser | null;
   idleExpiresAt: string | null;
   absoluteExpiresAt: string | null;
-  ready: boolean; // first /auth/me check finished
+  ready: boolean; // user and CSRF restoration finished
+  error: string | null;
 }
 
 export function useSession() {
@@ -22,38 +22,46 @@ export function useSession() {
     idleExpiresAt: null,
     absoluteExpiresAt: null,
     ready: false,
+    error: null,
   });
+  const generation = useRef(0);
+
+  const accept = useCallback((auth: AuthResult) => {
+    generation.current++;
+    setCsrfToken(auth.csrf_token);
+    setState({ user: auth.user, idleExpiresAt: auth.idle_expires_at,
+      absoluteExpiresAt: auth.absolute_expires_at, ready: true, error: null });
+  }, []);
 
   const restore = useCallback(async () => {
+    const current = ++generation.current;
+    setState((previous) => ({ ...previous, ready: false, error: null }));
     try {
-      const user = await request<SessionUser>("/auth/me");
-      // Recover the CSRF token after a reload (safe GET, re-issues it).
-      let idle: string | null = null;
-      let absolute: string | null = null;
-      try {
-        const auth = await request<AuthResult>("/auth/csrf");
-        setCsrfToken(auth.csrf_token);
-        idle = auth.idle_expires_at;
-        absolute = auth.absolute_expires_at;
-      } catch {
-        setCsrfToken(null); // safe-method-only browsing until re-login
-      }
-      setState({ user, idleExpiresAt: idle, absoluteExpiresAt: absolute, ready: true });
-    } catch {
+      const auth = await request<AuthResult>("/auth/csrf");
+      if (generation.current !== current) return;
+      accept(auth);
+    } catch (err) {
+      if (generation.current !== current) return;
       setCsrfToken(null);
-      setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true });
+      setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true,
+        error: err instanceof ApiError && err.status === 401 ? null : "Could not restore your session. Please sign in again." });
     }
-  }, []);
+  }, [accept]);
 
   const logout = useCallback(async () => {
+    generation.current++;
     try {
       await request<void>("/auth/logout", { method: "POST", body: "{}" });
-    } catch {
-      // Session already gone server-side; clear locally regardless.
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 401)) {
+        setState((previous) => ({ ...previous, error: "Sign out failed. Please retry." }));
+        return false;
+      }
     }
     setCsrfToken(null);
-    setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true });
+    setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true, error: null });
+    return true;
   }, []);
 
-  return { ...state, restore, logout };
+  return { ...state, accept, restore, logout };
 }

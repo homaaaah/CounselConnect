@@ -103,12 +103,22 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 | Registration form has no program options | Same seed issue as above |
 | Login says "Incorrect identifier or password" | Wrong credentials, or the counselor seed row is missing → re-run `dev_seed.sql` (it adds `counselor@ucc.edu.ph` / `counselor-dev-2026`) |
 | Reviewer page says "Only a Guidance Counselor may perform this action" (403) | You signed in as a student account → sign in with the counselor account |
-| Unsafe action says "missing or invalid CSRF token" | Your session expired (1h idle) or you reloaded the page → sign in again |
+| Unsafe action says "missing or invalid CSRF token" | Reload to recover the session-bound token; if the session expired, sign in again. Normal reloads now restore CSRF automatically before showing the reviewer. |
 | Toast says "email NOT sent (SMTP not configured)" | Expected when SMTP vars are blank — fill them or ignore |
 | Approved but nothing arrives in email | Gmail rejected the app password → confirm it's a fresh App Password (not your login password), 2FA is on, and restart uvicorn |
 | Frontend shows "Request failed" on everything | Backend not running → start it first (step 4), frontend depends on it |
 | `alembic upgrade head` says access denied | MySQL user lacks privileges on the `counselconnect` DB → grant ALL on `counselconnect.*` to your user |
 | Weird route 404s after editing backend files | Rare reload hiccup → restart uvicorn |
+
+## Automated checks
+
+From `backend/`, `python -m pytest app/tests -q` runs database-free tests and skips MySQL tests unless `COUNSELCONNECT_TEST_DATABASE_URL` is explicitly supplied in the process environment. It does not read this test URL from `.env` or fall back to the application's database.
+
+Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema. The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
+
+From `frontend/`, run `npm test` for session/reviewer component regressions and `npm run build` for TypeScript plus production compilation. With Node and frontend dependencies installed, the backend suite also exercises the actual React app against a temporary loopback FastAPI server and the isolated test schema (login, reload, approval, logout). This is an HTTP/component integration check, not a full browser test. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
+
+The backend automatically runs COR expiry/deletion retries while serving requests. See `REGISTRATION_VERIFICATION.md` for cleanup monitoring and one-shot scheduling when the application is offline.
 
 ## Rules everyone must follow
 

@@ -10,10 +10,6 @@ DFD 1.2/1.3 + docs/REGISTRATION_VERIFICATION.md:
 
 from __future__ import annotations
 
-import io
-import os
-import re
-import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -30,24 +26,49 @@ class EnrollmentVerificationRepository(BaseRepository[EnrollmentVerification]):
 
     model = EnrollmentVerification
 
-    def find_file(self, file_id: int) -> EnrollmentVerificationFile | None:
-        return self.session.get(EnrollmentVerificationFile, file_id)
+    def lock_verification(self, verification_id: int) -> EnrollmentVerification | None:
+        return self.session.scalar(
+            select(EnrollmentVerification)
+            .where(EnrollmentVerification.verification_id == verification_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
 
-    def list_files_for_verification(self, verification_id: int) -> list[EnrollmentVerificationFile]:
-        return list(
-            self.session.scalars(
-                select(EnrollmentVerificationFile).where(
-                    EnrollmentVerificationFile.verification_id == verification_id
-                )
+    def student_for_verification(self, verification_id: int) -> int | None:
+        return self.session.scalar(
+            select(EnrollmentVerification.student_user_id).where(
+                EnrollmentVerification.verification_id == verification_id
             )
         )
 
-    def find_latest_for_student(self, student_user_id: int) -> EnrollmentVerification | None:
+    def find_file(self, file_id: int) -> EnrollmentVerificationFile | None:
+        return self.session.get(EnrollmentVerificationFile, file_id)
+
+    def list_files_for_verification(
+        self, verification_id: int
+    ) -> list[EnrollmentVerificationFile]:
+        return list(
+            self.session.scalars(
+                select(EnrollmentVerificationFile)
+                .where(EnrollmentVerificationFile.verification_id == verification_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        )
+
+    def find_latest_for_student(
+        self, student_user_id: int
+    ) -> EnrollmentVerification | None:
         return self.session.scalar(
             select(EnrollmentVerification)
             .where(EnrollmentVerification.student_user_id == student_user_id)
-            .order_by(EnrollmentVerification.submitted_at.desc())
+            .order_by(
+                EnrollmentVerification.submitted_at.desc(),
+                EnrollmentVerification.verification_id.desc(),
+            )
             .limit(1)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
 
     def list_pending(self) -> list[EnrollmentVerification]:
@@ -56,6 +77,21 @@ class EnrollmentVerificationRepository(BaseRepository[EnrollmentVerification]):
             self.session.scalars(
                 select(EnrollmentVerification)
                 .where(EnrollmentVerification.status == "PENDING")
+                .where(
+                    EnrollmentVerification.submitted_at
+                    > datetime.now(timezone.utc) - timedelta(days=7)
+                )
+                .where(
+                    select(EnrollmentVerificationFile.file_id)
+                    .where(
+                        EnrollmentVerificationFile.verification_id
+                        == EnrollmentVerification.verification_id,
+                        EnrollmentVerificationFile.cleanup_state == "PENDING",
+                        EnrollmentVerificationFile.expires_at
+                        > datetime.now(timezone.utc),
+                    )
+                    .exists()
+                )
                 .order_by(EnrollmentVerification.submitted_at.asc())
             )
         )
@@ -76,10 +112,60 @@ class EnrollmentVerificationRepository(BaseRepository[EnrollmentVerification]):
             )
         )
 
-    def find_active_file(self, verification_id: int) -> EnrollmentVerificationFile | None:
-        return self.session.scalar(
-            select(EnrollmentVerificationFile).where(
+    def find_active_file(
+        self, verification_id: int, *, now: datetime | None = None, lock: bool = False
+    ) -> EnrollmentVerificationFile | None:
+        stmt = (
+            select(EnrollmentVerificationFile)
+            .where(
                 EnrollmentVerificationFile.verification_id == verification_id,
                 EnrollmentVerificationFile.cleanup_state == "PENDING",
+                EnrollmentVerificationFile.expires_at
+                > (now or datetime.now(timezone.utc)),
+            )
+            .order_by(EnrollmentVerificationFile.file_id.desc())
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt)
+
+    def find_file_by_storage_key(
+        self, storage_key: str
+    ) -> EnrollmentVerificationFile | None:
+        return self.session.scalar(
+            select(EnrollmentVerificationFile).where(
+                EnrollmentVerificationFile.storage_key == storage_key
+            )
+        )
+
+    def list_cleanup_candidates(self, now: datetime) -> list[int]:
+        """Tracked work only: expired/replaced files, failed deletes, or decisions."""
+        return list(
+            self.session.scalars(
+                select(EnrollmentVerification.verification_id)
+                .outerjoin(
+                    EnrollmentVerificationFile,
+                    EnrollmentVerification.verification_id
+                    == EnrollmentVerificationFile.verification_id,
+                )
+                .where(
+                    (EnrollmentVerificationFile.expires_at <= now)
+                    | (EnrollmentVerificationFile.cleanup_state == "FAILED")
+                    | (
+                        (EnrollmentVerification.status != "PENDING")
+                        & EnrollmentVerificationFile.file_id.is_not(None)
+                    )
+                    | (
+                        (EnrollmentVerification.status == "PENDING")
+                        & (
+                            EnrollmentVerification.submitted_at
+                            <= now - timedelta(days=7)
+                        )
+                    )
+                )
+                .distinct()
+                .order_by(EnrollmentVerification.verification_id)
             )
         )

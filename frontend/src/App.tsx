@@ -5,15 +5,19 @@ import RegisterPage from "./pages/RegisterPage";
 import HomePage from "./pages/HomePage";
 import ReviewerPage from "./pages/ReviewerPage";
 import { useHealth } from "./hooks/useHealth";
+import { useSession } from "./features/auth";
 
 /**
  * Hash-based page switcher (DFD Master System Flow).
- * A real protected router arrives with ADR-P01; until then the four pages
- * exist and the health line proves the full stack round-trip.
+ * The reviewer UI mounts only after cookie/CSRF restoration and a role
+ * check. The backend independently authorizes every protected request.
  */
 export default function App() {
   const [page, setPage] = useState(window.location.hash.replace("#", "") || "landing");
   const { status, error } = useHealth();
+  const session = useSession();
+
+  useEffect(() => { void session.restore(); }, [session.restore]);
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash.replace("#", "") || "landing");
@@ -21,12 +25,28 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  if (!session.ready) {
+    return <p role="status" className="p-6">Restoring your session…</p>;
+  }
+
   return (
     <>
-      {page === "login" && <LoginPage />}
+      {session.error && <p role="alert" className="p-3 text-red-700">{session.error}</p>}
+      {session.user && (
+        <div className="flex justify-end bg-white px-6 py-2">
+          <button onClick={async () => {
+            if (await session.logout()) window.location.hash = "landing";
+          }} className="text-sm text-slate-600 underline">Sign out</button>
+        </div>
+      )}
+      {page === "login" && <LoginPage onSignedIn={session.accept} />}
       {page === "register" && <RegisterPage />}
       {page === "home" && <HomePage />}
-      {page === "review" && <ReviewerPage />}
+      {page === "review" && (session.user?.role_code === "COUNSELOR"
+        ? <ReviewerPage />
+        : session.user
+          ? <p role="alert" className="p-6">This page requires a Counselor account.</p>
+          : <LoginPage onSignedIn={session.accept} />)}
       {!["login", "register", "home", "review"].includes(page) && (
         <LandingPage onPreviewHome={() => (window.location.hash = "home")} />
       )}

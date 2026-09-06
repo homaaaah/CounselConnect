@@ -6,7 +6,7 @@
  * Auth (ADR-019): session cookie via `credentials: "include"` + CSRF
  * header; requires the COUNSELOR role server-side.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { request, ApiError } from "../../services/apiClient";
 
 export interface PendingApplication {
@@ -41,7 +41,25 @@ export function useReviewerConsole() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
-  const [pdfBlobs, setPdfBlobs] = useState<Record<number, string>>({});
+  const pdfBlobs = useRef<Record<number, string>>({});
+  const pdfGeneration = useRef<Record<number, number>>({});
+  const mounted = useRef(true);
+
+  function discardPdf(verificationId: number) {
+    pdfGeneration.current[verificationId] = (pdfGeneration.current[verificationId] ?? 0) + 1;
+    const url = pdfBlobs.current[verificationId];
+    if (url) URL.revokeObjectURL(url);
+    delete pdfBlobs.current[verificationId];
+  }
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      Object.values(pdfBlobs.current).forEach((url) => URL.revokeObjectURL(url));
+      pdfBlobs.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -84,6 +102,7 @@ export function useReviewerConsole() {
         `/enrollment-verifications/${verificationId}/approve`,
         { method: "POST", body: JSON.stringify({ valid_months: 12 }) }
       );
+      discardPdf(verificationId);
       setToast({
         kind: "ok",
         text: result.email_queued
@@ -93,6 +112,7 @@ export function useReviewerConsole() {
       await refresh();
     } catch (err) {
       if (err instanceof ApiError && err.code === "DECISION_ALREADY_MADE") {
+        discardPdf(verificationId);
         setToast({ kind: "warn", text: `Application #${verificationId} was already decided.` });
         await refresh();
         return;
@@ -111,6 +131,7 @@ export function useReviewerConsole() {
         `/enrollment-verifications/${verificationId}/reject`,
         { method: "POST", body: JSON.stringify({ comment }) }
       );
+      discardPdf(verificationId);
       setToast({
         kind: "ok",
         text: result.email_queued
@@ -120,6 +141,7 @@ export function useReviewerConsole() {
       await refresh();
     } catch (err) {
       if (err instanceof ApiError && err.code === "DECISION_ALREADY_MADE") {
+        discardPdf(verificationId);
         setToast({ kind: "warn", text: `Application #${verificationId} was already decided.` });
         await refresh();
         return;
@@ -129,8 +151,9 @@ export function useReviewerConsole() {
   }
 
   async function openCorPdf(verificationId: number): Promise<void> {
-    if (pdfBlobs[verificationId]) {
-      window.open(pdfBlobs[verificationId], "_blank");
+    const generation = pdfGeneration.current[verificationId] ?? 0;
+    if (pdfBlobs.current[verificationId]) {
+      window.open(pdfBlobs.current[verificationId], "_blank");
       return;
     }
     try {
@@ -138,12 +161,14 @@ export function useReviewerConsole() {
       // cross-origin), then open the blob URL in a new tab.
       const res = await fetch(
         `${API}/enrollment-verifications/${verificationId}/cor`,
-        { credentials: "include" }
+        { credentials: "include", cache: "no-store" }
       );
       if (!res.ok) throw new Error("fetch failed");
       const blob = await res.blob();
+      if (!mounted.current || (pdfGeneration.current[verificationId] ?? 0) !== generation) return;
       const url = URL.createObjectURL(blob);
-      setPdfBlobs((prev) => ({ ...prev, [verificationId]: url }));
+      discardPdf(verificationId);
+      pdfBlobs.current[verificationId] = url;
       window.open(url, "_blank");
     } catch {
       setToast({ kind: "warn", text: `Could not open the COR PDF for #${verificationId}.` });

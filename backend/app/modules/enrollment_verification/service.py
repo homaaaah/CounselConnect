@@ -13,18 +13,18 @@ Workflow (docs/REGISTRATION_VERIFICATION.md, DFD 1.2/1.3, v4.1 note):
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Depends, UploadFile
+from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core.exceptions import AppError
-from app.core.logging import safe_kwargs
 from app.core.notifications import send_email, smtp_configured
 from app.database import get_session
 from app.modules.accounts.models import User
@@ -43,6 +43,11 @@ SEVEN_DAYS = timedelta(days=7)
 # v4.1: decision-shape invariant lives here (MySQL 8 forbade the DDL CHECK).
 APPROVED_NEEDS = ("decision_at", "reviewed_by_user_id", "valid_until")
 REJECTED_NEEDS = ("decision_at", "reviewed_by_user_id", "reason_code")
+logger = logging.getLogger(__name__)
+
+
+def as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
@@ -68,23 +73,51 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         and stays in the same pending flow.
         """
         settings = get_settings()
+        now = datetime.now(timezone.utc)
+        self.ensure_found(
+            self.accounts.lock_user(student_user_id),
+            "STUDENT_NOT_FOUND",
+            "Student not found.",
+        )
         existing = self.repository.find_latest_for_student(student_user_id)
 
         # Validate the upload first (fail fast, no partial state).
         self._validate_pdf(content, filename, settings.cor_max_mb)
 
+        if (
+            existing is not None
+            and existing.status == "PENDING"
+            and as_utc(existing.submitted_at) + SEVEN_DAYS <= now
+        ):
+            existing.status = "EXPIRED"
+
         # Reuse an open flow or open a new one.
-        if existing is not None and existing.status in ("PENDING", "NEEDS_RESUBMISSION"):
+        if existing is not None and existing.status in (
+            "PENDING",
+            "NEEDS_RESUBMISSION",
+        ):
             verification = existing
             # Replace any previous pending file.
-            old = self.repository.find_active_file(verification.verification_id)
+            old = self.repository.find_active_file(
+                verification.verification_id, lock=True
+            )
             if old is not None:
-                self._delete_cor_bytes(old.storage_key)
-                self.repository.session.delete(old)
+                # Queue replacement cleanup in the SAME transaction as
+                # the new file. Never delete old evidence before commit.
+                old.expires_at = now
+            if verification.status == "NEEDS_RESUBMISSION":
+                verification.status = "PENDING"
+                verification.submitted_at = now
+                verification.decision_at = None
+                verification.reviewed_by_user_id = None
+                verification.reason_code = None
+                verification.reviewer_note = None
+                verification.valid_until = None
         else:
             verification = EnrollmentVerification(
                 student_user_id=student_user_id,
                 status="PENDING",
+                submitted_at=now,
             )
             self.repository.add(verification)
             self.repository.session.flush()
@@ -96,10 +129,27 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
             storage_key=storage_key,
             mime_type="application/pdf",
             size_bytes=len(content),
-            expires_at=datetime.now(timezone.utc) + SEVEN_DAYS,
+            expires_at=as_utc(verification.submitted_at) + SEVEN_DAYS,
             cleanup_state="PENDING",
         )
         self.repository.session.add(file_row)
+        try:
+            self.repository.session.flush()
+            self.repository.session.commit()
+        except Exception:
+            self.repository.session.rollback()
+            # The on-disk marker survives if compensation fails, so the
+            # cleanup worker can still find the abandoned upload by TTL.
+            if not self._delete_cor_bytes(storage_key):
+                logger.warning("verification_upload_cleanup_retry_required")
+            raise
+        self._purge_cor_files(verification.verification_id)
+        try:
+            self._storage_path(storage_key).with_suffix(".pending").unlink(
+                missing_ok=True
+            )
+        except OSError:
+            logger.warning("verification_upload_marker_cleanup_retry_required")
         return verification
 
     def _validate_pdf(self, content: bytes, filename: str, max_mb: int) -> None:
@@ -131,21 +181,30 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         key = f"cor/{uuid.uuid4().hex}.pdf"
         target = root / key
         target.parent.mkdir(parents=True, exist_ok=True)
+        # A minimal durable marker covers crashes/rollbacks between the
+        # filesystem write and the DB commit. It contains no document data.
+        target.with_suffix(".pending").touch(exist_ok=False)
         target.write_bytes(content)
         return key
 
-    def _delete_cor_bytes(self, storage_key: str) -> None:
-        settings = get_settings()
-        target = Path(settings.cor_storage_root) / storage_key
+    def _storage_path(self, storage_key: str) -> Path:
+        root = Path(get_settings().cor_storage_root).resolve()
+        target = (root / storage_key).resolve()
+        if not target.is_relative_to(root) or target == root:
+            raise OSError("Invalid private storage key")
+        return target
+
+    def _delete_cor_bytes(self, storage_key: str) -> bool:
         try:
+            target = self._storage_path(storage_key)
             target.unlink(missing_ok=True)
+            target.with_suffix(".pending").unlink(missing_ok=True)
+            return True
         except OSError:
-            # Bytes cleanup retries later via cleanup_state; never crash a decision.
-            pass
+            return False
 
     def _read_cor_bytes(self, storage_key: str) -> bytes:
-        settings = get_settings()
-        target = Path(settings.cor_storage_root) / storage_key
+        target = self._storage_path(storage_key)
         if not target.is_file():
             raise AppError(
                 code="COR_FILE_NOT_FOUND",
@@ -156,7 +215,9 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
 
     # ---------------------------------------------------------- review
 
-    def list_pending(self) -> list[tuple[EnrollmentVerification, User, EnrollmentVerificationFile]]:
+    def list_pending(
+        self,
+    ) -> list[tuple[EnrollmentVerification, User, EnrollmentVerificationFile]]:
         """Pending queue with applicant details for the reviewer screen."""
         result = []
         for verification in self.repository.list_pending():
@@ -198,10 +259,9 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
 
     def read_cor_pdf(self, verification_id: int) -> bytes:
         """COR bytes for the reviewer's in-app PDF preview."""
-        verification = self.repository.get(verification_id)
-        if verification is None:
-            raise AppError(code="VERIFICATION_NOT_FOUND", message="Not found.", status_code=404)
-        file_row = self.repository.find_active_file(verification_id)
+        verification = self._lock_verification(verification_id)
+        self._require_current_cor(verification)
+        file_row = self.repository.find_active_file(verification_id, lock=True)
         if file_row is None:
             raise AppError(
                 code="COR_FILE_NOT_FOUND",
@@ -210,13 +270,11 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
             )
         return self._read_cor_bytes(file_row.storage_key)
 
-    def approve(self, verification_id: int, reviewer_user_id: int, valid_months: int = 12) -> EnrollmentVerification:
+    def approve(
+        self, verification_id: int, reviewer_user_id: int, valid_months: int = 12
+    ) -> tuple[EnrollmentVerification, bool]:
         """Approve: activate the student account with a validity window."""
-        verification = self.ensure_found(
-            self.repository.get(verification_id),
-            "VERIFICATION_NOT_FOUND",
-            "Verification request not found.",
-        )
+        verification = self._lock_verification(verification_id)
         if verification.status != "PENDING":
             raise AppError(
                 code="DECISION_ALREADY_MADE",
@@ -224,6 +282,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
                 status_code=409,
             )
 
+        self._require_current_cor(verification)
         now = datetime.now(timezone.utc)
         verification.status = "APPROVED"
         verification.decision_at = now
@@ -232,28 +291,28 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         # v4.1 invariant: APPROVED rows must carry decision+reviewer+valid_until.
         for field in APPROVED_NEEDS:
             if getattr(verification, field) is None:
-                raise AppError(code="VERIFICATION_INVALID_STATE", message="Invalid approval state.")
+                raise AppError(
+                    code="VERIFICATION_INVALID_STATE", message="Invalid approval state."
+                )
 
         # Activate the student account.
-        student = self.accounts.get(verification.student_id if False else verification.student_user_id)
+        student = self.accounts.get(verification.student_user_id)
         if student is not None:
             student.account_status = "ACTIVE"
-
-        # COR bytes are deleted after the decision (privacy boundary).
-        self._purge_cor_files(verification_id)
 
         # Commit BEFORE the response is built: the request-scoped session
         # teardown would otherwise commit only after the response is sent,
         # and the reviewer UI's instant refresh could still see the
         # pre-decision PENDING row (observed 409-Conflict race).
         self.repository.session.commit()
+        self._purge_cor_files(verification_id)
 
         email_queued = self._notify(verification, student, approved=True)
         return verification, email_queued
 
     def reject(
         self, verification_id: int, reviewer_user_id: int, reason: str
-    ) -> EnrollmentVerification:
+    ) -> tuple[EnrollmentVerification, bool]:
         """Reject with a REQUIRED comment; account stays non-active."""
         comment = (reason or "").strip()
         if not comment:
@@ -262,11 +321,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
                 message="A rejection comment is required.",
                 status_code=422,
             )
-        verification = self.ensure_found(
-            self.repository.get(verification_id),
-            "VERIFICATION_NOT_FOUND",
-            "Verification request not found.",
-        )
+        verification = self._lock_verification(verification_id)
         if verification.status != "PENDING":
             raise AppError(
                 code="DECISION_ALREADY_MADE",
@@ -274,6 +329,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
                 status_code=409,
             )
 
+        self._require_current_cor(verification)
         verification.status = "REJECTED"
         verification.decision_at = datetime.now(timezone.utc)
         verification.reviewed_by_user_id = reviewer_user_id
@@ -282,29 +338,139 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         # v4.1 invariant: REJECTED rows must carry decision+reviewer+reason.
         for field in REJECTED_NEEDS:
             if getattr(verification, field) is None:
-                raise AppError(code="VERIFICATION_INVALID_STATE", message="Invalid rejection state.")
+                raise AppError(
+                    code="VERIFICATION_INVALID_STATE",
+                    message="Invalid rejection state.",
+                )
 
         # Account remains PENDING_VERIFICATION (cannot sign in to services).
         student = self.accounts.get(verification.student_user_id)
 
-        # COR bytes are deleted after the decision (privacy boundary).
-        self._purge_cor_files(verification_id)
-
         # Commit BEFORE the response is built (see approve() note: avoids
         # the post-response teardown race with the reviewer UI refresh).
         self.repository.session.commit()
+        self._purge_cor_files(verification_id)
 
-        email_queued = self._notify(verification, student, approved=False, comment=comment)
+        email_queued = self._notify(
+            verification, student, approved=False, comment=comment
+        )
         return verification, email_queued
 
     def _purge_cor_files(self, verification_id: int) -> None:
+        """Delete only committed cleanup work, retaining failed rows for retry."""
+        verification = self._lock_verification(verification_id)
+        now = datetime.now(timezone.utc)
         for file_row in self.repository.list_files_for_verification(verification_id):
-            self._delete_cor_bytes(file_row.storage_key)
-            self.repository.session.delete(file_row)
+            if (
+                verification.status == "PENDING"
+                and file_row.cleanup_state == "PENDING"
+                and as_utc(file_row.expires_at) > now
+            ):
+                continue
+            if self._delete_cor_bytes(file_row.storage_key):
+                self.repository.session.delete(file_row)
+                logger.info("verification_file_deleted file_id=%s", file_row.file_id)
+            else:
+                file_row.cleanup_state = "FAILED"
+                logger.warning(
+                    "verification_file_cleanup_failed file_id=%s", file_row.file_id
+                )
+        self.repository.session.commit()
+
+    def _lock_verification(self, verification_id: int) -> EnrollmentVerification:
+        """Consistent lock order: student, then verification, for all writers."""
+        student_id = self.repository.student_for_verification(verification_id)
+        if student_id is None:
+            raise AppError(
+                code="VERIFICATION_NOT_FOUND",
+                message="Verification request not found.",
+                status_code=404,
+            )
+        self.accounts.lock_user(student_id)
+        return self.ensure_found(
+            self.repository.lock_verification(verification_id),
+            "VERIFICATION_NOT_FOUND",
+            "Verification request not found.",
+        )
+
+    def _require_current_cor(self, verification: EnrollmentVerification) -> None:
+        now = datetime.now(timezone.utc)
+        if verification.status != "PENDING":
+            raise AppError(
+                code="COR_FILE_NOT_FOUND",
+                message="The COR is no longer available.",
+                status_code=404,
+            )
+        if as_utc(verification.submitted_at) + SEVEN_DAYS <= now:
+            verification.status = "EXPIRED"
+            self.repository.session.commit()
+            self._purge_cor_files(verification.verification_id)
+            raise AppError(
+                code="VERIFICATION_EXPIRED",
+                message="This COR verification has expired.",
+                status_code=409,
+            )
+        if (
+            self.repository.find_active_file(
+                verification.verification_id, now=now, lock=True
+            )
+            is None
+        ):
+            raise AppError(
+                code="COR_FILE_NOT_FOUND",
+                message="A current COR is required.",
+                status_code=404,
+            )
+
+    def cleanup_due_files(self) -> None:
+        """Expire pending flows and retry tracked deletions; safe across workers."""
+        now = datetime.now(timezone.utc)
+        candidates = self.repository.list_cleanup_candidates(now)
+        for verification_id in candidates:
+            try:
+                verification = self._lock_verification(verification_id)
+                if (
+                    verification.status == "PENDING"
+                    and as_utc(verification.submitted_at) + SEVEN_DAYS <= now
+                ):
+                    verification.status = "EXPIRED"
+                self.repository.session.commit()
+                self._purge_cor_files(verification_id)
+            except Exception:
+                self.repository.session.rollback()
+                logger.error(
+                    "verification_cleanup_retry_required verification_id=%s",
+                    verification_id,
+                )
+
+        self._cleanup_abandoned_uploads(now)
+
+    def _cleanup_abandoned_uploads(self, now: datetime) -> None:
+        """Reconcile only our UUID markers; never sweep unrelated files."""
+        folder = Path(get_settings().cor_storage_root) / "cor"
+        for marker in folder.glob("*.pending"):
+            if not re.fullmatch(r"[0-9a-f]{32}", marker.stem):
+                continue
+            try:
+                if marker.stat().st_mtime > (now - SEVEN_DAYS).timestamp():
+                    continue
+                key = f"cor/{marker.stem}.pdf"
+                tracked = self.repository.find_file_by_storage_key(key)
+                if tracked is not None:
+                    # Committed uploads are handled by the DB work queue.
+                    marker.unlink(missing_ok=True)
+                elif not self._delete_cor_bytes(key):
+                    logger.warning("verification_abandoned_upload_cleanup_failed")
+                else:
+                    logger.info("verification_abandoned_upload_deleted")
+            except OSError:
+                logger.warning("verification_upload_marker_cleanup_failed")
 
     # -------------------------------------------------------- notification
 
-    def _notify(self, verification, student, *, approved: bool, comment: str = "") -> bool:
+    def _notify(
+        self, verification, student, *, approved: bool, comment: str = ""
+    ) -> bool:
         """Queue the decision email in a background thread.
 
         Returns True when the email was queued for sending (SMTP

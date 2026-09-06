@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Response
@@ -21,12 +20,13 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
 from app.core.security import (
+    DUMMY_PASSWORD_HASH,
     digests_match,
     hash_password,
     needs_rehash,
-    new_csrf_token,
     new_session_credential,
     sha256_digest,
+    session_csrf_token,
     verify_password,
 )
 from app.database import get_session
@@ -65,18 +65,25 @@ class AuthService(BaseService[User]):
     # ------------------------------------------------------------- helpers
 
     def _find_user_by_identifier(self, identifier: str) -> User | None:
-        """Student number first (students), then email (staff/legacy)."""
+        """Staff email takes precedence over any colliding student number.
+
+        Students authenticate by student number (ADR-005/019); a public
+        registration must never shadow a staff member's login identifier.
+        """
+        staff = self.accounts.find_user_by_email(identifier)
+        if staff is not None and staff.role_code in ("GUIDANCE_STAFF", "COUNSELOR"):
+            return staff
         profile = self.accounts.find_student_profile_by_number(identifier)
         if profile is not None:
             user = self.accounts.get(profile.user_id)
-            if user is not None:
+            if user is not None and user.role_code == "STUDENT":
                 return user
-        return self.accounts.find_user_by_email(identifier)
+        return None
 
     def _issue_session(self, user: User) -> tuple[UserSession, str, str]:
         """Create a session row; returns (row, raw_credential, raw_csrf)."""
         raw_credential = new_session_credential()
-        raw_csrf = new_csrf_token()
+        raw_csrf = session_csrf_token(raw_credential)
         now = utcnow()
         session = UserSession(
             user_id=user.user_id,
@@ -116,7 +123,7 @@ class AuthService(BaseService[User]):
         if user is None:
             # Timing parity: unknown identifiers run a dummy verify so
             # response time cannot reveal whether the identifier exists.
-            verify_password(password, hash_password("timing-parity-dummy"))
+            verify_password(password, DUMMY_PASSWORD_HASH)
             raise AppError(
                 code="INVALID_CREDENTIALS",
                 message="Incorrect identifier or password.",
@@ -157,6 +164,7 @@ class AuthService(BaseService[User]):
         """
         from app.config import get_settings
 
+        response.headers["Cache-Control"] = "no-store"
         response.set_cookie(
             key=SESSION_COOKIE,
             value=raw_credential,
@@ -170,21 +178,20 @@ class AuthService(BaseService[User]):
     def clear_session_cookie(self, response: Response) -> None:
         response.delete_cookie(key=SESSION_COOKIE, path="/")
 
-    def rotate_csrf_token(self, session: UserSession) -> str:
-        """Issue a fresh CSRF token for a live session (digest-only storage).
-
-        Called by GET /auth/csrf so a page reload (in-memory token lost)
-        can restore the token without an unsafe-method CSRF proof.
-        """
-        raw_csrf = new_csrf_token()
-        session.csrf_token_hash = sha256_digest(raw_csrf)
-        self.repository.session.flush()
+    def recover_csrf_token(self, session: UserSession, raw_credential: str) -> str:
+        """Recover the same token across reloads/tabs; upgrade legacy tokens once."""
+        raw_csrf = session_csrf_token(raw_credential)
+        digest = sha256_digest(raw_csrf)
+        if not digests_match(session.csrf_token_hash, digest):
+            session.csrf_token_hash = digest
+            self.repository.session.flush()
         return raw_csrf
 
     # ----------------------------------------------------- current user
 
     def authenticate_request(
-        self, raw_credential: str | None, csrf_token: str | None, *, is_safe_method: bool
+        self, raw_credential: str | None, csrf_token: str | None, *, is_safe_method: bool,
+        record_activity: bool = True,
     ) -> tuple[User, UserSession]:
         """Authenticate one request; enforce idle/absolute/CSRF rules.
 
@@ -222,7 +229,8 @@ class AuthService(BaseService[User]):
                 status_code=403,
             )
         # Genuine user action renews the idle window (never past the ceiling).
-        self.repository.touch_session(session.session_id)
+        if record_activity:
+            self.repository.touch_session(session.session_id)
         return user, session
 
     # ------------------------------------------------------------- logout

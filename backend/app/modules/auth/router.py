@@ -94,28 +94,36 @@ def logout(
 
 @router.get("/me", response_model=SessionUser, summary="Current authenticated user")
 def me(
+    response: Response,
     session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     service: AuthService = Depends(get_auth_service),
 ):
-    user, _session = service.authenticate_request(session_cookie, None, is_safe_method=True)
+    response.headers["Cache-Control"] = "no-store"
+    user, _session = service.authenticate_request(
+        session_cookie, None, is_safe_method=True, record_activity=False
+    )
     return SessionUser.model_validate(user, from_attributes=True)
 
 
 @router.get(
     "/csrf",
     response_model=AuthResponse,
-    summary="Recover the CSRF token for a live session (safe method, re-issues token)",
+    summary="Recover the CSRF token for a live session without renewing idle activity",
 )
 def recover_csrf(
+    response: Response,
     session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     service: AuthService = Depends(get_auth_service),
 ):
-    """Re-issues the session-bound CSRF token after a page reload.
+    """Recovers the session-bound CSRF token after a page reload.
 
     Safe because the caller must already hold the session cookie (proof
     of the credential); CSRF tokens are not secrets from their own
     session — they only guard cross-site forgery of unsafe requests.
     """
-    user, session = service.authenticate_request(session_cookie, None, is_safe_method=True)
-    raw_csrf = service.rotate_csrf_token(session)
+    response.headers["Cache-Control"] = "no-store"
+    user, session = service.authenticate_request(
+        session_cookie, None, is_safe_method=True, record_activity=False
+    )
+    raw_csrf = service.recover_csrf_token(session, session_cookie)
     return _auth_response(user, session, raw_csrf)

@@ -38,10 +38,18 @@ class AppError(Exception):
             self.status_code = status_code
 
     def to_payload(self) -> dict[str, Any]:
-        return {"error": {"code": self.code, "message": self.message, "details": self.details}}
+        return {
+            "error": {
+                "code": self.code,
+                "message": self.message,
+                "details": self.details,
+            }
+        }
 
 
-def _envelope(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+def _envelope(
+    code: str, message: str, details: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return {"error": {"code": code, "message": message, "details": details or {}}}
 
 
@@ -50,14 +58,31 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def handle_app_error(_: Request, exc: AppError) -> JSONResponse:
-        return JSONResponse(status_code=exc.status_code, content=jsonable_encoder(exc.to_payload()))
+        return JSONResponse(
+            status_code=exc.status_code, content=jsonable_encoder(exc.to_payload())
+        )
 
     @app.exception_handler(RequestValidationError)
-    async def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    async def handle_validation_error(
+        _: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             content=jsonable_encoder(
-                _envelope("VALIDATION_ERROR", "Request validation failed.", exc.errors())
+                _envelope(
+                    "VALIDATION_ERROR",
+                    "Request validation failed.",
+                    {
+                        "fields": [
+                            {
+                                "loc": error["loc"],
+                                "type": error["type"],
+                                "message": "Invalid or missing value.",
+                            }
+                            for error in exc.errors()
+                        ]
+                    },
+                )
             ),
         )
 
@@ -66,5 +91,7 @@ def install_error_handlers(app: FastAPI) -> None:
         # Safe generic response: never leak internals or stack traces.
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=jsonable_encoder(_envelope("INTERNAL_ERROR", "An unexpected error occurred.")),
+            content=jsonable_encoder(
+                _envelope("INTERNAL_ERROR", "An unexpected error occurred.")
+            ),
         )

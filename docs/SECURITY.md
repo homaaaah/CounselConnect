@@ -17,6 +17,8 @@ Web authentication uses opaque sessions in the HttpOnly `counselconnect_session`
 - Revoked, idle-expired, and absolute-expired sessions fail authentication; a new login revokes the user's other live sessions (single-session policy).
 - Logout, password reset, account restriction, and account disablement must revoke sessions (one or all for the user).
 - The table stores no IP history, device fingerprints, COR data, message content, or SOS answers.
+- Staff email lookup takes precedence over colliding student numbers; new registrations reject collisions with existing staff identifiers. Students use their student number, not their personal email, to sign in.
+- `/auth/csrf` restores both user and CSRF state before the reviewer UI mounts. CSRF is derived with domain-separated HMAC from the random session credential, so recovery does not invalidate other tabs; only its SHA-256 digest is stored. Legacy random CSRF tokens migrate on recovery. `/auth/me` and `/auth/csrf` do not renew idle activity. Auth responses use `Cache-Control: no-store`.
 - Login is allowed for `ACTIVE`, `PENDING_VERIFICATION`, and `VERIFICATION_EXPIRED` accounts (pending/expired students must still reach account/COR re-verification); feature-level authorization still requires `ACTIVE` where the feature docs say so.
 - Password-reset credentials will be hashed, single-use, 30-minute expiry, and a successful reset revokes all active sessions without revealing account existence (flow in its own task; no Remember Me in v1).
 
@@ -44,6 +46,10 @@ Web authentication uses opaque sessions in the HttpOnly `counselconnect_session`
 - Treat the stored face-to-face `meeting_location` as an appointment snapshot; only Counselor may change the source campus Guidance Office location.
 
 File deletion is outside a DB rollback: persist cleanup state, detect failure, retry/alert, and never falsely report deletion. Data-minimizing architecture supports privacy compliance but does not alone prove legal compliance; deployed notices, lawful purpose, safeguards, retention, and disposal still matter.
+
+COR decisions commit before deletion. Failed deletions retain `cleanup_state=FAILED` metadata for the application cleanup worker; logs contain only outcome codes and internal record IDs. Private PDF responses use `Cache-Control: no-store`; the reviewer releases preview blob URLs after decisions and on unmount. See `REGISTRATION_VERIFICATION.md` for expiry and retry operation.
+
+Validation errors return only field locations, error types, and safe messages. Submitted inputs, passwords, and validator context are excluded. Database tests require a separate explicit test URL, use a unique disposable schema, and override application database access; their file stores and SMTP settings are isolated as well.
 
 ## Priority tests
 

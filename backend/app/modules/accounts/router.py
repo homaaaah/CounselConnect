@@ -5,12 +5,10 @@ Counselor-only management endpoints arrive with ADR-P01 (auth context).
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from pydantic import EmailStr
+from fastapi.exceptions import RequestValidationError
+from pydantic import EmailStr, ValidationError
 
-from app.core.exceptions import AppError
 from app.modules.accounts.schemas import (
     CampusResponse,
     ProgramResponse,
@@ -61,9 +59,8 @@ async def register_student_with_cor(
     file: UploadFile = File(..., description="Current COR PDF (registration form)"),
     service: AccountsService = Depends(get_accounts_service),
 ):
-    cor_content = await file.read()
-    user, profile, verification = service.register_student_with_cor(
-        SimpleNamespace(
+    try:
+        data = StudentRegistrationRequest(
             email=email,
             password=password,
             first_name=first_name,
@@ -74,7 +71,18 @@ async def register_student_with_cor(
             program_id=program_id,
             year_level=year_level,
             section=section,
-        ),
+        )
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [{**error, "loc": ("body", *error["loc"])} for error in exc.errors()]
+        ) from None
+    from app.config import get_settings
+
+    # Read only enough to validate the configured limit, including one
+    # extra byte to detect an oversized upload without loading it all.
+    cor_content = await file.read(get_settings().cor_max_mb * 1024 * 1024 + 1)
+    user, profile, verification = service.register_student_with_cor(
+        data,
         cor_content,
         file.filename or "cor.pdf",
     )
@@ -89,15 +97,17 @@ async def register_student_with_cor(
     )
 
 
-@router.get("/campuses", response_model=ListEnvelope[CampusResponse],
-            summary="Active campuses")
+@router.get(
+    "/campuses", response_model=ListEnvelope[CampusResponse], summary="Active campuses"
+)
 def list_campuses(service: AccountsService = Depends(get_accounts_service)):
     items = [CampusResponse.model_validate(c) for c in service.list_active_campuses()]
     return paginate(items, page=1, page_size=max(len(items), 1))
 
 
-@router.get("/programs", response_model=ListEnvelope[ProgramResponse],
-            summary="Active programs")
+@router.get(
+    "/programs", response_model=ListEnvelope[ProgramResponse], summary="Active programs"
+)
 def list_programs(service: AccountsService = Depends(get_accounts_service)):
     items = [ProgramResponse.model_validate(p) for p in service.list_active_programs()]
     return paginate(items, page=1, page_size=max(len(items), 1))

@@ -31,7 +31,7 @@ from app.modules.enrollment_verification.service import (
     EnrollmentVerificationService,
     get_enrollment_verification_service,
 )
-from app.shared.dependencies import get_current_user, require_counselor, require_roles
+from app.shared.dependencies import require_counselor, require_roles
 
 router = APIRouter(prefix="/enrollment-verifications", tags=["enrollment_verification"])
 
@@ -47,7 +47,9 @@ def upload_cor(
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
     student: User = Depends(require_roles("STUDENT")),
 ):
-    content = file.file.read()
+    from app.config import get_settings
+
+    content = file.file.read(get_settings().cor_max_mb * 1024 * 1024 + 1)
     verification = service.submit_cor(student.user_id, content, file.filename or "cor.pdf")
     return verification
 
@@ -117,7 +119,10 @@ def get_cor_pdf(
     return Response(
         content=content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="cor-{verification_id}.pdf"'},
+        headers={
+            "Content-Disposition": f'inline; filename="cor-{verification_id}.pdf"',
+            "Cache-Control": "no-store",
+        },
     )
 
 

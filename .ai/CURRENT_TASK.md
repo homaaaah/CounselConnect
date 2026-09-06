@@ -1,48 +1,44 @@
 # CounselConnect — Current Task
 
 **Status:** COMPLETED
-**Risk class:** HIGH (authentication/authorization, cookies, role enforcement)
+**Risk class:** HIGH (authentication, COR privacy, concurrent decisions, test isolation)
 
-## Objective (ADR-019, user-approved 2026-09-05)
+## Objective
 
-Real login/logout/refresh with MySQL-backed opaque sessions in secure HttpOnly cookies, CSRF protection, Argon2id password hashing (transparent bcrypt upgrade), role-based endpoint enforcement replacing the temporary X-Admin-Key dev guard. ADR-P01 recorded as APPROVED in `.ai/DECISIONS.md` (ADR-019); removed from Pending.
+Implement the seven issues identified in the 2026-09-06 review, as requested by the user, within the existing Markdown contracts and approved ADR-004/005/019 rules.
+
+## Context and scope
+
+Primary route: security. Owning contracts: `docs/SECURITY.md`, `docs/REGISTRATION_VERIFICATION.md`, `docs/USER_ROLES.md`, `docs/API_CONTRACT.md`; naming follows `.ai/NAMING_CONVENTIONS.md`.
+
+- Prevent student-number collisions from shadowing staff email logins.
+- Restore session/CSRF before protected UI actions; preserve CSRF across tabs and expose real sign-out.
+- Enforce seven-day COR expiry, retain failed cleanup metadata, and run automatic cleanup/retries.
+- Serialize COR submissions/decisions; commit decisions before irreversible file deletion.
+- Isolate all DB tests from the ordinary application database, storage, and SMTP.
+- Sanitize validation errors and share registration validation between JSON and multipart.
+- Add focused privacy/concurrency/frontend regressions and regenerate OpenAPI.
+
+Preserve existing structure-documentation changes. No role expansion, new database tables, production data migration, or approval of pending policy choices.
 
 ## Delivered
 
-**Backend**
-- `core/security.py`: Argon2id hash/verify; bcrypt verify + `needs_rehash` upgrade; 256-bit `secrets` credentials; SHA-256 digests; constant-time compares.
-- `modules/auth/`: `schemas.py` (LoginRequest/SessionUser/AuthResponse), `service.py` (login by student-number-or-email with timing parity, session issue, single-session policy, cookie set/clear with settings-driven `secure`, CSRF rotation, authenticate_request with 1h idle / 12h absolute / CSRF / status checks, logout), `router.py` (login, refresh, logout, me, csrf).
-- `shared/dependencies.py`: `get_current_user`, `require_roles`, `require_counselor` (CSRF enforced on unsafe methods only).
-- `modules/enrollment_verification/router.py`: all reviewer endpoints COUNSELOR-gated; COR upload STUDENT-gated with session identity (`student_user_id` query param gone).
-- `modules/accounts/router.py`: removed the `/accounts/lookup` enumeration endpoint.
-- `config.py`: `cookie_secure` setting (default False for localhost, True behind HTTPS); removed dead `dev_admin_key`.
-- `dev_seed.sql`: dev counselor `counselor@ucc.edu.ph` / `counselor-dev-2026` (Argon2id; ADR-005 developer-created; rotation warning).
-- `requirements.txt`: `argon2-cffi>=23.1`.
+- Staff email cannot be shadowed by a student number; registration rejects existing staff-identifier collisions. Student login follows the approved student-number rule. Unknown logins reuse a precomputed dummy password hash.
+- The app restores user/CSRF together before mounting the reviewer, keeps recovery stable across tabs, and supports real sign-out. Late responses cannot overwrite a newer login token. Session recovery does not count as genuine activity.
+- COR submissions and decisions use a consistent Student/verification lock order. Decisions commit before file deletion. Expired evidence is denied, failed deletion retains retry metadata, and the application worker performs expiry/retry passes every minute. Interrupted upload markers are reconciled by TTL. Preview blobs are released after decisions/unmount, including in-flight preview races.
+- Test fixtures require an explicit test URL, create/drop only their own random schema, override application connections, and isolate file stores/SMTP. JSON/multipart registration share validation; errors omit submitted inputs and validator context.
+- Owning security/registration/API/database/setup docs and the context route are updated. OpenAPI is regenerated; `backend/scripts/export_openapi.py --check` provides a repeatable drift check. Existing structure-guide changes are preserved.
 
-**Frontend**
-- `apiClient.ts`: `credentials: "include"`, in-memory CSRF token attached to unsafe methods when present (login/register exempt), 401 clears token.
-- `features/auth/`: `useLogin` (real flow), `useSession` (restore via `/auth/me` + `/auth/csrf` recovery after reload; logout).
-- `features/enrollment/`: reviewer console session-based (no dev-key UI, blob-fetch PDF preview); `useCorUpload` session identity.
-- `LoginPage`: role-based redirect (COUNSELOR → `#review`).
+## Verification (executed 2026-09-06)
 
-**Tests** — `tests/unit/test_auth_flow.py` (16 tests): identifier lookup, same-error rule, allowed statuses + guard constant, bcrypt→Argon2 upgrade, single-session revocation, cookie flags (HttpOnly/SameSite/Path/Max-Age), me/refresh/logout flows, CSRF on refresh + approve, per-endpoint role gates (pending/history/cor/approve/reject), session-identity COR upload, idle + absolute expiry, never-sliding absolute, digest-only storage.
+- Backend: **66 passed**, no skips, against a unique disposable loopback MySQL schema; application data was not used by the test fixtures. Covers failed deletion/retry, TTL, original replacement deadlines, commit failure, simultaneous approve/reject (both winners), authorization, validation redaction, and CSRF recovery.
+- The backend suite includes a real React-to-FastAPI HTTP flow: login → lose component/CSRF memory while retaining the cookie → restore → approve → logout. It runs against the isolated schema and temporary COR store.
+- Frontend: **8 passed** with the actual TS/TSX components and API client; `npm run build` passed (TypeScript + Vite production output).
+- Generated OpenAPI matches the application; focused Ruff checks and `git diff --check` passed.
+- One existing Starlette/TestClient deprecation warning remains. The HTTP/component integration test is not a full browser/device test.
 
-**Docs** — SECURITY.md (implemented ADR-019 section, allowed-statuses fix), TEAM_SETUP_GUIDE.md (counselor sign-in flow, troubleshooting, no more dev-key), `contracts/openapi.json` regenerated (20 paths; +auth/csrf, −accounts/lookup).
+## Remaining project decisions outside this fix
 
-## Review (HIGH-risk fresh pass — read-only agent)
+Guidance Staff assignment wiring, password reset, session-row cleanup scheduling, idle-warning UI, and other pending ADRs remain separate work. Existing provisional PDF/size rules are unchanged. Physical cleanup requires an application/cleanup process to run; failed I/O is tracked and retried, not falsely reported as successful.
 
-REQUEST_CHANGES blockers all fixed: (1) client CSRF guard no longer blocks public POSTs; (5) `/auth/csrf` re-issues token after reload (logout-after-reload works); (2) enumeration endpoint removed; (3) dummy-verify timing parity; (7) settings-driven Secure cookie; plus #4 role redirect, #6 true idle-expiry moment, #14 STUDENT role gate, #9 dead config/stale docstrings, #12 stale hook, #10 Argon2 comment, #11 docs statuses, test gaps (cookie flags, per-endpoint gates, CSRF-on-approve, guard constant).
-
-Remaining from review, deliberately deferred: GUIDANCE_STAFF assigned-case review endpoints (needs assignment data model wiring — separate task); scheduled `delete_expired_sessions` cleanup job (needs a scheduler story); OpenAPI security schemes annotations (cosmetic); FR-AUTH-03 five-minute warning UI rendering (timestamps already returned).
-
-## Verification (all executed 2026-09-05)
-
-1. `pytest app/tests -q` → **31 passed** (16 auth + 10 sessions + 5 originals) against real MySQL test schema.
-2. Live e2e (uvicorn + curl cookie jar): login (cookie HttpOnly/SameSite=lax/Max-Age=43200), /auth/me, /auth/csrf recovery, refresh (CSRF+expiries), logout revokes (401 after), wrong password 401 same envelope, timing parity ~equal (401ms vs 354ms incl. network), student-number login, student 403 on all reviewer endpoints, student COR upload 201 via session, counselor queue 200, lookup endpoint 404.
-3. Frontend `npm run build` clean; login page role-redirect wired.
-4. OpenAPI regenerated and asserted.
-
-## Human decisions
-
-- ADR-P01 approved by user (built as ADR-019). Password-reset flow (FR-AUTH-04) is the next auth task, separately.
-- Dev counselor password `counselor-dev-2026` must be rotated before any real deployment (documented in seed + setup guide).
+Cleanup does not sweep unrelated or previously untracked legacy files; any reconciliation of applicant files that lost metadata before this fix is separate authorized maintenance. No production migration or deployment was performed.

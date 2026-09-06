@@ -35,6 +35,13 @@ class AccountsRepository(BaseRepository[User]):
     def find_user_by_email(self, email: str) -> User | None:
         return self.session.scalar(select(User).where(User.email == email))
 
+    def lock_user(self, user_id: int) -> User | None:
+        """Serialize verification submissions/decisions for one student."""
+        return self.session.scalar(
+            select(User).where(User.user_id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
     def find_student_profile(self, user_id: int) -> StudentProfile | None:
         return self.session.get(StudentProfile, user_id)
 

@@ -33,6 +33,10 @@ def hash_password(plain: str) -> str:
     return _argon2.hash(plain)
 
 
+# Compute once per process, not on each unknown-identifier login attempt.
+DUMMY_PASSWORD_HASH = hash_password("counselconnect-login-timing-placeholder")
+
+
 def verify_password(plain: str, hashed: str) -> bool:
     """True when the password matches an Argon2id or legacy bcrypt hash."""
     if hashed.startswith("$argon2"):
@@ -64,6 +68,15 @@ def new_session_credential() -> str:
 def new_csrf_token() -> str:
     """New 256-bit random CSRF token bound to one session."""
     return secrets.token_urlsafe(CREDENTIAL_ENTROPY_BYTES)
+
+
+def session_csrf_token(raw_credential: str) -> str:
+    """Recoverable, session-bound token without exposing the cookie secret.
+
+    Domain-separated HMAC keeps recovery stable across tabs. Only the
+    token's SHA-256 digest is persisted, just like random CSRF tokens.
+    """
+    return hmac.new(raw_credential.encode("utf-8"), b"counselconnect/csrf/v1", hashlib.sha256).hexdigest()
 
 
 def sha256_digest(value: str) -> bytes:

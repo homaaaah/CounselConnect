@@ -21,6 +21,16 @@ If still pending after seven days: delete COR, set verification `EXPIRED`, and k
 - Exclude temporary files from long-lived backups where feasible.
 - MySQL keeps status, timestamps, reviewer/reason, `valid_until`, and cleanup metadata—not document bytes.
 
+## Implemented cleanup and concurrency
+
+- Both registration endpoints use `StudentRegistrationRequest` validation. The existing PDF/size limit remains provisional under ADR-P05; uploads are read with a bounded size.
+- Submissions and decisions lock the Student row, then the verification row, and re-read the current state. A competing decision receives `409 DECISION_ALREADY_MADE`.
+- Pending replacements retain the original seven-day deadline. The replacement and retired file metadata commit together; only then is the old file deleted. Decisions likewise commit before deletion. Failed deletion preserves the file row as `FAILED` for retry, including replacement failures.
+- The FastAPI lifespan starts a cleanup worker immediately and every 60 seconds while the application runs. It expires pending verifications, deletes due files, and retries failed deletion. Preview and decision paths independently deny expired evidence, even between cleanup passes.
+- An empty, UUID-named `.pending` marker in private storage tracks a write interrupted before DB commit. Abandoned marked uploads are reconciled after seven days; unrelated files are never swept. These markers contain no document content.
+- Cleanup failures log only outcome codes/internal IDs. Monitor `verification_cleanup_worker_failed`, `verification_cleanup_retry_required`, and `verification_file_cleanup_failed`; fix storage/database access failures so retries can succeed.
+- For an application that is not continuously running, schedule `python -m app.modules.enrollment_verification.cleanup` from `backend/` against its configured private store and database. This command performs one cleanup pass. No deletion can run while every application/cleanup process is stopped.
+
 ## Authorization
 
 - Guidance Staff: assigned cases only.

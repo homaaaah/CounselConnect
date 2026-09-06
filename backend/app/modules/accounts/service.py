@@ -56,6 +56,14 @@ class AccountsService(BaseService[User]):
         """
         repo = self.repository
 
+        identifier_owner = repo.find_user_by_email(data.student_number)
+        if identifier_owner is not None and identifier_owner.role_code in ("COUNSELOR", "GUIDANCE_STAFF"):
+            raise AppError(
+                code="INVALID_STUDENT_NUMBER",
+                message="Use your university-issued student number.",
+                status_code=422,
+            )
+
         if repo.find_user_by_email(data.email) is not None:
             raise AppError(
                 code="EMAIL_ALREADY_REGISTERED",

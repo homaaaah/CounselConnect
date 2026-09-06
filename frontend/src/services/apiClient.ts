@@ -44,6 +44,7 @@ export function getCsrfToken(): string | null {
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const sentCsrfToken = csrfToken;
   const isFormData = init.body instanceof FormData;
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   if (!isFormData) {
@@ -63,7 +64,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   });
   if (!response.ok) {
     const envelope = (await response.json().catch(() => null)) as ApiErrorEnvelope | null;
-    if (response.status === 401) {
+    if (response.status === 401 && csrfToken === sentCsrfToken) {
       setCsrfToken(null); // session gone/invalid — force re-login
     }
     throw new ApiError(response.status, envelope ?? {

@@ -96,7 +96,7 @@ def counselor(db_session: Session) -> User:
 @pytest.fixture()
 def client(db_session: Session) -> TestClient:
     """App wired to the rollback session (DB state never escapes a test)."""
-    app = create_app()
+    app = create_app(run_cleanup=False)
 
     def _override():
         yield db_session
@@ -114,11 +114,14 @@ def _login(client: TestClient, identifier: str, password: str):
 # --------------------------------------------------------------- service
 
 
-def test_login_by_student_number_and_email(db_session, student):
+def test_student_login_uses_student_number(db_session, student):
+    from app.core.exceptions import AppError
+
     svc = AuthService(db_session)
     by_number = svc.login("2026-AUTHTST", "student-pass-1")
-    by_email = svc.login("auth-student@example.edu", "student-pass-1")
-    assert by_number[0].user_id == by_email[0].user_id == student.user_id
+    assert by_number[0].user_id == student.user_id
+    with pytest.raises(AppError, match="Incorrect identifier or password"):
+        svc.login("auth-student@example.edu", "student-pass-1")
     # Same-error rule: unknown identifier and wrong password are identical.
     for bad in [("nope", "student-pass-1"), ("2026-AUTHTST", "wrong")]:
         from app.core.exceptions import AppError
@@ -172,6 +175,39 @@ def test_login_revokes_previous_sessions(db_session, student):
     fresh2 = db_session.get(UserSession, s2.session_id)
     assert fresh1.revoked_at is not None
     assert fresh2.revoked_at is None
+
+
+def test_existing_student_number_collision_cannot_block_counselor(client, db_session, student, counselor):
+    profile = db_session.get(StudentProfile, student.user_id)
+    profile.student_number = counselor.email
+    db_session.flush()
+    response = _login(client, counselor.email, "counselor-pass-1")
+    assert response.status_code == 200
+    assert response.json()["user"]["user_id"] == counselor.user_id
+    assert _login(client, counselor.email, "student-pass-1").status_code == 401
+
+
+def test_registration_rejects_staff_identifier_collision(db_session, counselor, academic_references):
+    from app.core.exceptions import AppError
+    from app.modules.accounts.schemas import StudentRegistrationRequest
+    from app.modules.accounts.service import AccountsService
+
+    payload = StudentRegistrationRequest(email="new-student@example.edu", password="student-pass-1",
+        first_name="Ana", last_name="Santos", student_number=counselor.email,
+        campus_id=academic_references[0], program_id=academic_references[1], year_level=1, section="A")
+    service = AccountsService(db_session)
+    with pytest.raises(AppError) as error:
+        service.register_student(payload)
+    assert error.value.code == "INVALID_STUDENT_NUMBER"
+    assert service.repository.find_user_by_email(payload.email) is None
+
+
+def test_csrf_recovery_after_reload_keeps_other_tab_token_valid(client, counselor):
+    login = _login(client, counselor.email, "counselor-pass-1").json()
+    recovered = client.get("/api/v1/auth/csrf")
+    assert recovered.status_code == 200
+    assert recovered.json()["csrf_token"] == login["csrf_token"]
+    assert client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": login["csrf_token"]}).status_code == 204
 
 
 # ---------------------------------------------------- endpoint flow (cookie+CSRF)

@@ -34,11 +34,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Login Api V1 Auth Login Post"
                 }
               }
             }
@@ -83,11 +91,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Refresh Api V1 Auth Refresh Post"
                 }
               }
             }
@@ -125,11 +141,19 @@
             "description": "Successful Response"
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Logout Api V1 Auth Logout Post"
                 }
               }
             }
@@ -174,11 +198,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Me Api V1 Auth Me Get"
                 }
               }
             }
@@ -191,8 +223,8 @@
         "tags": [
           "auth"
         ],
-        "summary": "Recover the CSRF token for a live session (safe method, re-issues token)",
-        "description": "Re-issues the session-bound CSRF token after a page reload.\n\nSafe because the caller must already hold the session cookie (proof\nof the credential); CSRF tokens are not secrets from their own\nsession — they only guard cross-site forgery of unsafe requests.",
+        "summary": "Recover the CSRF token for a live session without renewing idle activity",
+        "description": "Recovers the session-bound CSRF token after a page reload.\n\nSafe because the caller must already hold the session cookie (proof\nof the credential); CSRF tokens are not secrets from their own\nsession — they only guard cross-site forgery of unsafe requests.",
         "operationId": "recover_csrf_api_v1_auth_csrf_get",
         "parameters": [
           {
@@ -224,11 +256,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Recover Csrf Api V1 Auth Csrf Get"
                 }
               }
             }
@@ -265,11 +305,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Register Student Api V1 Accounts Register Student Post"
                 }
               }
             }
@@ -306,11 +354,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Register Student With Cor Api V1 Accounts Register Student With Cor Post"
                 }
               }
             }
@@ -335,6 +391,24 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Campuses Api V1 Accounts Campuses Get"
+                }
+              }
+            }
           }
         }
       }
@@ -353,6 +427,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListEnvelope_ProgramResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Programs Api V1 Accounts Programs Get"
                 }
               }
             }
@@ -407,11 +499,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Upload Cor Api V1 Enrollment Verifications Cor Post"
                 }
               }
             }
@@ -460,11 +560,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Pending Api V1 Enrollment Verifications Pending Get"
                 }
               }
             }
@@ -530,11 +638,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List History Api V1 Enrollment Verifications History Get"
                 }
               }
             }
@@ -587,11 +703,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Get Cor Pdf Api V1 Enrollment Verifications  Verification Id  Cor Get"
                 }
               }
             }
@@ -662,11 +786,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Approve Api V1 Enrollment Verifications  Verification Id  Approve Post"
                 }
               }
             }
@@ -730,11 +862,19 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Sanitized validation or business-rule errors",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reject Api V1 Enrollment Verifications  Verification Id  Reject Post"
                 }
               }
             }
@@ -759,6 +899,24 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Cms Blocks Api V1 Content Cms Blocks Get"
+                }
+              }
+            }
           }
         }
       }
@@ -777,6 +935,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListEnvelope_ContentItemResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Faqs Api V1 Content Faqs Get"
                 }
               }
             }
@@ -801,6 +977,24 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Announcements Api V1 Content Announcements Get"
+                }
+              }
+            }
           }
         }
       }
@@ -819,6 +1013,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListEnvelope_EmergencyContactResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Emergency Contacts Api V1 Content Emergency Contacts Get"
                 }
               }
             }
@@ -845,6 +1057,24 @@
                   },
                   "type": "object",
                   "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Health Api V1 Health Get"
                 }
               }
             }
@@ -1160,18 +1390,41 @@
         ],
         "title": "EmergencyContactResponse"
       },
-      "HTTPValidationError": {
+      "ErrorDetail": {
         "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details",
+            "default": {}
           }
         },
         "type": "object",
-        "title": "HTTPValidationError"
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
       },
       "ListEnvelope_CampusResponse_": {
         "properties": {
@@ -1742,7 +1995,57 @@
         ],
         "title": "UserResponse"
       },
-      "ValidationError": {
+      "ValidationDetails": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationFieldError"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "title": "ValidationDetails"
+      },
+      "ValidationErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "$ref": "#/components/schemas/ValidationDetails"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "title": "ValidationErrorDetail"
+      },
+      "ValidationErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ValidationErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ValidationErrorResponse"
+      },
+      "ValidationFieldError": {
         "properties": {
           "loc": {
             "items": {
@@ -1756,31 +2059,24 @@
               ]
             },
             "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
+            "title": "Loc"
           },
           "type": {
             "type": "string",
-            "title": "Error Type"
+            "title": "Type"
           },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
+          "message": {
+            "type": "string",
+            "title": "Message"
           }
         },
         "type": "object",
         "required": [
           "loc",
-          "msg",
-          "type"
+          "type",
+          "message"
         ],
-        "title": "ValidationError"
+        "title": "ValidationFieldError"
       },
       "VerificationFileMeta": {
         "properties": {

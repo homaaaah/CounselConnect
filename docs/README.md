@@ -5,6 +5,7 @@ Load one owning feature doc plus shared docs only when needed.
 | Need | File |
 |---|---|
 | System map | `SYSTEM_OVERVIEW.md` |
+| Repository structure | `structure/PROJECT_STRUCTURE.md` |
 | Roles/permissions | `USER_ROLES.md` |
 | Cross-feature sequence | `WORKFLOWS.md` |
 | Shared API contract and frontend/backend handoff | `API_CONTRACT.md` |

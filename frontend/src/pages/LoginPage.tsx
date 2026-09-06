@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useLogin } from "../features/auth";
+import { useLogin, type AuthResult } from "../features/auth";
 
 /** Sign-in page (ADR-019): opaque session cookie + CSRF. */
-export default function LoginPage() {
+export default function LoginPage({ onSignedIn }: { onSignedIn: (auth: AuthResult) => void }) {
   const { login, submitting } = useLogin();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -14,7 +14,6 @@ export default function LoginPage() {
       const target = result.role === "COUNSELOR" ? "#review" : "#landing";
       const t = setTimeout(() => {
         window.location.hash = target;
-        window.location.reload();
       }, 700);
       return () => clearTimeout(t);
     }
@@ -23,6 +22,7 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const r = await login(identifier, password);
+    if (r.ok && r.auth) onSignedIn(r.auth);
     setResult({ ok: r.ok, message: r.message, role: r.auth?.user.role_code });
   }
 

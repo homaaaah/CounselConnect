@@ -101,6 +101,7 @@ Rules:
 - `message` is safe, human-readable text; it must not contain secrets or internal traces.
 - `details` is an object containing safe field-level or conflict context; use `{}` when none is required.
 - FastAPI's default validation error must be normalized to this envelope by a shared exception handler.
+- `VALIDATION_ERROR` uses `details.fields`, an array of `{ "loc": ["body", "field_name"], "type": "error_type", "message": "Invalid or missing value." }`. Never return submitted `input` values or validator context.
 - The frontend must branch on `error.code`, not exact message text.
 
 | Status | Use |
@@ -167,6 +168,8 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 FastAPI exposes the live generated schema at `/openapi.json` and interactive documentation at `/docs` while the backend is running. The team must also commit a generated snapshot at `contracts/openapi.json` whenever an `AGREED` endpoint is implemented or changed.
 
 Do not hand-edit the generated snapshot. Change the FastAPI route, Pydantic schema, response declaration, or shared error handler, then regenerate it.
+
+From `backend/`, run `python scripts/export_openapi.py` to regenerate, or add `--check` to verify the snapshot without changing it. Neither command starts the cleanup worker or connects to MySQL.
 
 The snapshot is ready for frontend use only when:
 
