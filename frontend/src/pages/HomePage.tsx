@@ -1,11 +1,12 @@
 import { usePublicContent } from "../features/content";
+import type { SessionUser } from "../features/auth";
 
 /**
  * Homepage after sign-in (DFD Master System Flow "Student services").
- * Until ADR-P01, reached via the demo link on the landing page; shows the
- * student service modules and emergency contacts.
+ * Active students can open appointments; the public preview also shows
+ * service descriptions and emergency contacts without protected data.
  */
-export default function HomePage() {
+export default function HomePage({ user }: { user?: SessionUser | null }) {
   const { announcements, contacts } = usePublicContent();
 
   const services = [
@@ -21,7 +22,7 @@ export default function HomePage() {
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
         <h1 className="text-lg font-semibold text-slate-800">CounselConnect</h1>
         <span className="text-xs text-slate-400">
-          Preview — sign-in arrives with ADR-P01
+          {user ? "Student services" : "Preview"}
         </span>
       </header>
 
@@ -38,9 +39,11 @@ export default function HomePage() {
               className="rounded-lg border border-slate-200 bg-white p-5 opacity-90">
               <h3 className="font-medium text-slate-800">{s.title}</h3>
               <p className="mt-1 text-sm text-slate-500">{s.desc}</p>
-              <p className="mt-3 text-xs font-medium text-amber-600">
-                Available after COR verification
-              </p>
+              {s.title === "Appointments" && user?.role_code === "STUDENT" && user.account_status === "ACTIVE"
+                ? <a href="#appointments" className="mt-3 inline-block text-sm font-medium text-emerald-700 underline">Book or manage appointments</a>
+                : <p className="mt-3 text-xs font-medium text-amber-600">
+                  {s.title === "Appointments" ? "Available after COR verification" : "Coming soon"}
+                </p>}
             </div>
           ))}
         </div>

@@ -18,6 +18,10 @@ class AccountsRepository(BaseRepository[User]):
     def find_campus(self, campus_id: int) -> Campus | None:
         return self.session.get(Campus, campus_id)
 
+    def lock_campus(self, campus_id: int) -> Campus | None:
+        return self.session.scalar(select(Campus).where(Campus.campus_id == campus_id)
+            .with_for_update().execution_options(populate_existing=True))
+
     def find_department(self, department_id: int) -> Department | None:
         return self.session.get(Department, department_id)
 

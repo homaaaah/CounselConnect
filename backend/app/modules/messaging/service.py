@@ -29,6 +29,20 @@ class MessagingService(BaseService[Conversation]):
     def __init__(self, session: Session) -> None:
         super().__init__(MessagingRepository(session))
 
+    def close_for_appointment(self, appointment):
+        """Internal call after the appointment service locks and authorizes the outcome."""
+        from datetime import datetime, timezone
+        from app.core.exceptions import AppError
+        conversation = self.repository.lock_conversation(appointment.conversation_id)
+        if (conversation is None or conversation.conversation_type != "APPOINTMENT"
+            or appointment.appointment_mode != "ONLINE"
+            or conversation.student_user_id != appointment.student_user_id
+            or conversation.counselor_user_id != appointment.counselor_user_id):
+            raise AppError("CONVERSATION_MISMATCH", "The appointment session link is invalid.")
+        if conversation.status == "OPEN":
+            conversation.status = "CLOSED"
+            conversation.closed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 def get_messaging_service(session: Session = Depends(get_session)) -> MessagingService:
     """FastAPI dependency: Session -> Repository -> Service."""

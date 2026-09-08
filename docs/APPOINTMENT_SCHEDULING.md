@@ -42,6 +42,21 @@ Final outcomes are `COMPLETED`, `CANCELLED`, and `NO_SHOW`. Rescheduling must re
 - Separation of `GENERAL`, `APPOINTMENT`, and `SOS` conversations.
 - UTC persistence and `Asia/Manila` display.
 
-## Pending
+## Implemented scheduling flow
+
+The scheduling UI is at `#appointments`, available from the signed-in navigation to active Students and Counselors. Student sign-in opens Student services with an appointment link. Guidance Staff and pending/expired Students cannot load appointment data. The reference is **Flowchart V1, page 4 (Appointment Scheduling)**.
+
+- Counselor selects a campus, time range, duration, and supported mode; the API persists concrete slots. A range must contain whole slots, with a technical batch maximum of 200. No duration/buffer policy or recurrence is assumed. Counselor availability cannot overlap across campuses.
+- Students filter future slots by campus, Philippine date, and mode; requesting a slot creates `PENDING`. The owning Counselor can confirm or reject a pending request. Rejection optionally includes a note of at most 500 characters.
+- Owner Student or assigned Counselor can cancel `PENDING` or `CONFIRMED`. They can reschedule `CONFIRMED` to a different future available slot; the same appointment returns to `PENDING` for review. A Counselor can select only their own replacement slots. A Student can select another Counselor. The replacement mode and campus location are revalidated and its location snapshot replaces the previous booking snapshot atomically. A linked online session prevents rescheduling.
+- Only the assigned Counselor records `COMPLETED` or `NO_SHOW`, from `CONFIRMED` and once the scheduled start has been reached. Confirmation after the start is denied. No additional no-show threshold or cancellation/reschedule cutoff has been chosen.
+- User-row locks in ascending ID order serialize participant conflicts; subsequent appointment, ordered slot, and campus locks revalidate current state. The generated unique active-slot constraint remains the database backstop. Failed replacement requests leave the original reservation intact. Terminal transitions release the reservation; searches exclude past slots.
+- Counselor may update a nonblank Guidance Office location. Existing face-to-face snapshots remain unchanged. Missing location blocks face-to-face-capable slot creation and face-to-face booking/rescheduling.
+- Lists are scoped to the acting Student or assigned Counselor, paginated at 20 by default (maximum 100), and returned with `Cache-Control: no-store`. State changes use the existing cookie/CSRF controls and minimal audit events, with no confidential content copied into audit metadata.
+- Dates persist in UTC and serialize with `Z`; form inputs and displays use `Asia/Manila`, independent of the browser's timezone. Refresh is explicit and there is no scheduling background poll.
+
+**Integration boundary:** online slots and requests are supported, but scheduled Live Chat joining/message exchange is not implemented. The UI states this before booking and on confirmed online appointments. The existing messaging service now validates participant/mode/type linkage and closes an already-linked conversation when an authorized terminal outcome occurs. It does not create or open conversations. The online integration requirements above remain requirements for the separate Live Chat implementation.
+
+## Pending policy and integration
 
 Slot duration/buffer, cancellation/reschedule cutoff, blocked periods, reminders, detailed no-show policy, and any allowed pre-start join window.

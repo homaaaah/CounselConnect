@@ -13,6 +13,10 @@ class MessagingRepository(BaseRepository[Conversation]):
 
     model = Conversation
 
+    def lock_conversation(self, conversation_id):
+        return self.session.scalar(select(Conversation).where(Conversation.conversation_id == conversation_id)
+            .with_for_update().execution_options(populate_existing=True))
+
     def find_message(self, message_id: int) -> Message | None:
         return self.session.get(Message, message_id)
 

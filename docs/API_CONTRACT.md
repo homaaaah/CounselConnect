@@ -150,6 +150,29 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 - Only Counselor may mutate `guidance_office_location`.
 - A confirmed online appointment may obtain exactly one `APPOINTMENT` conversation when the approved start-time rule allows it.
 
+### Implemented scheduling endpoints
+
+Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All routes require a valid session; mutations require CSRF. Only active Students and Counselors can use scheduling, and appointment resources are scoped to the owner Student/assigned Counselor. Guidance Staff is denied. No request accepts an acting-user or student ID override.
+
+| Method/path | Allowed caller and behavior |
+|---|---|
+| `GET /availability-slots` | Student: future available slots; Counselor: own future slots. Optional `campus_id`, `appointment_mode`, aware `starts_after`/`ends_before`; `page=1`, `page_size=20` (max 100). |
+| `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1–200 concrete slots. |
+| `PATCH /campuses/{campus_id}/guidance-office-location` | Counselor; nonblank `guidance_office_location` (max 255); 200 campus response. |
+| `GET /appointments` | Own appointments; optional `status`; `page=1`, `page_size=20` (max 100). |
+| `POST /appointments` | Student; `availability_slot_id`, `appointment_mode`; 201 `PENDING` appointment. |
+| `GET /appointments/{appointment_id}` | Owner Student/assigned Counselor; 200 appointment. |
+| `POST /appointments/{appointment_id}/confirm` | Assigned Counselor; pending to confirmed. |
+| `POST /appointments/{appointment_id}/reject` | Assigned Counselor; JSON object with optional nullable `rejection_note` (max 500). |
+| `POST /appointments/{appointment_id}/cancel` | Owner Student/assigned Counselor; pending or confirmed to cancelled. |
+| `POST /appointments/{appointment_id}/reschedule` | Owner Student/assigned Counselor; replacement `availability_slot_id`, `appointment_mode`; confirmed to pending. |
+| `POST /appointments/{appointment_id}/complete` | Assigned Counselor; confirmed to completed once scheduled start is reached. |
+| `POST /appointments/{appointment_id}/no-show` | Assigned Counselor; confirmed to no-show once scheduled start is reached. |
+
+Transitions return 200 appointment responses. Responses include the schedule, campus/counselor names, and (only in authorized appointment responses) student name and booking-time `meeting_location`. `conversation_id` remains nullable; there is no chat-join endpoint in this scheduling delivery. All scheduling responses are `no-store`; schema validation excludes unknown request fields and returns sanitized errors. Exact shapes are generated in `contracts/openapi.json`.
+
+Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMENT_NOT_FOUND`/`CAMPUS_NOT_FOUND`; and 409 `SLOT_UNAVAILABLE`, `SCHEDULE_CONFLICT`, `MODE_INCOMPATIBLE`, `GUIDANCE_OFFICE_REQUIRED`, `SLOT_IN_PAST`, `INVALID_APPOINTMENT_TRANSITION`, `SESSION_NOT_STARTED`, `SESSION_ALREADY_LINKED`, `PARTICIPANT_UNAVAILABLE`, `APPOINTMENT_CHANGED`, or `CONVERSATION_MISMATCH`. Unauthenticated and missing/invalid CSRF requests use the existing auth errors. Naive datetime inputs and invalid pagination/ranges/enums receive sanitized 422 errors.
+
 ### Messaging
 
 - `conversation_type` is `GENERAL`, `APPOINTMENT`, or `SOS`.

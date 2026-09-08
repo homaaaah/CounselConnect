@@ -64,6 +64,20 @@ async function mount(t, component = React.createElement(App)) {
   return root;
 }
 
+test("student login link opens the staff email form and switches back", async (t) => {
+  environment(t, "#login");
+  fakeApi(t, () => failure(401));
+  const root = await mount(t);
+  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number");
+  const staffLink = root.root.findByProps({ href: "#staff-login" });
+  await act(async () => { window.location.hash = staffLink.props.href; });
+  assert.equal(root.root.findByType("h1").children.join(""), "Counselor / Staff sign in");
+  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Email");
+  assert.equal(root.root.findByProps({ id: "identifier" }).props.type, "email");
+  await act(async () => { window.location.hash = "#login"; });
+  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number");
+});
+
 test("reload waits for CSRF recovery before loading the reviewer and approving", async (t) => {
   environment(t);
   let resolve;

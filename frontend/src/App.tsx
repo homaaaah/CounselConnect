@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import HomePage from "./pages/HomePage";
 import ReviewerPage from "./pages/ReviewerPage";
+import AppointmentsPage from "./pages/AppointmentsPage";
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
 
@@ -33,21 +34,31 @@ export default function App() {
     <>
       {session.error && <p role="alert" className="p-3 text-red-700">{session.error}</p>}
       {session.user && (
-        <div className="flex justify-end bg-white px-6 py-2">
+        <div className="flex flex-wrap justify-end gap-4 bg-white px-6 py-2">
+          {session.user.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) && (
+            <a href="#appointments" className="text-sm text-emerald-700 underline">Appointments</a>
+          )}
+          {session.user.role_code === "COUNSELOR" && <a href="#review" className="text-sm text-emerald-700 underline">COR verification</a>}
           <button onClick={async () => {
             if (await session.logout()) window.location.hash = "landing";
           }} className="text-sm text-slate-600 underline">Sign out</button>
         </div>
       )}
       {page === "login" && <LoginPage onSignedIn={session.accept} />}
+      {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
       {page === "register" && <RegisterPage />}
-      {page === "home" && <HomePage />}
+      {page === "home" && <HomePage user={session.user} />}
+      {page === "appointments" && (session.user
+        ? session.user.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code)
+          ? <AppointmentsPage key={session.user.user_id} user={session.user} />
+          : <p role="alert" className="p-6">Appointments require an active Student or Counselor account.</p>
+        : <LoginPage onSignedIn={session.accept} />)}
       {page === "review" && (session.user?.role_code === "COUNSELOR"
         ? <ReviewerPage />
         : session.user
           ? <p role="alert" className="p-6">This page requires a Counselor account.</p>
-          : <LoginPage onSignedIn={session.accept} />)}
-      {!["login", "register", "home", "review"].includes(page) && (
+          : <LoginPage audience="staff" onSignedIn={session.accept} />)}
+      {!["login", "staff-login", "register", "home", "review", "appointments"].includes(page) && (
         <LandingPage onPreviewHome={() => (window.location.hash = "home")} />
       )}
       <p className="fixed bottom-2 right-3 text-[10px] text-slate-300">

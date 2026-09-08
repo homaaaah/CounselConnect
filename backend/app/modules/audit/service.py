@@ -27,6 +27,11 @@ class AuditService(BaseService[AuditEvent]):
     def __init__(self, session: Session) -> None:
         super().__init__(AuditRepository(session))
 
+    def record(self, actor_user_id: int, event_type: str, target_type: str, target_id: int):
+        """Record minimal operational metadata in the caller's transaction."""
+        self.repository.add(AuditEvent(actor_user_id=actor_user_id, event_type=event_type,
+            target_type=target_type, target_id=target_id, outcome="SUCCESS"))
+
 
 def get_audit_service(session: Session = Depends(get_session)) -> AuditService:
     """FastAPI dependency: Session -> Repository -> Service."""

@@ -123,6 +123,25 @@ class AccountsService(BaseService[User]):
     def list_active_programs(self):
         return self.repository.list_active_programs()
 
+    def scheduling_user(self, user_id: int, *, lock: bool = False):
+        """Internal scheduling reference; callers enforce participant scope."""
+        return self.repository.lock_user(user_id) if lock else self.repository.get(user_id)
+
+    def scheduling_campus(self, campus_id: int, *, lock: bool = False):
+        return self.repository.lock_campus(campus_id) if lock else self.repository.find_campus(campus_id)
+
+    def set_guidance_office_location(self, actor, campus_id: int, location: str):
+        if actor.role_code != "COUNSELOR" or actor.account_status != "ACTIVE":
+            raise AppError("FORBIDDEN_ROLE", "Only an active Counselor may configure the Guidance Office.", status_code=403)
+        campus = self.scheduling_campus(campus_id, lock=True)
+        if campus is None or not campus.is_active:
+            raise AppError("CAMPUS_NOT_FOUND", "Campus does not exist or is inactive.", status_code=404)
+        campus.guidance_office_location = location
+        from app.modules.audit.service import AuditService
+        AuditService(self.repository.session).record(actor.user_id, "guidance_office_location_updated", "campus", campus_id)
+        self.repository.session.flush()
+        return campus
+
 
 def get_accounts_service(session: Session = Depends(get_session)) -> AccountsService:
     """FastAPI dependency: Session -> Repository -> Service."""
