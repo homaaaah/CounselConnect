@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react";
 import { useLogin, type AuthResult } from "../features/auth";
 
-/** Sign-in page (ADR-019): opaque session cookie + CSRF. */
-export default function LoginPage({ onSignedIn, audience = "student" }: {
+/**
+ * Sign-in page (ADR-019): opaque session cookie + CSRF. Capstone card styling.
+ * inModal renders the same card without the full-page shell, with in-modal
+ * audience/register switches and a close button (landing overlay).
+ */
+export default function LoginPage({ onSignedIn, audience = "student", inModal = false,
+  onClose, onSwitchAudience, onSwitchToRegister }: {
   onSignedIn: (auth: AuthResult) => void;
   audience?: "student" | "staff";
+  inModal?: boolean;
+  onClose?: () => void;
+  onSwitchAudience?: () => void;
+  onSwitchToRegister?: () => void;
 }) {
   const isStudent = audience === "student";
   const { login, submitting } = useLogin();
@@ -30,83 +39,79 @@ export default function LoginPage({ onSignedIn, audience = "student" }: {
     setResult({ ok: r.ok, message: r.message, role: r.auth?.user.role_code });
   }
 
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
-      <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-800">
-          {isStudent ? "Student sign in" : "Counselor / Staff sign in"}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          CounselConnect — Guidance and Counseling Office
-        </p>
+  const card = (
+    <div className="modal-card">
+      {inModal && (
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      )}
 
-        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="identifier" className="text-sm font-medium text-slate-700">
-              {isStudent ? "Student number" : "Email"}
-            </label>
-            <input
-              id="identifier"
-              type={isStudent ? "text" : "email"}
-              autoComplete="username"
-              required
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="text-sm font-medium text-slate-700">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-md bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {submitting ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-
-        {result && (
-          <p
-            className={`mt-4 rounded-md p-3 text-sm ${
-              result.ok
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-red-50 text-red-600"
-            }`}
-          >
-            {result.message}
-          </p>
-        )}
-
-        {isStudent && <p className="mt-6 text-center text-sm text-slate-500">
-          No account yet?{" "}
-          <a href="#register" className="font-medium text-emerald-600 hover:underline">
-            Register
-          </a>
-        </p>}
-        <p className="mt-4 text-center text-sm text-slate-500">
-          <a href={isStudent ? "#staff-login" : "#login"} className="font-medium text-emerald-600 hover:underline">
-            {isStudent ? "Counselor / Staff sign in" : "Student sign in"}
-          </a>
-        </p>
-        <p className="mt-2 text-center text-xs text-slate-400">
-          <a href="#landing" className="hover:underline">
-            Back to landing page
-          </a>
-        </p>
+      <div className="login-header">
+        <h1>{isStudent ? "Student sign in" : "Counselor / Staff sign in"}</h1>
+        <p>CounselConnect — Guidance and Counseling Office</p>
       </div>
-    </main>
+
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="identifier">{isStudent ? "Student number" : "Email"}</label>
+          <input
+            id="identifier"
+            type={isStudent ? "text" : "email"}
+            autoComplete="username"
+            required
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            className="form-input"
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="form-input"
+          />
+        </div>
+        <button type="submit" disabled={submitting} className="btn-submit">
+          {submitting ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+
+      {result && <div className={`form-message ${result.ok ? "success" : "error"}`} role="status">{result.message}</div>}
+
+      {inModal ? (
+        <>
+          <p className="signup-text">
+            <button type="button" className="linklike" onClick={onSwitchAudience}>
+              {isStudent ? "Counselor / Staff sign in" : "Student sign in"}
+            </button>
+          </p>
+          <p className="signup-text">
+            No account yet? <button type="button" className="linklike" onClick={onSwitchToRegister}>Register</button>
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="signup-text">
+            <a href={isStudent ? "#staff-login" : "#login"}>
+              {isStudent ? "Counselor / Staff sign in" : "Student sign in"}
+            </a>
+          </p>
+          <p className="signup-text">
+            No account yet? <a href="#register">Register</a>
+          </p>
+          <p className="footer-link" style={{ textAlign: "center" }}>
+            <a href="#landing">Back to landing page</a>
+          </p>
+        </>
+      )}
+    </div>
   );
+
+  return inModal ? card : <main className="auth-shell">{card}</main>;
 }

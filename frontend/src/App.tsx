@@ -59,7 +59,7 @@ export default function App() {
           ? <p role="alert" className="p-6">This page requires a Counselor account.</p>
           : <LoginPage audience="staff" onSignedIn={session.accept} />)}
       {!["login", "staff-login", "register", "home", "review", "appointments"].includes(page) && (
-        <LandingPage onPreviewHome={() => (window.location.hash = "home")} />
+        <LandingPage onSignedIn={session.accept} />
       )}
       <p className="fixed bottom-2 right-3 text-[10px] text-slate-300">
         {error ? `API unreachable: ${error}` : `API status: ${status}`}

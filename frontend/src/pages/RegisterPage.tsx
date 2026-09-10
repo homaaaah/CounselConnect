@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { useRegistration, EMPTY_FORM, RegistrationForm } from "../features/accounts";
 
-const inputClass =
-  "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none";
-
-/** Student registration (DFD 1.1 + 1.2): details + COR PDF, ONE submit. */
-export default function RegisterPage() {
+/**
+ * Student registration (DFD 1.1 + 1.2): details + COR PDF, ONE submit.
+ * Capstone card styling. inModal renders the same card without the
+ * full-page shell, with an in-modal sign-in switch (landing overlay).
+ */
+export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin }: {
+  inModal?: boolean;
+  onClose?: () => void;
+  onSwitchToLogin?: () => void;
+}) {
   const { campuses, programs, register, submitting } = useRegistration();
   const [form, setForm] = useState<RegistrationForm>(EMPTY_FORM);
   const [corFile, setCorFile] = useState<File | null>(null);
@@ -20,51 +25,67 @@ export default function RegisterPage() {
     setResult(await register(form, corFile));
   }
 
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-10">
-      <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-800">Create your account</h1>
-        <p className="mt-1 text-sm text-slate-500">
+  const card = (
+    <div className="signup-card">
+      {inModal && (
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+          <i className="fa-solid fa-xmark"></i>
+        </button>
+      )}
+
+      <div className="signup-header">
+        <h1>Create your account</h1>
+        <p>
           Register with your details and attach your current registration form (COR) —
           your proof of enrollment at the University of Caloocan City. Everything is
           submitted together for Guidance Counselor approval.
         </p>
+      </div>
 
-        <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit} encType="multipart/form-data">
-          <div>
-            <label className="text-sm font-medium text-slate-700">First name</label>
-            <input required className={inputClass} value={form.first_name}
+      <form onSubmit={handleSubmit} encType="multipart/form-data">
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-group-label">First name</label>
+            <input required className="form-input" value={form.first_name}
               onChange={(e) => set("first_name", e.target.value)} />
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Last name</label>
-            <input required className={inputClass} value={form.last_name}
+          <div className="form-group">
+            <label className="form-group-label">Last name</label>
+            <input required className="form-input" value={form.last_name}
               onChange={(e) => set("last_name", e.target.value)} />
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Middle name (optional)</label>
-            <input className={inputClass} value={form.middle_name}
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-group-label">Middle name (optional)</label>
+            <input className="form-input" value={form.middle_name}
               onChange={(e) => set("middle_name", e.target.value)} />
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Student number</label>
-            <input required className={inputClass} placeholder="e.g. 2026-00001"
+          <div className="form-group">
+            <label className="form-group-label">Student number</label>
+            <input required className="form-input" placeholder="e.g. 2026-00001"
               value={form.student_number}
               onChange={(e) => set("student_number", e.target.value)} />
           </div>
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-slate-700">Email</label>
-            <input required type="email" className={inputClass} value={form.email}
-              onChange={(e) => set("email", e.target.value)} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-slate-700">Password (8+ characters)</label>
-            <input required type="password" minLength={8} className={inputClass}
-              value={form.password} onChange={(e) => set("password", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Campus</label>
-            <select required className={inputClass} value={form.campus_id}
+        </div>
+
+        <div className="form-group full-width">
+          <label className="form-group-label">Email</label>
+          <input required type="email" className="form-input" value={form.email}
+            onChange={(e) => set("email", e.target.value)} />
+        </div>
+
+        <div className="form-group full-width">
+          <label className="form-group-label">Password (8+ characters)</label>
+          <input required type="password" minLength={8} className="form-input"
+            value={form.password} onChange={(e) => set("password", e.target.value)} />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-group-label">Campus</label>
+            <select required className="form-select" value={form.campus_id}
               onChange={(e) => set("campus_id", e.target.value)}>
               <option value="" disabled>Select campus</option>
               {campuses.map((c) => (
@@ -72,9 +93,9 @@ export default function RegisterPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Program</label>
-            <select required className={inputClass} value={form.program_id}
+          <div className="form-group">
+            <label className="form-group-label">Program</label>
+            <select required className="form-select" value={form.program_id}
               onChange={(e) => set("program_id", e.target.value)}>
               <option value="" disabled>Select program</option>
               {programs.map((p) => (
@@ -82,63 +103,67 @@ export default function RegisterPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Year level</label>
-            <select required className={inputClass} value={form.year_level}
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-group-label">Year level</label>
+            <select required className="form-select" value={form.year_level}
               onChange={(e) => set("year_level", e.target.value)}>
               {[1, 2, 3, 4, 5, 6].map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Section</label>
-            <input required maxLength={50} className={inputClass} value={form.section}
+          <div className="form-group">
+            <label className="form-group-label">Section</label>
+            <input required maxLength={50} className="form-input" value={form.section}
               onChange={(e) => set("section", e.target.value)} />
           </div>
+        </div>
 
-          <div className="md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-4">
-            <label className="text-sm font-medium text-slate-700">
-              Registration form (COR) — required PDF
-            </label>
-            <p className="mt-1 text-xs text-slate-500">
-              Your Certificate of Registration is the required proof of current enrollment.
-              PDF only, max 10 MB. Stored privately and deleted after the decision.
-            </p>
-            <input
-              required
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(e) => setCorFile(e.target.files?.[0] ?? null)}
-              className="mt-2 w-full text-sm"
-            />
-            {corFile && (
-              <p className="mt-2 text-xs text-emerald-600">
-                Attached: {corFile.name} ({(corFile.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
-            )}
+        <div className="upload-box">
+          <div className="upload-title">Registration form (COR) — required PDF</div>
+          <div className="upload-desc">
+            Your Certificate of Registration is the required proof of current enrollment.
+            PDF only, max 10 MB. Stored privately and deleted after the decision.
           </div>
+          <input
+            required
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => setCorFile(e.target.files?.[0] ?? null)}
+            className="form-input"
+          />
+          {corFile && (
+            <div className="form-hint">
+              Attached: {corFile.name} ({(corFile.size / 1024 / 1024).toFixed(2)} MB)
+            </div>
+          )}
+        </div>
 
-          <div className="md:col-span-2">
-            <button type="submit" disabled={submitting}
-              className="w-full rounded-md bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-              {submitting ? "Submitting…" : "Submit registration for approval"}
-            </button>
-          </div>
-        </form>
+        <button type="submit" disabled={submitting} className="btn-submit btn-success">
+          {submitting ? "Submitting…" : "Submit registration for approval"}
+        </button>
+      </form>
 
-        {result && (
-          <p className={`mt-4 rounded-md p-3 text-sm ${
-            result.success ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-          }`}>
-            {result.message}
-          </p>
-        )}
+      {result && (
+        <div className={`form-message ${result.success ? "success" : "error"}`} role="status">
+          {result.message}
+        </div>
+      )}
 
-        <p className="mt-6 text-center text-xs text-slate-400">
-          <a href="#landing" className="hover:underline">Back to landing page</a>
+      {inModal ? (
+        <p className="signup-text">
+          Already have an account? <button type="button" className="linklike" onClick={onSwitchToLogin}>Sign in</button>
         </p>
-      </div>
-    </main>
+      ) : (
+        <p className="footer-link" style={{ textAlign: "center" }}>
+          <a href="#landing">Back to landing page</a>
+        </p>
+      )}
+    </div>
   );
+
+  return inModal ? card : <main className="auth-shell">{card}</main>;
 }

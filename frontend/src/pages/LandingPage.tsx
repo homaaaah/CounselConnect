@@ -1,112 +1,232 @@
-import { Link } from "./LandingLink";
+import { useEffect, useState } from "react";
 import { usePublicContent } from "../features/content";
+import LoginPage from "./LoginPage";
+import RegisterPage from "./RegisterPage";
+import type { AuthResult } from "../features/auth";
+
+type ModalState = { kind: "login" | "register"; audience: "student" | "staff" } | null;
 
 /**
- * Public landing page (DFD Master System Flow entry).
- * Shows published announcements and office CMS content from content_items.
+ * Public landing page (DFD Master System Flow entry) — Capstone design
+ * ported into React. Published announcements and office CMS content from
+ * content_items map into the marketing layout: the hero paragraph uses the
+ * CMS landing_hero block (Capstone copy as fallback), announcements render
+ * as blog cards, and FAQs render in a strip below.
+ *
+ * LOG IN / CONNECT WITH US open the existing auth pages as modal overlays
+ * (LoginPage / RegisterPage in inModal mode) instead of navigating away;
+ * the full-page #login / #staff-login / #register hash routes remain.
  */
-export default function LandingPage({ onPreviewHome }: { onPreviewHome?: () => void }) {
+export default function LandingPage({ onSignedIn }: { onSignedIn: (auth: AuthResult) => void }) {
   const { cmsBlocks, faqs, announcements, loading } = usePublicContent();
+  const [modal, setModal] = useState<ModalState>(null);
 
   const hero = cmsBlocks.find((b) => b.content_key === "landing_hero");
 
+  useEffect(() => {
+    if (!modal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [modal]);
+
+  const openLogin = (audience: "student" | "staff") => setModal({ kind: "login", audience });
+
   return (
-    <main className="flex min-h-screen flex-col bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-800">CounselConnect</h1>
-          <p className="text-xs text-slate-500">
-            University of Caloocan City — Guidance and Counseling Office
-          </p>
+    <div className="landing-page">
+      {/* Header */}
+      <header>
+        <div className="container nav-container">
+          <a href="#landing" className="logo">CounselConnect</a>
+          <ul className="nav-links">
+            <li><a href="#landing" className="active">Home</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#news">News</a></li>
+          </ul>
+          <button type="button" className="btn-login" onClick={() => openLogin("student")}>LOG IN</button>
         </div>
-        <nav className="flex gap-3">
-          <Link to="login">Sign in</Link>
-          <Link to="register" variant="primary">
-            Register
-          </Link>
-        </nav>
       </header>
 
-      <section className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
-        <h2 className="text-center text-3xl font-bold text-slate-800">
-          {hero?.title ?? "Guidance and Counseling Services"}
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-center text-slate-600">
-          {hero?.body ??
-            "Schedule appointments, chat with your guidance counselor, access wellness resources, and get support when you need it — all in one place."}
-        </p>
-
-        <div className="mt-8 flex justify-center gap-4">
-          <Link to="register" variant="primary" size="lg">
-            Create your account
-          </Link>
-          <Link to="login" size="lg">
-            Sign in
-          </Link>
-        </div>
-
-        {onPreviewHome && (
-          <p className="mt-4 text-center">
-            <button
-              onClick={onPreviewHome}
-              className="text-xs text-slate-400 underline hover:text-slate-600"
-            >
-              Preview the signed-in homepage (real sign-in arrives with ADR-P01)
-            </button>
+      {/* Hero Section */}
+      <section className="hero">
+        <div className="container">
+          <h1><i>Gentle Support</i> for whatever today brings you.</h1>
+          <p>
+            {hero?.body ??
+              "Appoint your next session in just a few clicks, talk with a compassionate professional, and explore wellness guidance at your pace."}
           </p>
-        )}
-        <p className="mt-2 text-center">
-          <a href="#review" className="text-xs text-slate-400 underline hover:text-slate-600">
-            Counselor review console (dev)
-          </a>
-        </p>
+          <button type="button" className="btn-connect" onClick={() => setModal({ kind: "register", audience: "student" })}>
+            CONNECT WITH US
+            <i className="fa-solid fa-chevron-right" style={{ fontSize: "0.75rem" }} />
+          </button>
+        </div>
+      </section>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Announcements
-            </h3>
-            {loading ? (
-              <p className="mt-3 text-sm text-slate-400">Loading…</p>
-            ) : announcements.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-400">No announcements yet.</p>
-            ) : (
-              <ul className="mt-3 space-y-3">
-                {announcements.map((a) => (
-                  <li key={a.content_id}>
-                    <p className="text-sm font-medium text-slate-700">{a.title}</p>
-                    <p className="mt-1 line-clamp-3 text-sm text-slate-500">{a.body}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
+      {/* Why Choose Us Section */}
+      <section className="why-section" id="features">
+        <div className="container">
+          <div className="why-grid">
+            <div className="why-left">
+              <h2>WHY CHOOSE US?</h2>
+            </div>
+            <div className="why-cards">
+              <div className="why-card">
+                <div className="why-card-img"></div>
+                <div className="why-card-title">Real-time Appointments</div>
+              </div>
+              <div className="why-card">
+                <div className="why-card-img"></div>
+                <div className="why-card-title">Live Communication</div>
+              </div>
+              <div className="why-card">
+                <div className="why-card-img"></div>
+                <div className="why-card-title">Curated Library Wellness</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Bio Section */}
+      <section className="bio-section">
+        <div className="container">
+          <div className="bio-grid">
+            <div className="bio-image-placeholder"></div>
+            <div className="bio-card">
+              <h2>Ms. Firstname A. Lastname</h2>
+              <p>
+                This is the space to introduce the university's guidance
+                counselors — who they are, how they support students, and what
+                makes the Guidance and Counseling Office unique. Real counselor
+                profiles arrive with the CMS content team.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Blog / Announcements Section */}
+      <section className="blog-section" id="news">
+        <div className="container">
+          <div className="section-title-center">
+            <span className="section-tag">FROM OUR BLOG</span>
+            <h2>
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit.<br />
+              Bibendum amet at molestie mattis.
+            </h2>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Frequently Asked Questions
-            </h3>
+          <div className="blog-grid">
             {loading ? (
-              <p className="mt-3 text-sm text-slate-400">Loading…</p>
-            ) : faqs.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-400">No FAQs published yet.</p>
+              <p className="blog-empty">Loading announcements…</p>
+            ) : announcements.length === 0 ? (
+              <p className="blog-empty">No announcements yet.</p>
             ) : (
-              <ul className="mt-3 space-y-3">
-                {faqs.map((f) => (
-                  <li key={f.content_id}>
-                    <p className="text-sm font-medium text-slate-700">{f.title}</p>
-                    <p className="mt-1 text-sm text-slate-500">{f.body}</p>
-                  </li>
-                ))}
-              </ul>
+              announcements.map((a) => (
+                <div className="blog-card" key={a.content_id}>
+                  <div className="blog-img"><i className="fa-regular fa-image"></i></div>
+                  <div className="blog-content">
+                    <div className="blog-category">Announcement</div>
+                    <div className="blog-title">{a.title}</div>
+                    <div className="blog-snippet">{a.body}</div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-slate-200 bg-white px-6 py-4 text-center text-xs text-slate-400">
-        CounselConnect — a centralized guidance-counseling platform.
+      {/* FAQ Section */}
+      <section className="faq-section">
+        <div className="container">
+          <div className="section-title-center">
+            <span className="section-tag">QUESTIONS?</span>
+            <h2>Frequently Asked Questions</h2>
+          </div>
+          {loading ? (
+            <p className="blog-empty">Loading FAQs…</p>
+          ) : faqs.length === 0 ? (
+            <p className="blog-empty">No FAQs published yet.</p>
+          ) : (
+            <div className="faq-grid">
+              {faqs.map((f) => (
+                <div className="faq-card" key={f.content_id}>
+                  <h3>{f.title}</h3>
+                  <p>{f.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer>
+        <div className="container">
+          <div className="footer-grid">
+            <div className="footer-col">
+              <h3>Contact</h3>
+              <p>info@mysite.com</p>
+              <p>123-456-7890</p>
+            </div>
+            <div className="footer-col">
+              <h3>Location</h3>
+              <p>500 Terry Francois Street,</p>
+              <p>San Francisco, CA 94158</p>
+            </div>
+            <div className="footer-col">
+              <h3>Follow</h3>
+              <div className="social-icons">
+                <a href="#" className="social-icon"><i className="fa-brands fa-linkedin-in"></i></a>
+                <a href="#" className="social-icon"><i className="fa-brands fa-youtube"></i></a>
+                <a href="#" className="social-icon"><i className="fa-brands fa-instagram"></i></a>
+                <a href="#" className="social-icon"><i className="fa-brands fa-facebook-f"></i></a>
+              </div>
+            </div>
+          </div>
+
+          <div className="footer-bottom">
+            <div>&copy; 2035 by CounselConnect</div>
+            <a href="#landing" className="back-to-top"><i className="fa-solid fa-arrow-up"></i></a>
+          </div>
+          <p className="dev-review-link">
+            <a href="#review">Counselor review console (dev)</a>
+          </p>
+        </div>
       </footer>
-    </main>
+
+      {/* Auth modal overlay (LOG IN / CONNECT WITH US) */}
+      {modal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModal(null);
+          }}
+        >
+          {modal.kind === "login" ? (
+            <LoginPage
+              key={modal.audience}
+              inModal
+              audience={modal.audience}
+              onSignedIn={onSignedIn}
+              onClose={() => setModal(null)}
+              onSwitchAudience={() => openLogin(modal.audience === "student" ? "staff" : "student")}
+              onSwitchToRegister={() => setModal({ kind: "register", audience: "student" })}
+            />
+          ) : (
+            <RegisterPage
+              inModal
+              onClose={() => setModal(null)}
+              onSwitchToLogin={() => openLogin("student")}
+            />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
