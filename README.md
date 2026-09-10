@@ -6,7 +6,7 @@ A centralized guidance-counseling platform for the **University of Caloocan City
 
 | Layer | Technology |
 |---|---|
-| Frontend | React + Vite + TailwindCSS, CapacitorJS wrapper (responsive web) |
+| Frontend | JavaScript (React) + Vite + TailwindCSS, CapacitorJS wrapper (responsive web) |
 | Backend | Python + FastAPI — ONE deployable **modular monolith** |
 | Database | MySQL 8.4 LTS |
 | ORM / driver | SQLAlchemy 2.0 + PyMySQL (sync) |
@@ -16,7 +16,7 @@ A centralized guidance-counseling platform for the **University of Caloocan City
 
 ```text
 backend/    FastAPI modular monolith (see backend/app/modules/)
-frontend/   React + Vite + Tailwind + Capacitor scaffold
+frontend/   JavaScript (React) + Vite + Tailwind + Capacitor scaffold
 contracts/  Generated OpenAPI snapshot (placeholder until endpoints exist)
 docs/       READ-ONLY feature contracts and rules (source of truth)
 db/         Approved baseline SQL schemas (v4 design, v4.1 MySQL-8.4 baseline)

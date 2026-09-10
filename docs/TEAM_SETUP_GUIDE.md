@@ -1,6 +1,6 @@
 # CounselConnect — Teammate Setup Guide
 
-Everything needed to run the full stack on your own machine: backend (FastAPI + MySQL), frontend (React + Vite), database, seed data, and the working demo flow. Follow top to bottom; each step says exactly what success looks like.
+Everything needed to run the full stack on your own machine: backend (FastAPI + MySQL), frontend (JavaScript/React + Vite), database, seed data, and the working demo flow. Follow top to bottom; each step says exactly what success looks like.
 
 ## What you need installed first
 
@@ -116,7 +116,7 @@ From `backend/`, `python -m pytest app/tests -q` runs database-free tests and sk
 
 Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema. The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
 
-From `frontend/`, run `npm test` for session/reviewer component regressions and `npm run build` for TypeScript plus production compilation. With Node and frontend dependencies installed, the backend suite also exercises the actual React app against a temporary loopback FastAPI server and the isolated test schema (login, reload, approval, logout). This is an HTTP/component integration check, not a full browser test. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
+From `frontend/`, run `npm test` for session/reviewer component regressions and `npm run build` for the Vite production compilation. With Node and frontend dependencies installed, the backend suite also exercises the actual React app against a temporary loopback FastAPI server and the isolated test schema (login, reload, approval, logout). This is an HTTP/component integration check, not a full browser test. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
 
 The backend automatically runs COR expiry/deletion retries while serving requests. See `REGISTRATION_VERIFICATION.md` for cleanup monitoring and one-shot scheduling when the application is offline.
 

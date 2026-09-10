@@ -135,4 +135,7 @@ def test_live_appointment_screens(mysql_test_engine):
                 )
             )
         )
-        assert len(slots) == 2 and all(s.status == "AVAILABLE" for s in slots)
+        # Slots materialize from the saved weekly schedule; the released
+        # booking must leave every slot AVAILABLE and provenance-linked.
+        assert len(slots) >= 1 and all(s.status == "AVAILABLE" for s in slots)
+        assert all(s.weekly_schedule_id is not None for s in slots)

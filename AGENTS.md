@@ -11,7 +11,7 @@ Do not preload all project docs. For API, schema, model, migration, or cross-sta
 
 ## Hard boundaries
 
-- Stack: React + Vite + TailwindCSS; FastAPI; MySQL 8.4 LTS; SQLAlchemy 2.0 + PyMySQL; Alembic; CapacitorJS; modular monolith.
+- Stack: JavaScript (React) + Vite + TailwindCSS; FastAPI; MySQL 8.4 LTS; SQLAlchemy 2.0 + PyMySQL; Alembic; CapacitorJS; modular monolith.
 - Roles: `STUDENT`, `GUIDANCE_STAFF`, `COUNSELOR`. There is no Administrator role; Counselor holds the highest authority. Guidance Staff is limited to assigned COR verification.
 - Current COR is the only enrollment evidence. Store it privately and temporarily; delete it after a decision or the seven-day pending TTL.
 - Facial-expression processing is optional, local-device only, session-only, non-diagnostic, and never affects SOS logic. No raw imagery, embeddings, or history.

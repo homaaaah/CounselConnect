@@ -1,5 +1,5 @@
 /**
  * Feature module: messaging (live chat UI).
- * Real-time transport choice (WebSocket vs polling) is pending ADR-P02.
+ * Real-time transport is native WebSocket per ADR-022 (implementation pending).
  */
 export {};

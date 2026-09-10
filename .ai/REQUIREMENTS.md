@@ -11,7 +11,7 @@ Use IDs in tasks/tests. Owning feature docs contain detail.
 | FR-AUTH-02 | Web authentication uses revocable MySQL-backed opaque sessions in secure HttpOnly cookies with CSRF protection; passwords use Argon2id and raw credentials are never persisted or logged. |
 | FR-AUTH-03 | Every role uses a one-hour idle and 12-hour absolute session limit with a five-minute warning; genuine activity may renew idle time, heartbeats may not, and v1 has no Remember Me. |
 | FR-AUTH-04 | Password-reset credentials are hashed, single-use, expire after 30 minutes, and successful reset revokes active sessions without revealing account existence. |
-| FR-APPT-01 | Counselor creates concrete availability; Student requests a slot; Counselor confirms/rejects and records outcomes. |
+| FR-APPT-01 | Counselor creates recurring weekly schedules or concrete availability; Students request slots (`PENDING`); Counselor confirms/rejects and records outcomes, with temporary blocks for unavailable time (ADR-020). |
 | FR-APPT-02 | Counselor assigns `ONLINE`, `FACE_TO_FACE`, or `BOTH` support to each concrete slot; Student selects `ONLINE` or `FACE_TO_FACE` only when compatible with the slot. |
 | FR-APPT-03 | Counselor alone configures each campus Guidance Office location. Face-to-face-capable availability requires that location, and a face-to-face appointment stores it as a booking-time snapshot. |
 | FR-APPT-04 | A confirmed online appointment provides one dedicated appointment-linked Live Chat when its scheduled start is reached. |

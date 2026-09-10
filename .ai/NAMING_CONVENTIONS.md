@@ -25,7 +25,7 @@ Never introduce `ADMIN`, `administrator`, `student_id` evidence, `emotional_base
 | Layer | Convention | Example |
 |---|---|---|
 | Python files/functions/variables | `snake_case` | `enrollment_verification.py`, `approve_verification` |
-| Python/TypeScript types, React components | `PascalCase` | `EnrollmentVerificationResponse`, `SOSCaseCard` |
+| Python/JavaScript classes, React components | `PascalCase` | `EnrollmentVerificationResponse`, `SOSCaseCard` |
 | React hooks | `useCamelCase` | `useAppointmentSlots` |
 | TS/JS variables/functions/props | `camelCase` | `verificationStatus` |
 | Constants/enum values/error codes | `SCREAMING_SNAKE_CASE` | `NEEDS_RESUBMISSION`, `SLOT_UNAVAILABLE` |
@@ -33,7 +33,7 @@ Never introduce `ADMIN`, `administrator`, `student_id` evidence, `emotional_base
 | Database tables | plural `snake_case` | `enrollment_verifications` |
 | URL resource segments | plural `kebab-case` | `/enrollment-verifications` |
 | Environment variables | `COUNSELCONNECT_` + uppercase | `COUNSELCONNECT_DATABASE_URL` |
-| Tests | mirror target + `_test`/`.test` | `test_appointments.py`, `AppointmentCard.test.tsx` |
+| Tests | mirror target + `_test`/`.test` | `test_appointments.py`, `AppointmentCard.test.jsx` |
 
 Keep API DTO fields exactly `snake_case` in frontend API types; use `camelCase` only inside UI logic. Do not add silent global case conversion.
 

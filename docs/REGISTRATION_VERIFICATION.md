@@ -23,7 +23,7 @@ If still pending after seven days: delete COR, set verification `EXPIRED`, and k
 
 ## Implemented cleanup and concurrency
 
-- Both registration endpoints use `StudentRegistrationRequest` validation. The existing PDF/size limit remains provisional under ADR-P05; uploads are read with a bounded size.
+- Both registration endpoints use `StudentRegistrationRequest` validation. The PDF/size limit is set by ADR-024 (10 MB default); uploads are read with a bounded size.
 - Submissions and decisions lock the Student row, then the verification row, and re-read the current state. A competing decision receives `409 DECISION_ALREADY_MADE`.
 - Pending replacements retain the original seven-day deadline. The replacement and retired file metadata commit together; only then is the old file deleted. Decisions likewise commit before deletion. Failed deletion preserves the file row as `FAILED` for retry, including replacement failures.
 - The FastAPI lifespan starts a cleanup worker immediately and every 60 seconds while the application runs. It expires pending verifications, deletes due files, and retries failed deletion. Preview and decision paths independently deny expired evidence, even between cleanup passes.

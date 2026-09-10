@@ -1,6 +1,6 @@
 """assistant Pydantic contracts (docs/API_CONTRACT.md shapes).
 
-# TODO: Exact request/response shape may evolve with ADR-P08.
+# Request/response shapes are stable under ADR-027 (deterministic retrieval).
 """
 
 from __future__ import annotations

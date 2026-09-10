@@ -1,6 +1,7 @@
 """Atomic scheduling workflow from Flowchart V1, page 4."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -10,7 +11,12 @@ from app.database import get_session
 from app.modules.accounts.service import AccountsService
 from app.modules.audit.service import AuditService
 from app.modules.bases import BaseService
-from app.modules.appointments.models import Appointment, AvailabilitySlot
+from app.modules.appointments.models import (
+    Appointment,
+    AvailabilitySlot,
+    CounselorAvailabilityBlock,
+    CounselorWeeklySchedule,
+)
 from app.modules.appointments.repository import AppointmentsRepository
 from app.modules.appointments.schemas import (
     AppointmentResponse,
@@ -20,6 +26,10 @@ from app.modules.appointments.schemas import (
 
 def utcnow():
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def manila_today():
+    return datetime.now(ZoneInfo("Asia/Manila")).date()
 
 
 def db_time(value):
@@ -34,6 +44,62 @@ class AppointmentsService(BaseService[Appointment]):
         self.accounts = AccountsService(session)
         self.audit = AuditService(session)
 
+    def ensure_schedule_slots(self, start_date, end_date, counselor_id=None):
+        """Materialize only the searched dates from active weekly schedules."""
+        schedules = self.repository.active_weekly_schedules(counselor_id)
+        created = 0
+        for offset in range((end_date - start_date).days + 1):
+            day = start_date + timedelta(days=offset)
+            for schedule in schedules:
+                if day.isoweekday() != schedule.day_of_week:
+                    continue
+                local_start = datetime.combine(day, schedule.start_time, tzinfo=ZoneInfo("Asia/Manila"))
+                local_end = datetime.combine(day, schedule.end_time, tzinfo=ZoneInfo("Asia/Manila"))
+                duration = timedelta(minutes=schedule.slot_duration_minutes)
+                while local_start < local_end:
+                    start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+                    end = (local_start + duration).astimezone(timezone.utc).replace(tzinfo=None)
+                    if not self.repository.overlapping_availability_blocks(schedule.counselor_user_id, start, end) and not self.repository.find_slot_exact(schedule.counselor_user_id, schedule.campus_id, start, end):
+                        self.repository.session.add(AvailabilitySlot(counselor_user_id=schedule.counselor_user_id, campus_id=schedule.campus_id, delivery_mode=schedule.delivery_mode, starts_at=start, ends_at=end, status="AVAILABLE", weekly_schedule_id=schedule.weekly_schedule_id))
+                        created += 1
+                    local_start += duration
+        if created:
+            self.repository.session.flush()
+
+    def calendar(self, actor, start_date: date, end_date: date):
+        self.authorize(actor)
+        if end_date < start_date or (end_date - start_date).days > 62:
+            raise AppError("INVALID_CALENDAR_RANGE", "Choose a calendar range of 63 days or less.", status_code=422)
+        self.ensure_schedule_slots(start_date, end_date, actor.user_id if actor.role_code == "COUNSELOR" else None)
+        counselor_ids = [actor.user_id] if actor.role_code == "COUNSELOR" else self.repository.active_counselor_ids()
+        blocked = self.repository.blocked_dates(counselor_ids, start_date, end_date) if counselor_ids else set()
+        days = []
+        for offset in range((end_date - start_date).days + 1):
+            day = start_date + timedelta(days=offset)
+            weekday = day.weekday() < 5
+            is_blocked = day in blocked
+            days.append({"calendar_date": day, "is_weekday": weekday, "is_blocked": is_blocked,
+                "available_times": [] if not weekday or is_blocked else [f"{hour:02d}:00" for hour in range(8, 16)]})
+        return {"timezone": "Asia/Manila", "business_hours": "Monday-Friday, 8:00 AM-4:00 PM", "days": days}
+
+    def block_date(self, actor, blocked_date, reason=None):
+        self.authorize(actor, ("COUNSELOR",))
+        if blocked_date < manila_today():
+            raise AppError("INVALID_BLOCK_DATE", "A past date cannot be blocked.", status_code=422)
+        if self.repository.blocked_date(actor.user_id, blocked_date):
+            raise AppError("DATE_ALREADY_BLOCKED", "This date is already blocked.")
+        block = self.repository.add_blocked_date(actor.user_id, blocked_date, reason)
+        self.repository.session.flush()
+        self.audit.record(actor.user_id, "counselor_date_blocked", "counselor_blocked_date", block.blocked_date_id)
+        return block
+
+    def unblock_date(self, actor, blocked_date):
+        self.authorize(actor, ("COUNSELOR",))
+        block = self.repository.remove_blocked_date(actor.user_id, blocked_date)
+        if block is None:
+            raise AppError("BLOCK_NOT_FOUND", "This date is not blocked.", status_code=404)
+        self.audit.record(actor.user_id, "counselor_date_unblocked", "counselor_blocked_date", block.blocked_date_id)
+
     def authorize(self, actor, roles=("STUDENT", "COUNSELOR")):
         if actor.role_code not in roles:
             raise AppError(
@@ -47,6 +113,74 @@ class AppointmentsService(BaseService[Appointment]):
                 "An active verified account is required.",
                 status_code=403,
             )
+
+    def create_weekly_schedule(self, actor, data):
+        """Store recurring university-local availability without changing appointments."""
+        self.authorize(actor, ("COUNSELOR",))
+        self._participants(None, actor.user_id)
+        campus = self._campus(data.campus_id)
+        if data.delivery_mode != "ONLINE" and not (campus.guidance_office_location or "").strip():
+            raise AppError("GUIDANCE_OFFICE_REQUIRED", "Configure the campus Guidance Office location first.")
+        if self.repository.overlapping_weekly_schedule(
+            actor.user_id, data.day_of_week, data.start_time, data.end_time
+        ):
+            raise AppError("SCHEDULE_CONFLICT", "This weekly period overlaps an active schedule.")
+        schedule = self.repository.create_weekly_schedule(
+            counselor_user_id=actor.user_id,
+            campus_id=data.campus_id,
+            day_of_week=data.day_of_week,
+            start_time=data.start_time,
+            end_time=data.end_time,
+            slot_duration_minutes=data.slot_duration_minutes,
+            delivery_mode=data.delivery_mode,
+        )
+        self.repository.session.flush()
+        self.audit.record(actor.user_id, "weekly_schedule_created", "counselor_weekly_schedule", schedule.weekly_schedule_id)
+        return schedule
+
+    def list_weekly_schedules(self, actor):
+        self.authorize(actor, ("COUNSELOR",))
+        return self.repository.weekly_schedules(actor.user_id)
+
+    def list_availability_blocks(self, actor):
+        self.authorize(actor, ("COUNSELOR",))
+        return self.repository.availability_blocks(actor.user_id)
+
+    def deactivate_weekly_schedule(self, actor, weekly_schedule_id):
+        self.authorize(actor, ("COUNSELOR",))
+        schedule = self.repository.deactivate_weekly_schedule(actor.user_id, weekly_schedule_id)
+        if schedule is None:
+            raise AppError("SCHEDULE_NOT_FOUND", "Weekly schedule not found.", status_code=404)
+        self.audit.record(actor.user_id, "weekly_schedule_deactivated", "counselor_weekly_schedule", schedule.weekly_schedule_id)
+
+    def create_availability_block(self, actor, data):
+        self.authorize(actor, ("COUNSELOR",))
+        starts_at, ends_at = db_time(data.starts_at), db_time(data.ends_at)
+        if starts_at <= utcnow():
+            raise AppError("BLOCK_IN_PAST", "A block must start in the future.")
+        # Serialize with booking/reschedule, which lock the same user row.
+        self._participants(None, actor.user_id)
+        if self.repository.overlapping_active_appointments(actor.user_id, starts_at, ends_at):
+            raise AppError("BLOCK_CONFLICT", "Resolve overlapping pending or confirmed appointments first.")
+        block = self.repository.create_availability_block(
+            counselor_user_id=actor.user_id,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            is_all_day=data.is_all_day,
+            reason=data.reason,
+        )
+        self.repository.session.flush()
+        self.audit.record(actor.user_id, "availability_block_created", "counselor_availability_block", block.availability_block_id)
+        return block
+
+    def delete_availability_block(self, actor, availability_block_id):
+        self.authorize(actor, ("COUNSELOR",))
+        # Serialize with booking/block creation, which lock the same user row.
+        self._participants(None, actor.user_id)
+        block = self.repository.delete_availability_block(actor.user_id, availability_block_id)
+        if block is None:
+            raise AppError("BLOCK_NOT_FOUND", "Availability block not found.", status_code=404)
+        self.audit.record(actor.user_id, "availability_block_deleted", "counselor_availability_block", availability_block_id)
 
     def _participants(self, student_id, *counselor_ids, require_active=True):
         # Global ascending user locks serialize cross-campus counselor and student conflicts.
@@ -185,6 +319,33 @@ class AppointmentsService(BaseService[Appointment]):
             page,
             page_size,
         )
+        counselor_ids = {slot.counselor_user_id for slot in items}
+        if counselor_ids:
+            blocked = self.repository.blocked_dates(counselor_ids, manila_today(), manila_today() + timedelta(days=370))
+            # Time-range availability blocks exclude matching slots for both roles.
+            time_blocks = [
+                block
+                for counselor_id in counselor_ids
+                for block in self.repository.overlapping_availability_blocks(
+                    counselor_id,
+                    min(slot.starts_at for slot in items),
+                    max(slot.ends_at for slot in items),
+                )
+            ]
+            def blocked_by_time_range(slot):
+                return any(
+                    block.counselor_user_id == slot.counselor_user_id
+                    and block.starts_at < slot.ends_at
+                    and block.ends_at > slot.starts_at
+                    for block in time_blocks
+                )
+            items = [
+                slot
+                for slot in items
+                if slot.starts_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Asia/Manila")).date() not in blocked
+                and not blocked_by_time_range(slot)
+            ]
+            total = len(items)
         return dict(
             items=[self.slot_response(s) for s in items],
             total=total,
@@ -247,6 +408,13 @@ class AppointmentsService(BaseService[Appointment]):
             raise AppError(
                 "SLOT_UNAVAILABLE",
                 "The selected counselor is no longer available at this time.",
+            )
+        if self.repository.overlapping_availability_blocks(
+            slot.counselor_user_id, slot.starts_at, slot.ends_at, lock=True
+        ):
+            raise AppError(
+                "SLOT_UNAVAILABLE",
+                "The counselor is unavailable during this period.",
             )
         if self.repository.participant_conflict(
             slot, student_id=student_id, exclude_id=exclude_id

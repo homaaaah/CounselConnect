@@ -1,33 +1,53 @@
 # CounselConnect — Current Task
 
-**Status:** COMPLETED — appointment scheduling; Live Chat integration remains separate.
-**Risk class:** HIGH (authorization, appointment reservations, concurrent transitions)
+**Status:** COMPLETED
+**Risk class:** HIGH (MySQL schema/migrations, appointment reservation boundaries)
+**Mode:** Verify & gap-fill + fix-it pass + pending-decision resolution (2026-09-10); all work committed and pushed.
 
-## Objective
+## Final state (2026-09-10)
 
-Implement appointment scheduling from Flowchart V1 page 4 using the existing React/FastAPI/MySQL modular monolith.
+Branch `database/recurring-schedules-and-blocks` pushed to origin (HEAD `f8edb3a`), 7 logical commits: schema/migrations → CONTRIBUTING restore → service layer → endpoints → tests → frontend UI → ADRs/docs. Backend 125/125 on MySQL 8.4; frontend build clean + 16/16 tests; OpenAPI snapshot regenerated and `--check` verified; working tree clean.
 
-## Delivered
+## Delivered across this task series
 
-- Counselor-owned concrete availability from campus/time range/duration/mode, with cross-campus overlap checks and Counselor-only Guidance Office location updates.
-- Active Student slot search and pending requests; assigned Counselor confirmation/rejection and outcomes; owner/assigned-Counselor cancellation and rescheduling back to pending review.
-- Atomic participant/appointment/slot locking; double-booking and overlapping Student appointment protection; failed replacement preservation; slot release and minimal transactional audit events.
-- Mode compatibility and face-to-face location snapshots, revalidated on replacement. All API timestamps use UTC; UI input/display uses Asia/Manila.
-- Authenticated `#appointments` navigation, student home link, counselor controls, filters/pagination, loading/empty/error/conflict states, and CSRF-protected mutations.
-- Existing linked appointment conversations are validated and closed on terminal outcomes through the messaging service. New chat creation/joining/exchange remains unimplemented and is disclosed in the UI.
-- Scheduling/API contracts and generated OpenAPI updated. Existing student/staff login-form changes are preserved.
+1. Database audit + gap-fill (booking-block exclusion, list filtering, lock serialization, hardened migration tests, service-boundary tests).
+2. `GET /availability-blocks` endpoint + counselor schedule/block management UI + live React/HTTP test rewrite.
+3. Environment fixes (venv rebuild, execution policy, CONTRIBUTING restore, stray-file cleanup).
+4. ADR-020 (supersedes ADR-007) and user-approved ADR-021..027 resolving P02/P04–P08; cross-references updated in code, docs, and OpenAPI; `FR-APPT-01` updated.
+5. OpenAPI snapshot regenerated with all new endpoints.
 
-## Verification (2026-09-08)
+## Delivered this pass
 
-- Backend: **117 passed**, no skips, against a unique disposable MySQL schema. Includes all state/action combinations, concurrent same-slot and overlapping-Student requests, simultaneous confirmation/rejection, ownership/role/active-account/CSRF checks, UTC output, snapshots, rollback, linked-chat closure validation, and existing registration/security regressions.
-- A real React-to-FastAPI/MySQL test creates availability, books, confirms, reschedules, reconfirms, and cancels through the actual appointment forms. Test campus filtering prevents interference from other synthetic fixtures in the shared disposable schema.
-- Frontend: **16 passed**; TypeScript/Vite production build passed.
-- Focused Ruff checks, OpenAPI drift check, and git diff whitespace checks passed.
-- Two existing dependency deprecation warnings remain. Component/HTTP integration is not a full browser/device test.
-- The existing local backend was restarted on port 8000 to load the new endpoints. No migration or production deployment was performed.
+1. **Missing `GET /availability-blocks`** (real gap found mid-task): added repository `availability_blocks()`, service `list_availability_blocks()`, router `GET /availability-blocks` (counselor-only, own rows) following the `list_weekly_schedules` pattern.
+2. **Counselor management UI**: `WeeklyScheduleSection` (campus/day/local-time/duration/mode form with whole-slot and Guidance-Office warnings; disable button) and `AvailabilityBlocksSection` (create/remove temporary blocks with future-time validation) on `AppointmentsPage`; hook fetches both for counselors only, passes `role`, `mutate` now sends no body for DELETE.
+3. **Live-frontend test drift fixed**: rewrote `live-appointments.cjs` to drive the real current UI (weekly-schedule form → materialized slots → student books face-to-face → counselor confirms → cancels); updated the Python harness's stale post-conditions (slots now materialize from the schedule; all AVAILABLE + `weekly_schedule_id` provenance).
+4. **Venv rebuilt**: `backend/.venv` recreated with system Python 3.11.6, requirements installed, all suites run through it.
+5. **`.ai/CONTRIBUTING.md` restored** from `docs/contributing-guide` branch (file had been deleted from the working tree).
+6. **Lock asymmetry fixed**: `delete_availability_block` now takes the counselor user-row lock (`_participants`) like create.
+7. **Housekeeping**: `debug.log` removed; PowerShell `CurrentUser` execution policy set to `RemoteSigned` (npm works).
+8. **Docs updated**: API_CONTRACT.md endpoint table now lists weekly-schedule/availability-block/calendar endpoints; APPOINTMENT_SCHEDULING.md UI-boundary reflects the implemented management forms.
 
-## Remaining scope
+## Verification (2026-09-10)
 
-- Live Chat transport/joining/message exchange and its complete lifecycle remain separate under the messaging contract.
-- Slot duration/buffer policy, cancellation/reschedule cutoff, blocked periods, reminders, detailed no-show threshold, and any pre-start join allowance remain pending decisions. No additional policies or meeting-platform integration were invented.
-- Scheduling supports explicit refresh; it does not introduce background polling.
+- Backend full suite (rebuilt venv, MySQL 8.4 disposable schemas): **125/125 passed** — includes the live React/HTTP flow.
+- Frontend: `tsc -b && vite build` clean; `npm test` 16/16.
+- Backend compile OK; zero leftover test schemas; dev DB at `20260910_recurring_schedules`.
+- Final-state check: `GET /availability-blocks` covered by the live flow (counselor block list renders).
+
+## Files changed this pass
+
+Backend: `router.py`, `service.py`, `repository.py`, `test_appointments_frontend.py`. Frontend: `AppointmentsPage.tsx`, `useAppointments.ts`, `features/appointments/index.ts`, `tests/live-appointments.cjs`. Docs: `API_CONTRACT.md`, `APPOINTMENT_SCHEDULING.md`. Meta: `.ai/CURRENT_TASK.md`, restored `.ai/CONTRIBUTING.md`.
+
+## Unresolved human decisions (updated 2026-09-10)
+
+1. Commit/branch strategy for the accumulated uncommitted work (CONTRIBUTING: `database/<task>` etc.; isolate before new tasks) — **RESOLVED 2026-09-10**: user approved committing on `database/recurring-schedules-and-blocks` with logical commits; coordinate with the `frontend/migrate-to-javascript` owner before they rebase.
+2. ~~ADR-007 supersession~~ **RESOLVED 2026-09-10**: superseded by new ADR-020 (recurring weekly schedules + temporary blocks); `FR-APPT-01` wording updated to match.
+3. ~~`FR-APPT-01` wording~~ **RESOLVED** with ADR-020.
+4. ~~ADR-P04 policies~~ **RESOLVED 2026-09-10**: user approved recommended policies → ADR-021 (60-day horizon, lazy materialization, 24h student cutoff, no reminders in v1, manual no-show, 15-min join window).
+5. ~~ADR-P02 Live Chat transport~~ **RESOLVED 2026-09-10**: user approved → ADR-022 (native FastAPI WebSocket, in-memory registry, ADR-008 retention; implementation still pending).
+6. ~~ADR-P05 COR details~~ **RESOLVED** → ADR-024 (ratifies implemented PDF-only/10 MB behavior).
+7. ~~ADR-P06 expression library~~ **RESOLVED** → ADR-025 (face-api.js, 7 labels, ≥60% confidence, opt-in).
+8. ~~ADR-P07 manual-resource rules~~ **RESOLVED** → ADR-026 (single Counselor approval, 5/10/25 MB attachment caps).
+9. ~~ADR-P08 assistant~~ **RESOLVED** → ADR-027 (deterministic retrieval, no LLM in v1).
+10. ADR-P03 content half (SOS question wording/thresholds — guidance-office approval) — still pending.
+11. ADR-P09 (Capacitor credential transport, production email fallback) — still pending.

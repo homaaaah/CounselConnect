@@ -68,23 +68,18 @@ test("confirmed student appointment selects a replacement and sends reschedule",
   assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled. Awaiting counselor review."));
 });
 
-test("counselor creates concrete slots with Philippine input converted to UTC", async t => {
+test("counselor blocks an unavailable calendar date", async t => {
   const calls = setup(t, { user: counselor });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
-  // The availability campus selector precedes search filters.
-  await act(async () => root.root.findAllByType("select")[0].props.onChange({ target: { value: "1" } }));
-  const form = formFor(root, "Create slots");
-  const dates = form.findAllByProps({ type: "datetime-local" });
+  const form = formFor(root, "Block date");
+  const date = form.findByProps({ type: "date" });
   await act(async () => {
-    dates[0].props.onChange({ target: { value: "2099-01-01T09:00" } });
-    dates[1].props.onChange({ target: { value: "2099-01-01T10:00" } });
-    form.findByProps({ type: "number" }).props.onChange({ target: { value: "30" } });
+    date.props.onChange({ target: { value: "2099-01-01" } });
   });
   await act(async () => form.props.onSubmit({ preventDefault() {} }));
   const sent = calls.find(c => c.method === "POST");
-  assert.equal(sent.path, "/api/v1/availability-slots");
-  assert.deepEqual(JSON.parse(sent.body), { campus_id: 1, delivery_mode: "ONLINE",
-    starts_at: "2099-01-01T01:00:00.000Z", ends_at: "2099-01-01T02:00:00.000Z", slot_duration_minutes: 30 });
+  assert.equal(sent.path, "/api/v1/calendar/blocks");
+  assert.deepEqual(JSON.parse(sent.body), { blocked_date: "2099-01-01", reason: null });
   assert.equal(button(root, "Request appointment"), undefined);
 });
 

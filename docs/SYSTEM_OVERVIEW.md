@@ -13,6 +13,6 @@ CounselConnect centralizes University of Caloocan City guidance workflows for St
 | Assistant | Navigation, approved FAQs, published resources only |
 | Operations | Counselor manages CMS, announcements, contacts, accounts/staff, academic corrections, audit views |
 
-Stack: React/Vite/TailwindCSS, FastAPI, MySQL 8.4 LTS, SQLAlchemy/PyMySQL/Alembic, CapacitorJS, modular monolith.
+Stack: JavaScript (React)/Vite/TailwindCSS, FastAPI, MySQL 8.4 LTS, SQLAlchemy/PyMySQL/Alembic, CapacitorJS, modular monolith.
 
 Global boundaries: backend authorization, data minimization, no diagnosis/medical advice, no raw facial media/biometrics, no durable COR, no unreviewed automated publication, and no mirrored third-party full articles.
