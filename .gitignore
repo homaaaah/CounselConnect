@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets (examples only are committed)
+.env
+.env.*
+!backend/.env.example
+!frontend/.env.example
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.local
+
+# Local private file stores (COR files must never be committed)
+backend/var/
+graphify-out/
+
+# Local AI-tool state (project config lives in .kilo/ and AGENTS.md only)
+.opencode/
+.kilocode/
+
+# Local duplicate snapshot of the repo (merge source; do not commit)
+counselconnect-frontend/
+
+# OneDrive / OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

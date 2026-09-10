@@ -1,0 +1,4066 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CounselConnect API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign in (student number or staff email)",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Login Api V1 Auth Login Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revalidate the current session (CSRF header required)",
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Refresh Api V1 Auth Refresh Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign out and revoke the session (CSRF header required)",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Logout Api V1 Auth Logout Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Current authenticated user",
+        "operationId": "me_api_v1_auth_me_get",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUser"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Me Api V1 Auth Me Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Recover the CSRF token for a live session without renewing idle activity",
+        "description": "Recovers the session-bound CSRF token after a page reload.\n\nSafe because the caller must already hold the session cookie (proof\nof the credential); CSRF tokens are not secrets from their own\nsession — they only guard cross-site forgery of unsafe requests.",
+        "operationId": "recover_csrf_api_v1_auth_csrf_get",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Recover Csrf Api V1 Auth Csrf Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/register/student": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Student self-registration (DFD 1.1; account starts PENDING_VERIFICATION)",
+        "operationId": "register_student_api_v1_accounts_register_student_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Register Student Api V1 Accounts Register Student Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/register/student-with-cor": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Atomic registration: account + COR PDF in ONE submission (DFD 1.1 + 1.2)",
+        "operationId": "register_student_with_cor_api_v1_accounts_register_student_with_cor_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_register_student_with_cor_api_v1_accounts_register_student_with_cor_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Register Student With Cor Api V1 Accounts Register Student With Cor Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/campuses": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Active campuses",
+        "operationId": "list_campuses_api_v1_accounts_campuses_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_CampusResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Campuses Api V1 Accounts Campuses Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/programs": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Active programs",
+        "operationId": "list_programs_api_v1_accounts_programs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ProgramResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Programs Api V1 Accounts Programs Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-verifications/cor": {
+      "post": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Student: upload current COR (registration form) PDF",
+        "operationId": "upload_cor_api_v1_enrollment_verifications_cor_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_cor_api_v1_enrollment_verifications_cor_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Upload Cor Api V1 Enrollment Verifications Cor Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-verifications/pending": {
+      "get": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Counselor: pending queue with applicant details",
+        "operationId": "list_pending_api_v1_enrollment_verifications_pending_get",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendingItemResponse"
+                  },
+                  "title": "Response List Pending Api V1 Enrollment Verifications Pending Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Pending Api V1 Enrollment Verifications Pending Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-verifications/history": {
+      "get": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Counselor: permanent review record (all applications; optional status filter)",
+        "description": "Permanent record of every registration application and its decision.\n\nDecided rows keep decision_at, reviewer, comment, and valid_until.\n`file` is omitted (null) because COR bytes are purged after decisions\nper the privacy boundary.",
+        "operationId": "list_history_api_v1_enrollment_verifications_history_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendingItemResponse"
+                  },
+                  "title": "Response List History Api V1 Enrollment Verifications History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List History Api V1 Enrollment Verifications History Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-verifications/{verification_id}/cor": {
+      "get": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Counselor: view the uploaded COR PDF",
+        "description": "Serves the PDF for the counselor's in-app preview (session cookie).",
+        "operationId": "get_cor_pdf_api_v1_enrollment_verifications__verification_id__cor_get",
+        "parameters": [
+          {
+            "name": "verification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Verification Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Get Cor Pdf Api V1 Enrollment Verifications  Verification Id  Cor Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-verifications/{verification_id}/approve": {
+      "post": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Counselor: approve the registration application",
+        "operationId": "approve_api_v1_enrollment_verifications__verification_id__approve_post",
+        "parameters": [
+          {
+            "name": "verification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Verification Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ApproveRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Approve Api V1 Enrollment Verifications  Verification Id  Approve Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-verifications/{verification_id}/reject": {
+      "post": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Counselor: reject the registration application (comment required)",
+        "operationId": "reject_api_v1_enrollment_verifications__verification_id__reject_post",
+        "parameters": [
+          {
+            "name": "verification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Verification Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reject Api V1 Enrollment Verifications  Verification Id  Reject Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/availability-slots": {
+      "get": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "List Slots",
+        "operationId": "list_slots_api_v1_availability_slots_get",
+        "parameters": [
+          {
+            "name": "campus_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campus Id"
+            }
+          },
+          {
+            "name": "appointment_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ONLINE",
+                    "FACE_TO_FACE"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Appointment Mode"
+            }
+          },
+          {
+            "name": "starts_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starts After"
+            }
+          },
+          {
+            "name": "ends_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ends Before"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_AvailabilitySlotResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Slots Api V1 Availability Slots Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Create Slots",
+        "operationId": "create_slots_api_v1_availability_slots_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvailabilitySlotCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_AvailabilitySlotResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Create Slots Api V1 Availability Slots Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/campuses/{campus_id}/guidance-office-location": {
+      "patch": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Update Location",
+        "operationId": "update_location_api_v1_campuses__campus_id__guidance_office_location_patch",
+        "parameters": [
+          {
+            "name": "campus_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Campus Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuidanceOfficeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Update Location Api V1 Campuses  Campus Id  Guidance Office Location Patch"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments": {
+      "get": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "List Appointments",
+        "operationId": "list_appointments_api_v1_appointments_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PENDING",
+                    "CONFIRMED",
+                    "COMPLETED",
+                    "CANCELLED",
+                    "REJECTED",
+                    "NO_SHOW"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_AppointmentResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Appointments Api V1 Appointments Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Book",
+        "operationId": "book_api_v1_appointments_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointmentCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Book Api V1 Appointments Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}": {
+      "get": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Detail",
+        "operationId": "detail_api_v1_appointments__appointment_id__get",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Detail Api V1 Appointments  Appointment Id  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/confirm": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Confirm",
+        "operationId": "confirm_api_v1_appointments__appointment_id__confirm_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Confirm Api V1 Appointments  Appointment Id  Confirm Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/reject": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Reject",
+        "operationId": "reject_api_v1_appointments__appointment_id__reject_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointmentRejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reject Api V1 Appointments  Appointment Id  Reject Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/cancel": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Cancel",
+        "operationId": "cancel_api_v1_appointments__appointment_id__cancel_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Cancel Api V1 Appointments  Appointment Id  Cancel Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/reschedule": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Reschedule",
+        "operationId": "reschedule_api_v1_appointments__appointment_id__reschedule_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointmentRescheduleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reschedule Api V1 Appointments  Appointment Id  Reschedule Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/complete": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Complete",
+        "operationId": "complete_api_v1_appointments__appointment_id__complete_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Complete Api V1 Appointments  Appointment Id  Complete Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/no-show": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "No Show",
+        "operationId": "no_show_api_v1_appointments__appointment_id__no_show_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 No Show Api V1 Appointments  Appointment Id  No Show Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/content/cms-blocks": {
+      "get": {
+        "tags": [
+          "content"
+        ],
+        "summary": "Published landing/office CMS blocks",
+        "operationId": "list_cms_blocks_api_v1_content_cms_blocks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ContentItemResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Cms Blocks Api V1 Content Cms Blocks Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/content/faqs": {
+      "get": {
+        "tags": [
+          "content"
+        ],
+        "summary": "Published FAQs",
+        "operationId": "list_faqs_api_v1_content_faqs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ContentItemResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Faqs Api V1 Content Faqs Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/content/announcements": {
+      "get": {
+        "tags": [
+          "content"
+        ],
+        "summary": "Published announcements",
+        "operationId": "list_announcements_api_v1_content_announcements_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ContentItemResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Announcements Api V1 Content Announcements Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/content/emergency-contacts": {
+      "get": {
+        "tags": [
+          "content"
+        ],
+        "summary": "Active ordered emergency contacts (SOS fallback display)",
+        "operationId": "list_emergency_contacts_api_v1_content_emergency_contacts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_EmergencyContactResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Emergency Contacts Api V1 Content Emergency Contacts Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Liveness probe",
+        "description": "Minimal health check; no data access, no auth required.",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AppointmentCreateRequest": {
+        "properties": {
+          "availability_slot_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Availability Slot Id"
+          },
+          "appointment_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE"
+            ],
+            "title": "Appointment Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "availability_slot_id",
+          "appointment_mode"
+        ],
+        "title": "AppointmentCreateRequest"
+      },
+      "AppointmentRejectRequest": {
+        "properties": {
+          "rejection_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AppointmentRejectRequest"
+      },
+      "AppointmentRescheduleRequest": {
+        "properties": {
+          "availability_slot_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Availability Slot Id"
+          },
+          "appointment_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE"
+            ],
+            "title": "Appointment Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "availability_slot_id",
+          "appointment_mode"
+        ],
+        "title": "AppointmentRescheduleRequest"
+      },
+      "AppointmentResponse": {
+        "properties": {
+          "appointment_id": {
+            "type": "integer",
+            "title": "Appointment Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "student_name": {
+            "type": "string",
+            "title": "Student Name"
+          },
+          "counselor_user_id": {
+            "type": "integer",
+            "title": "Counselor User Id"
+          },
+          "counselor_name": {
+            "type": "string",
+            "title": "Counselor Name"
+          },
+          "availability_slot_id": {
+            "type": "integer",
+            "title": "Availability Slot Id"
+          },
+          "campus_id": {
+            "type": "integer",
+            "title": "Campus Id"
+          },
+          "campus_name": {
+            "type": "string",
+            "title": "Campus Name"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "appointment_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE"
+            ],
+            "title": "Appointment Mode"
+          },
+          "meeting_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Location"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CONFIRMED",
+              "COMPLETED",
+              "CANCELLED",
+              "REJECTED",
+              "NO_SHOW"
+            ],
+            "title": "Status"
+          },
+          "rejection_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "appointment_id",
+          "student_user_id",
+          "student_name",
+          "counselor_user_id",
+          "counselor_name",
+          "availability_slot_id",
+          "campus_id",
+          "campus_name",
+          "starts_at",
+          "ends_at",
+          "appointment_mode",
+          "meeting_location",
+          "conversation_id",
+          "status",
+          "rejection_note",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AppointmentResponse"
+      },
+      "ApproveRequest": {
+        "properties": {
+          "valid_months": {
+            "type": "integer",
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Valid Months",
+            "default": 12
+          }
+        },
+        "type": "object",
+        "title": "ApproveRequest"
+      },
+      "AuthResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/SessionUser"
+          },
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          },
+          "idle_expires_at": {
+            "type": "string",
+            "title": "Idle Expires At"
+          },
+          "absolute_expires_at": {
+            "type": "string",
+            "title": "Absolute Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "csrf_token",
+          "idle_expires_at",
+          "absolute_expires_at"
+        ],
+        "title": "AuthResponse"
+      },
+      "AvailabilitySlotCreateRequest": {
+        "properties": {
+          "campus_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Campus Id"
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE",
+              "BOTH"
+            ],
+            "title": "Delivery Mode"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "slot_duration_minutes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Slot Duration Minutes",
+            "description": "Counselor-selected duration; no policy default."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "campus_id",
+          "delivery_mode",
+          "starts_at",
+          "ends_at",
+          "slot_duration_minutes"
+        ],
+        "title": "AvailabilitySlotCreateRequest"
+      },
+      "AvailabilitySlotResponse": {
+        "properties": {
+          "slot_id": {
+            "type": "integer",
+            "title": "Slot Id"
+          },
+          "counselor_user_id": {
+            "type": "integer",
+            "title": "Counselor User Id"
+          },
+          "counselor_name": {
+            "type": "string",
+            "title": "Counselor Name"
+          },
+          "campus_id": {
+            "type": "integer",
+            "title": "Campus Id"
+          },
+          "campus_name": {
+            "type": "string",
+            "title": "Campus Name"
+          },
+          "guidance_office_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance Office Location"
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE",
+              "BOTH"
+            ],
+            "title": "Delivery Mode"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "RESERVED"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot_id",
+          "counselor_user_id",
+          "counselor_name",
+          "campus_id",
+          "campus_name",
+          "guidance_office_location",
+          "delivery_mode",
+          "starts_at",
+          "ends_at",
+          "status"
+        ],
+        "title": "AvailabilitySlotResponse"
+      },
+      "Body_register_student_with_cor_api_v1_accounts_register_student_with_cor_post": {
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "student_number": {
+            "type": "string",
+            "title": "Student Number"
+          },
+          "campus_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Program Id"
+          },
+          "year_level": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Year Level"
+          },
+          "section": {
+            "type": "string",
+            "title": "Section"
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Current COR PDF (registration form)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first_name",
+          "last_name",
+          "email",
+          "password",
+          "student_number",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section",
+          "file"
+        ],
+        "title": "Body_register_student_with_cor_api_v1_accounts_register_student_with_cor_post"
+      },
+      "Body_upload_cor_api_v1_enrollment_verifications_cor_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_cor_api_v1_enrollment_verifications_cor_post"
+      },
+      "CampusResponse": {
+        "properties": {
+          "campus_id": {
+            "type": "integer",
+            "title": "Campus Id"
+          },
+          "campus_name": {
+            "type": "string",
+            "title": "Campus Name"
+          },
+          "guidance_office_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance Office Location"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "campus_id",
+          "campus_name",
+          "guidance_office_location",
+          "is_active"
+        ],
+        "title": "CampusResponse"
+      },
+      "ContentItemResponse": {
+        "properties": {
+          "content_id": {
+            "type": "integer",
+            "title": "Content Id"
+          },
+          "content_type": {
+            "type": "string",
+            "enum": [
+              "CMS_BLOCK",
+              "FAQ",
+              "ANNOUNCEMENT"
+            ],
+            "title": "Content Type"
+          },
+          "content_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Key"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content_id",
+          "content_type",
+          "content_key",
+          "title",
+          "body",
+          "is_published",
+          "created_by_user_id",
+          "updated_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ContentItemResponse"
+      },
+      "EmergencyContactResponse": {
+        "properties": {
+          "contact_id": {
+            "type": "integer",
+            "title": "Contact Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "contact_number": {
+            "type": "string",
+            "title": "Contact Number"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "display_order": {
+            "type": "integer",
+            "title": "Display Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contact_id",
+          "name",
+          "contact_number",
+          "description",
+          "is_active",
+          "display_order"
+        ],
+        "title": "EmergencyContactResponse"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "GuidanceOfficeUpdateRequest": {
+        "properties": {
+          "guidance_office_location": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Guidance Office Location"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "guidance_office_location"
+        ],
+        "title": "GuidanceOfficeUpdateRequest"
+      },
+      "ListEnvelope_AppointmentResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AppointmentResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[AppointmentResponse]"
+      },
+      "ListEnvelope_AvailabilitySlotResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AvailabilitySlotResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[AvailabilitySlotResponse]"
+      },
+      "ListEnvelope_CampusResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CampusResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[CampusResponse]"
+      },
+      "ListEnvelope_ContentItemResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[ContentItemResponse]"
+      },
+      "ListEnvelope_EmergencyContactResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmergencyContactResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[EmergencyContactResponse]"
+      },
+      "ListEnvelope_ProgramResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProgramResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[ProgramResponse]"
+      },
+      "LoginRequest": {
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Identifier"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identifier",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "PendingItemResponse": {
+        "properties": {
+          "verification": {
+            "$ref": "#/components/schemas/VerificationResponse"
+          },
+          "student": {
+            "$ref": "#/components/schemas/StudentSummaryResponse"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerificationFileMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "verification",
+          "student"
+        ],
+        "title": "PendingItemResponse",
+        "description": "One queue/history entry: verification + applicant (+ COR metadata when pending)."
+      },
+      "ProgramResponse": {
+        "properties": {
+          "program_id": {
+            "type": "integer",
+            "title": "Program Id"
+          },
+          "department_id": {
+            "type": "integer",
+            "title": "Department Id"
+          },
+          "program_code": {
+            "type": "string",
+            "title": "Program Code"
+          },
+          "program_name": {
+            "type": "string",
+            "title": "Program Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "program_id",
+          "department_id",
+          "program_code",
+          "program_name",
+          "is_active"
+        ],
+        "title": "ProgramResponse"
+      },
+      "RegistrationResultResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/StudentProfileResponse"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "profile",
+          "next_step"
+        ],
+        "title": "RegistrationResultResponse",
+        "description": "Result of student self-registration (always PENDING_VERIFICATION)."
+      },
+      "RejectRequest": {
+        "properties": {
+          "comment": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "comment"
+        ],
+        "title": "RejectRequest"
+      },
+      "SessionUser": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role_code": {
+            "type": "string",
+            "title": "Role Code"
+          },
+          "account_status": {
+            "type": "string",
+            "title": "Account Status"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "role_code",
+          "account_status",
+          "first_name",
+          "last_name"
+        ],
+        "title": "SessionUser"
+      },
+      "StudentProfileResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "student_number": {
+            "type": "string",
+            "title": "Student Number"
+          },
+          "campus_id": {
+            "type": "integer",
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "type": "integer",
+            "title": "Program Id"
+          },
+          "year_level": {
+            "type": "integer",
+            "title": "Year Level"
+          },
+          "section": {
+            "type": "string",
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "student_number",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section"
+        ],
+        "title": "StudentProfileResponse"
+      },
+      "StudentRegistrationRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "first_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name"
+          },
+          "student_number": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Student Number"
+          },
+          "campus_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Program Id"
+          },
+          "year_level": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Year Level"
+          },
+          "section": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "first_name",
+          "last_name",
+          "student_number",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section"
+        ],
+        "title": "StudentRegistrationRequest",
+        "description": "DFD 1.1 'Register Student Account' payload.\n\nCreates the pending account + academic profile; COR upload is a\nseparate step (limits pending ADR-P05)."
+      },
+      "StudentSummaryResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Number"
+          },
+          "campus_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Program Id"
+          },
+          "year_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Level"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "first_name",
+          "middle_name",
+          "last_name"
+        ],
+        "title": "StudentSummaryResponse",
+        "description": "Applicant details shown to the reviewer (DFD 1.3 review screen)."
+      },
+      "UserResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "role_code": {
+            "type": "string",
+            "enum": [
+              "STUDENT",
+              "GUIDANCE_STAFF",
+              "COUNSELOR"
+            ],
+            "title": "Role Code"
+          },
+          "account_status": {
+            "type": "string",
+            "enum": [
+              "PENDING_VERIFICATION",
+              "ACTIVE",
+              "VERIFICATION_EXPIRED"
+            ],
+            "title": "Account Status"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "role_code",
+          "account_status",
+          "first_name",
+          "middle_name",
+          "last_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserResponse"
+      },
+      "ValidationDetails": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationFieldError"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "title": "ValidationDetails"
+      },
+      "ValidationErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "$ref": "#/components/schemas/ValidationDetails"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "title": "ValidationErrorDetail"
+      },
+      "ValidationErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ValidationErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ValidationErrorResponse"
+      },
+      "ValidationFieldError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Loc"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "type",
+          "message"
+        ],
+        "title": "ValidationFieldError"
+      },
+      "VerificationFileMeta": {
+        "properties": {
+          "file_id": {
+            "type": "integer",
+            "title": "File Id"
+          },
+          "verification_id": {
+            "type": "integer",
+            "title": "Verification Id"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "cleanup_state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "FAILED"
+            ],
+            "title": "Cleanup State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "verification_id",
+          "mime_type",
+          "size_bytes",
+          "expires_at",
+          "cleanup_state"
+        ],
+        "title": "VerificationFileMeta"
+      },
+      "VerificationResponse": {
+        "properties": {
+          "verification_id": {
+            "type": "integer",
+            "title": "Verification Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "NEEDS_RESUBMISSION",
+              "REJECTED",
+              "EXPIRED"
+            ],
+            "title": "Status"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "assigned_guidance_staff_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Guidance Staff User Id"
+          },
+          "decision_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision At"
+          },
+          "reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By User Id"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "reviewer_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Note"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "email_queued": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Queued"
+          }
+        },
+        "type": "object",
+        "required": [
+          "verification_id",
+          "student_user_id",
+          "status",
+          "submitted_at",
+          "assigned_guidance_staff_user_id",
+          "decision_at",
+          "reviewed_by_user_id",
+          "reason_code",
+          "reviewer_note",
+          "valid_until"
+        ],
+        "title": "VerificationResponse"
+      }
+    }
+  }
+}
