@@ -13,12 +13,34 @@
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
+/**
+ * Coerce any error body to the standard envelope shape.
+ * Handles: standard envelopes (pass through), non-envelope JSON (FastAPI
+ * `detail` strings, gateway errors), and unparseable/empty bodies.
+ */
+function normalizeErrorBody(body) {
+  if (body && typeof body === "object" && body.error
+    && typeof body.error.message === "string") {
+    return {
+      error: {
+        code: typeof body.error.code === "string" ? body.error.code : "REQUEST_FAILED",
+        message: body.error.message,
+        details: body.error.details ?? {},
+      },
+    };
+  }
+  const detail = body && typeof body === "object" && typeof body.detail === "string"
+    ? body.detail : "Request failed.";
+  return { error: { code: "REQUEST_FAILED", message: detail, details: {} } };
+}
+
 export class ApiError extends Error {
   constructor(status, envelope) {
-    super(envelope.error.message);
-    this.code = envelope.error.code;
+    const normalized = normalizeErrorBody(envelope);
+    super(normalized.error.message);
+    this.code = normalized.error.code;
     this.status = status;
-    this.details = envelope.error.details ?? {};
+    this.details = normalized.error.details;
   }
 }
 
