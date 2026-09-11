@@ -1,32 +1,24 @@
-# CounselConnect — Current Task
+# CounselConnect - Current Task
 
 **Status:** COMPLETED (2026-09-11)
-**Risk class:** MEDIUM (localized client error-path hardening; no API/schema/auth boundary change)
+**Risk class:** MEDIUM (calendar availability calculation; no schema or authorization change)
 
-**Task:** Harden frontend `ApiError` against non-envelope error responses so the converted `apiClient.js` never crashes when a server/proxy returns a JSON body without the standard `{ "error": { code, message, details } }` envelope (e.g. FastAPI 405 `{"detail": "Method Not Allowed"}`, unknown-route 404s, gateway errors).
-
-**Route (CONTEXT_MAP):** `project` → `.ai/PROJECT.md`; affected code: `frontend/src/services/apiClient.js`, `frontend/tests/session.test.cjs`.
-
-## Objective (observable)
-
-A non-envelope JSON error body throws a safe `ApiError` carrying `code: "REQUEST_FAILED"`, the body's `detail` string as message when present, and no constructor crash; standard envelopes and unparseable bodies (`NETWORK_ERROR`) behave exactly as before.
+**Task:** Replace default calendar hours with actual remaining availability and keep today's count current.
 
 ## Outcome
 
-- `normalizeErrorBody` added before the `ApiError` constructor: standard envelopes pass through with exact code/message/details (message must be a string; a non-string code degrades to `REQUEST_FAILED`); non-envelope JSON with a `detail` string becomes `REQUEST_FAILED` + that detail; anything else (unparseable, empty, missing `error`) becomes `REQUEST_FAILED`/"Request failed.".
-- New session-suite test "non-envelope error bodies still throw a safe ApiError" covering all three shapes (405 detail, standard envelope, unparseable 502).
+- Calendar reads all future AVAILABLE slots in the requested range, excludes time blocks and owner-specific whole-day blocks, and returns distinct Manila start times. Counselor scope and active-account authorization are preserved.
+- Calendar counts and selected-day buttons remove elapsed times every second and on focus without renewing session activity. Empty days show "No times left".
+- Updated the appointment contract and added frontend, service-unit, and MySQL integration regressions.
 
-## Verification (run 2026-09-11)
+## Verification
 
-- `npm test` — 30/30 PASS (29 existing + 1 new; envelope pass-through assertions intact: `TEST_ERROR`, CSRF, booking-conflict flows).
-- Live backend probe: `PUT /accounts/programs` (real FastAPI 405 `{"detail":"Method Not Allowed"}`) now rejects with `{"status":405,"code":"REQUEST_FAILED","message":"Method Not Allowed","details":{}}` — previously a `TypeError` crash (pre-existing since the TS original; surfaced by the JS-migration verification).
-- `npm run build` — PASS (209.52 kB, clean).
-- MEDIUM self-review of diff: minimal, localized; 401 token-clear logic and CSRF header logic untouched.
+- Frontend: 32 tests passed; production build passed.
+- Backend calendar unit tests: 4 passed.
+- MySQL appointment integration suite: 54 skipped because COUNSELCONNECT_TEST_DATABASE_URL is absent; SQL persistence verification remains outstanding.
+- git diff --check passed.
 
-## Remaining limitations
+## Limitations
 
-- None known for this fix. (Broader live-HTTP suites still need a backend loopback server; not run here.)
-
-## Human decisions
-
-- (none outstanding)
+- Other users' booking changes arrive on the existing 60-second background refresh; elapsed-time removal is local every second.
+- Local backend restarted with the changes; health returned 200 and unauthenticated calendar access returned 401.

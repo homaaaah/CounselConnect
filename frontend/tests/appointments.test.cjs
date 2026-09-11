@@ -19,7 +19,7 @@ const appointment = { appointment_id: 5, student_user_id: 2, student_name: "Ana 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const envelope = items => ({ items, total: items.length, page: 1, page_size: 20 });
 
-function setup(t, { user = student, appointments = [], failure = false } = {}) {
+function setup(t, { user = student, appointments = [], failure = false, calendar } = {}) {
   const calls = [];
   global.window = { location: { hash: "#appointments" }, addEventListener() {}, removeEventListener() {} };
   setCsrfToken("synthetic-csrf");
@@ -35,6 +35,7 @@ function setup(t, { user = student, appointments = [], failure = false } = {}) {
     if (path.endsWith("/availability-slots")) return json(envelope([slot]));
     if (path.endsWith("/appointments")) return json(envelope(appointments));
     if (path.includes("/calendar")) {
+      if (calendar) return json(calendar);
       const now = new Date();
       const iso = date => date.toISOString().slice(0, 10);
       const day = offset => {
@@ -142,6 +143,35 @@ test("calendar month navigation stays within loaded data", async t => {
   assert.equal(nav("Next month").props.disabled, true, "cannot navigate past the loaded month range");
   assert.equal(nav("Previous month").props.disabled, true, "cannot navigate before the loaded month range");
 });
+
+for (const user of [student, counselor]) {
+  test(user.role_code + " calendar count and selected times expire without a network refresh", async t => {
+    let now = Date.parse("2026-09-11T05:30:00Z"); // 1:30 PM Manila
+    t.mock.method(Date, "now", () => now);
+    const timers = [];
+    t.mock.method(global, "setInterval", (callback, delay) => { timers.push({ callback, delay }); return 1; });
+    t.mock.method(global, "clearInterval", () => {});
+    const calls = setup(t, { user, calendar: { days: [{ calendar_date: "2026-09-11",
+      is_weekday: true, is_blocked: false, is_past: false,
+      available_times: ["08:00", "13:30", "14:00", "14:30"] }] } });
+    const root = await mount(t, React.createElement(AppointmentsPage, { user }));
+    const cell = () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2026-09-11"));
+    assert.match(cell().props["aria-label"], /2 times available/);
+    await act(async () => cell().props.onClick());
+    assert.ok(button(root, "14:00"));
+    const requestsBefore = calls.length;
+    now = Date.parse("2026-09-11T06:00:00Z");
+    await act(async () => timers.find(timer => timer.delay === 1000).callback());
+    assert.match(cell().props["aria-label"], /1 times available/);
+    assert.equal(button(root, "14:00"), undefined);
+    assert.ok(button(root, "14:30"));
+    now = Date.parse("2026-09-11T06:30:00Z");
+    await act(async () => timers.find(timer => timer.delay === 1000).callback());
+    assert.match(cell().props["aria-label"], /No available time slots/);
+    assert.ok(JSON.stringify(root.toJSON()).includes("No times left"));
+    assert.equal(calls.length, requestsBefore, "clock updates do not request or renew a session");
+  });
+}
 
 test("slot whose start has passed shows no booking form and the passed-time message", async t => {
   const pastSlot = { ...slot, slot_id: 11, starts_at: "2020-01-01T01:00:00Z", ends_at: "2020-01-01T02:00:00Z" };

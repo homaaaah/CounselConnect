@@ -215,6 +215,24 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         )
         return items, total
 
+    def calendar_slots(self, counselor_ids, now, starts_after, ends_before):
+        """All unreserved calendar starts, without the slot list's pagination."""
+        blocked_by_time = select(CounselorAvailabilityBlock.availability_block_id).where(
+            CounselorAvailabilityBlock.counselor_user_id == AvailabilitySlot.counselor_user_id,
+            CounselorAvailabilityBlock.starts_at < AvailabilitySlot.ends_at,
+            CounselorAvailabilityBlock.ends_at > AvailabilitySlot.starts_at,
+        ).exists()
+        return list(self.session.scalars(
+            select(AvailabilitySlot).where(
+                AvailabilitySlot.counselor_user_id.in_(counselor_ids),
+                AvailabilitySlot.status == "AVAILABLE",
+                AvailabilitySlot.starts_at > now,
+                AvailabilitySlot.starts_at >= starts_after,
+                AvailabilitySlot.starts_at < ends_before,
+                ~blocked_by_time,
+            ).order_by(AvailabilitySlot.starts_at)
+        ))
+
     def slots(
         self,
         actor,

@@ -163,7 +163,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `GET /availability-blocks` | Counselor: own temporary unavailable time ranges. |
 | `POST /availability-blocks` | Counselor; aware `starts_at`/`ends_at`, `is_all_day`, optional `reason` (max 255); 201 block. Rejected with `BLOCK_CONFLICT` when it would overlap a `PENDING`/`CONFIRMED` appointment. |
 | `DELETE /availability-blocks/{availability_block_id}` | Counselor; removes one of their blocks; 204. |
-| `GET /calendar` | Active Student/Counselor; `start_date`/`end_date` (max 63 days); calendar days with `is_past`, blocked dates, and slot availability in `Asia/Manila`. |
+| `GET /calendar` | Active Student/Counselor; `start_date`/`end_date` (max 63 days); calendar days with `is_past`, blocked dates, and `available_times`: sorted distinct future, unreserved slot start times in `Asia/Manila`, excluding owner blocks (no default hourly times). |
 | `POST /calendar/blocks` | Counselor; whole-day blocked date with optional `reason` (max 255); 201. |
 | `DELETE /calendar/blocks/{blocked_date}` | Counselor; removes a whole-day blocked date; 204. |
 | `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1–200 concrete slots. |

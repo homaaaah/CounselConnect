@@ -18,7 +18,20 @@ function Pagination({ page, total, onChange, disabled }) {
 
 function CalendarView({ state, counselor }) {
   const [selected, setSelected] = useState(null);
-  const days = Array.isArray(state.calendar?.days) ? state.calendar.days : [];
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    const timer = setInterval(update, 1000);
+    window.addEventListener("focus", update);
+    return () => { clearInterval(timer); window.removeEventListener("focus", update); };
+  }, []);
+  const currentTime = Math.max(now, Date.now());
+  const days = (Array.isArray(state.calendar?.days) ? state.calendar.days : []).map(day => ({
+    ...day,
+    is_past: day.is_past || new Date(day.calendar_date + "T00:00:00+08:00").getTime() + 86400000 <= currentTime,
+    available_times: day.available_times.filter(time =>
+      new Date(day.calendar_date + "T" + time + ":00+08:00").getTime() > currentTime),
+  }));
   const byDate = new Map(days.map(day => [day.calendar_date, day]));
   const sortedDates = days.map(day => day.calendar_date).sort();
   const rangeStart = sortedDates[0];
@@ -74,7 +87,7 @@ function CalendarView({ state, counselor }) {
           className={`group min-h-20 bg-white p-1.5 text-left transition-colors ${!bookable ? "cursor-default" : "hover:bg-emerald-50"} ${state2 === "past" ? "text-slate-300" : state2 === "blocked" ? "bg-red-50" : state2 === "weekend" ? "bg-slate-50 text-slate-400" : ""} ${isSelected ? "ring-2 ring-inset ring-emerald-600" : ""}`}>
           <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${isToday ? "bg-emerald-600 text-white" : ""}`}>{Number(cellDate.slice(8))}</span>
           {day && !day.is_past && day.is_weekday && !day.is_blocked && <p className="mt-1 hidden truncate text-[10px] font-medium text-emerald-700 sm:block">
-            {day.available_times.length > 0 ? day.available_times.length + " open" : "Full"}</p>}
+            {day.available_times.length > 0 ? day.available_times.length + " open" : "No times left"}</p>}
           {day && (day.is_past || day.is_blocked || !day.is_weekday) && <p className="mt-1 hidden truncate text-[10px] text-slate-400 sm:block">{day.is_blocked ? "Blocked" : day.is_past ? "Passed" : "—"}</p>}
         </button>;
       })}

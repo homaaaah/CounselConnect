@@ -70,10 +70,24 @@ class AppointmentsService(BaseService[Appointment]):
         self.authorize(actor)
         if end_date < start_date or (end_date - start_date).days > 62:
             raise AppError("INVALID_CALENDAR_RANGE", "Choose a calendar range of 63 days or less.", status_code=422)
-        today = manila_today()
+        now = utcnow()
+        manila = ZoneInfo("Asia/Manila")
+        today = now.replace(tzinfo=timezone.utc).astimezone(manila).date()
         self.ensure_schedule_slots(max(start_date, today), end_date, actor.user_id if actor.role_code == "COUNSELOR" else None)
         counselor_ids = [actor.user_id] if actor.role_code == "COUNSELOR" else self.repository.active_counselor_ids()
-        blocked = self.repository.blocked_dates(counselor_ids, start_date, end_date) if counselor_ids else set()
+        blocked_by_counselor = {
+            counselor_id: self.repository.blocked_dates([counselor_id], start_date, end_date)
+            for counselor_id in counselor_ids
+        }
+        blocked = set.intersection(*blocked_by_counselor.values()) if blocked_by_counselor else set()
+        range_start = db_time(datetime.combine(start_date, datetime.min.time(), tzinfo=manila))
+        range_end = db_time(datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=manila))
+        times_by_date = {}
+        for slot in self.repository.calendar_slots(counselor_ids, now, range_start, range_end):
+            local_start = slot.starts_at.replace(tzinfo=timezone.utc).astimezone(manila)
+            if local_start.date() in blocked_by_counselor[slot.counselor_user_id]:
+                continue
+            times_by_date.setdefault(local_start.date(), set()).add(local_start.strftime("%H:%M"))
         days = []
         for offset in range((end_date - start_date).days + 1):
             day = start_date + timedelta(days=offset)
@@ -81,17 +95,7 @@ class AppointmentsService(BaseService[Appointment]):
             is_past = day < today
             is_blocked = day in blocked
             if weekday and not is_blocked and not is_past:
-                available = [f"{hour:02d}:00" for hour in range(8, 16)]
-                if day == today:
-                    now_local = datetime.now(ZoneInfo("Asia/Manila"))
-                    available = [
-                        time
-                        for time in available
-                        if now_local < datetime.combine(
-                            day, datetime.strptime(time, "%H:%M").time(), tzinfo=ZoneInfo("Asia/Manila")
-                        )
-                    ]
-                times = available
+                times = sorted(times_by_date.get(day, set()))
             else:
                 times = []
             days.append({"calendar_date": day, "is_weekday": weekday, "is_blocked": is_blocked, "is_past": is_past,
