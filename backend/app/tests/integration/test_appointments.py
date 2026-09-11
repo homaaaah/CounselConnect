@@ -215,38 +215,45 @@ def test_reschedule_rejected_for_past_replacement(db_session, actors):
     assert svc.repository.find_slot(past.slot_id).status == "AVAILABLE"
 
 
-def test_calendar_marks_past_days_and_clamps_today_times(db_session, actors):
-    from zoneinfo import ZoneInfo
-
-    from app.modules.appointments.service import manila_today
+def test_calendar_counts_real_future_unreserved_times(db_session, actors, monkeypatch):
+    from datetime import date
+    from app.modules.appointments import service as module
+    from app.modules.appointments.models import CounselorAvailabilityBlock
 
     users, campus = actors
     svc = AppointmentsService(db_session)
-    today = manila_today()
-    start = today - timedelta(days=2)
-    calendar = svc.calendar(users[2], start, today + timedelta(days=1))
-    days = {day["calendar_date"]: day for day in calendar["days"]}
-    # Fully past days are flagged and carry no available times.
-    assert days[start]["is_past"] is True
-    assert days[start]["available_times"] == []
-    # Future days are untouched: full default times on a weekday.
-    future = today + timedelta(days=1)
-    if future.weekday() < 5:
-        assert days[future]["is_past"] is False
-        assert days[future]["available_times"] == [
-            f"{hour:02d}:00" for hour in range(8, 16)
-        ]
-    # Today keeps only times whose Manila hour is still ahead of now.
-    now_manila = datetime.now(ZoneInfo("Asia/Manila"))
-    if today.weekday() < 5:
-        expected_today = [
-            f"{hour:02d}:00"
-            for hour in range(8, 16)
-            if now_manila.replace(hour=hour, minute=0, second=0, microsecond=0)
-            > now_manila
-        ]
-        assert days[today]["is_past"] is False
-        assert days[today]["available_times"] == expected_today
+    # Friday, 1:30 PM Manila; use UTC persistence, independent of test host TZ.
+    monkeypatch.setattr(module, "utcnow", lambda: datetime(2026, 9, 11, 5, 30))
+    today = date(2026, 9, 11)
+    assert svc.calendar(users[2], today, today)["days"][0]["available_times"] == []
+    for hour, minute, owner, status in [
+        (5, 0, 0, "AVAILABLE"), (5, 30, 0, "AVAILABLE"),
+        (6, 0, 0, "RESERVED"), (6, 30, 0, "AVAILABLE"),
+        (7, 0, 0, "AVAILABLE"), (7, 30, 0, "AVAILABLE"),
+        (7, 0, 1, "AVAILABLE"),
+    ]:
+        start = datetime(2026, 9, 11, hour, minute)
+        db_session.add(AvailabilitySlot(counselor_user_id=users[owner].user_id,
+            campus_id=campus.campus_id, delivery_mode="ONLINE", status=status,
+            starts_at=start, ends_at=start + timedelta(minutes=30)))
+    db_session.add(CounselorAvailabilityBlock(counselor_user_id=users[0].user_id,
+        starts_at=datetime(2026, 9, 11, 6, 30), ends_at=datetime(2026, 9, 11, 7),
+        is_all_day=False))
+    db_session.flush()
+    result = svc.calendar(users[2], today - timedelta(days=1), today + timedelta(days=3))
+    days = {day["calendar_date"]: day for day in result["days"]}
+    assert days[today]["available_times"] == ["15:00", "15:30"]
+    assert days[today - timedelta(days=1)]["is_past"] is True
+    assert days[today - timedelta(days=1)]["available_times"] == []
+    assert days[today + timedelta(days=3)]["available_times"] == []
+    assert svc.calendar(users[1], today, today)["days"][0]["available_times"] == ["15:00"]
+    # A whole-day block applies only to its owner; another Counselor stays open.
+    svc.repository.add_blocked_date(users[0].user_id, today)
+    db_session.flush()
+    student_day = svc.calendar(users[2], today, today)["days"][0]
+    assert student_day["available_times"] == ["15:00"]
+    assert student_day["is_blocked"] is False
+    assert svc.calendar(users[0], today, today)["days"][0]["available_times"] == []
 
 
 def test_location_required_at_creation_and_booking(db_session, actors):
