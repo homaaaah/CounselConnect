@@ -2,8 +2,8 @@
 const assert = require("node:assert/strict");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
-require("./register-typescript.cjs");
-const Page = require("../src/pages/AppointmentsPage.tsx").default;
+require("./register-app.cjs");
+const Page = require("../src/pages/AppointmentsPage.jsx").default;
 const { request, setCsrfToken } = require("../src/services/apiClient");
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
 assert.equal(new URL(base).hostname, "127.0.0.1");

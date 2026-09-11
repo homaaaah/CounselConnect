@@ -1,6 +1,5 @@
 import { useRef } from "react";
 import { usePublicContent } from "../features/content";
-import type { SessionUser } from "../features/auth";
 import { useAppointments, formatSchedule } from "../features/appointments";
 
 /**
@@ -10,10 +9,10 @@ import { useAppointments, formatSchedule } from "../features/appointments";
  * /content/emergency-contacts. The static mock (fake counselor, hardcoded
  * calendar, alert-based booking) is retired.
  */
-export default function HomePage({ user }: { user?: SessionUser | null }) {
+export default function HomePage({ user }) {
   const { announcements, contacts } = usePublicContent();
   const appointments = useAppointments(user?.role_code ?? "");
-  const contactsRef = useRef<HTMLDivElement>(null);
+  const contactsRef = useRef(null);
 
   const canBook = user?.role_code === "STUDENT" || user?.role_code === "COUNSELOR";
   const active = canBook && user?.account_status === "ACTIVE";

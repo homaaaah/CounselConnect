@@ -126,6 +126,7 @@ class CalendarDayResponse(BaseModel):
     calendar_date: date
     is_weekday: bool
     is_blocked: bool
+    is_past: bool
     available_times: list[str]
 
 

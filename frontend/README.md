@@ -1,6 +1,6 @@
 # Frontend
 
-React, Vite, TailwindCSS, and Capacitor client for CounselConnect.
+React (JavaScript, JS/JSX), Vite, TailwindCSS, and Capacitor client for CounselConnect.
 
 ## Layout
 
@@ -20,7 +20,7 @@ src/
   hooks/       Global hooks
   pages/       Current route-level pages
   services/    API client and service wrappers
-  types/       Shared TypeScript types
+  types/       Shared API DTO notes (plain JavaScript)
   utils/       Shared pure helpers
 ```
 

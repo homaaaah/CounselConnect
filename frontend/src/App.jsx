@@ -7,6 +7,7 @@ import ReviewerPage from "./pages/ReviewerPage";
 import AppointmentsPage from "./pages/AppointmentsPage";
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
+import { AppNavBar } from "./components/layout";
 
 /**
  * Hash-based page switcher (DFD Master System Flow).
@@ -34,15 +35,15 @@ export default function App() {
     <>
       {session.error && <p role="alert" className="p-3 text-red-700">{session.error}</p>}
       {session.user && (
-        <div className="flex flex-wrap justify-end gap-4 bg-white px-6 py-2">
-          {session.user.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) && (
-            <a href="#appointments" className="text-sm text-emerald-700 underline">Appointments</a>
-          )}
-          {session.user.role_code === "COUNSELOR" && <a href="#review" className="text-sm text-emerald-700 underline">COR verification</a>}
-          <button onClick={async () => {
+        <AppNavBar
+          user={session.user}
+          page={page}
+          idleExpiresAt={session.idleExpiresAt}
+          absoluteExpiresAt={session.absoluteExpiresAt}
+          onSignOut={async () => {
             if (await session.logout()) window.location.hash = "landing";
-          }} className="text-sm text-slate-600 underline">Sign out</button>
-        </div>
+          }}
+        />
       )}
       {page === "login" && <LoginPage onSignedIn={session.accept} />}
       {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}

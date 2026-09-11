@@ -4029,6 +4029,10 @@
             "type": "boolean",
             "title": "Is Blocked"
           },
+          "is_past": {
+            "type": "boolean",
+            "title": "Is Past"
+          },
           "available_times": {
             "items": {
               "type": "string"
@@ -4042,6 +4046,7 @@
           "calendar_date",
           "is_weekday",
           "is_blocked",
+          "is_past",
           "available_times"
         ],
         "title": "CalendarDayResponse"

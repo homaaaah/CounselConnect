@@ -6,16 +6,10 @@
 import { useState } from "react";
 import { request, ApiError } from "../../services/apiClient";
 
-export interface CorUploadResult {
-  success: boolean;
-  message: string;
-  status?: string;
-}
-
 export function useCorUpload() {
   const [uploading, setUploading] = useState(false);
 
-  async function uploadCor(file: File): Promise<CorUploadResult> {
+  async function uploadCor(file) {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       return { success: false, message: "The registration form must be a PDF file." };
     }
@@ -23,7 +17,7 @@ export function useCorUpload() {
     try {
       const form = new FormData();
       form.append("file", file);
-      const body = await request<{ verification_id: number; status: string }>(
+      const body = await request(
         "/enrollment-verifications/cor",
         { method: "POST", body: form }
       );

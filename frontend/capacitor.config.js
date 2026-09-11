@@ -1,6 +1,4 @@
-import type { CapacitorConfig } from "@capacitor/cli";
-
-const config: CapacitorConfig = {
+const config = {
   appId: "ph.edu.ucc.counselconnect",
   appName: "CounselConnect",
   webDir: "dist",

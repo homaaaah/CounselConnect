@@ -3,11 +3,11 @@ const { test } = require("node:test");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
 
-require("./register-typescript.cjs");
+require("./register-app.cjs");
 
-const App = require("../src/App.tsx").default;
-const { setCsrfToken, getCsrfToken, request } = require("../src/services/apiClient.ts");
-const { useReviewerConsole } = require("../src/features/enrollment/useReviewerConsole.ts");
+const App = require("../src/App.jsx").default;
+const { setCsrfToken, getCsrfToken, request } = require("../src/services/apiClient.js");
+const { useReviewerConsole } = require("../src/features/enrollment/useReviewerConsole.js");
 
 const auth = {
   user: { user_id: 1, email: "counselor@example.edu", role_code: "COUNSELOR",

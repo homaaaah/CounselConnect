@@ -8,35 +8,13 @@
 import { useCallback, useState } from "react";
 import { request, ApiError, setCsrfToken } from "../../services/apiClient";
 
-export interface SessionUser {
-  user_id: number;
-  email: string;
-  role_code: string;
-  account_status: string;
-  first_name: string;
-  last_name: string;
-}
-
-export interface AuthResult {
-  user: SessionUser;
-  csrf_token: string;
-  idle_expires_at: string;
-  absolute_expires_at: string;
-}
-
-export interface LoginResult {
-  ok: boolean;
-  message: string;
-  auth?: AuthResult;
-}
-
 export function useLogin() {
   const [submitting, setSubmitting] = useState(false);
 
-  const login = useCallback(async (identifier: string, password: string): Promise<LoginResult> => {
+  const login = useCallback(async (identifier, password) => {
     setSubmitting(true);
     try {
-      const auth = await request<AuthResult>("/auth/login", {
+      const auth = await request("/auth/login", {
         method: "POST",
         body: JSON.stringify({ identifier, password }),
       });

@@ -6,27 +6,18 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { ApiError, request, setCsrfToken } from "../../services/apiClient";
-import type { SessionUser, AuthResult } from "./useLogin";
-
-export interface SessionState {
-  user: SessionUser | null;
-  idleExpiresAt: string | null;
-  absoluteExpiresAt: string | null;
-  ready: boolean; // user and CSRF restoration finished
-  error: string | null;
-}
 
 export function useSession() {
-  const [state, setState] = useState<SessionState>({
+  const [state, setState] = useState({
     user: null,
     idleExpiresAt: null,
     absoluteExpiresAt: null,
-    ready: false,
+    ready: false, // user and CSRF restoration finished
     error: null,
   });
   const generation = useRef(0);
 
-  const accept = useCallback((auth: AuthResult) => {
+  const accept = useCallback((auth) => {
     generation.current++;
     setCsrfToken(auth.csrf_token);
     setState({ user: auth.user, idleExpiresAt: auth.idle_expires_at,
@@ -37,7 +28,7 @@ export function useSession() {
     const current = ++generation.current;
     setState((previous) => ({ ...previous, ready: false, error: null }));
     try {
-      const auth = await request<AuthResult>("/auth/csrf");
+      const auth = await request("/auth/csrf");
       if (generation.current !== current) return;
       accept(auth);
     } catch (err) {
@@ -51,7 +42,7 @@ export function useSession() {
   const logout = useCallback(async () => {
     generation.current++;
     try {
-      await request<void>("/auth/logout", { method: "POST", body: "{}" });
+      await request("/auth/logout", { method: "POST", body: "{}" });
     } catch (err) {
       if (!(err instanceof ApiError && err.status === 401)) {
         setState((previous) => ({ ...previous, error: "Sign out failed. Please retry." }));

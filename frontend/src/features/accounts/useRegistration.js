@@ -5,33 +5,7 @@
 import { useEffect, useState } from "react";
 import { request, ApiError } from "../../services/apiClient";
 
-export interface Campus {
-  campus_id: number;
-  campus_name: string;
-  guidance_office_location: string | null;
-}
-
-export interface Program {
-  program_id: number;
-  department_id: number;
-  program_code: string;
-  program_name: string;
-}
-
-export interface RegistrationForm {
-  email: string;
-  password: string;
-  first_name: string;
-  middle_name: string;
-  last_name: string;
-  student_number: string;
-  campus_id: string;
-  program_id: string;
-  year_level: string;
-  section: string;
-}
-
-export const EMPTY_FORM: RegistrationForm = {
+export const EMPTY_FORM = {
   email: "",
   password: "",
   first_name: "",
@@ -44,25 +18,16 @@ export const EMPTY_FORM: RegistrationForm = {
   section: "",
 };
 
-interface ListEnvelope<T> {
-  items: T[];
-}
-
-export interface RegistrationResult {
-  success: boolean;
-  message: string;
-}
-
 export function useRegistration() {
-  const [campuses, setCampuses] = useState<Campus[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [campuses, setCampuses] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      request<ListEnvelope<Campus>>("/accounts/campuses"),
-      request<ListEnvelope<Program>>("/accounts/programs"),
+      request("/accounts/campuses"),
+      request("/accounts/programs"),
     ])
       .then(([c, p]) => {
         if (!cancelled) {
@@ -78,10 +43,7 @@ export function useRegistration() {
     };
   }, []);
 
-  async function register(
-    form: RegistrationForm,
-    corFile: File | null
-  ): Promise<RegistrationResult> {
+  async function register(form, corFile) {
     if (corFile === null) {
       return {
         success: false,

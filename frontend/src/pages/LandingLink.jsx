@@ -6,20 +6,12 @@
  */
 import { useCallback as useCallbackShim } from "react";
 
-export type LinkVariant = "default" | "primary";
-export type LinkSize = "md" | "lg";
-
 /** Placeholder link: swaps the visible page via a URL hash. */
 export function Link({
   to,
   children,
   variant = "default",
   size = "md",
-}: {
-  to: string;
-  children: React.ReactNode;
-  variant?: LinkVariant;
-  size?: LinkSize;
 }) {
   const base =
     "inline-flex items-center justify-center rounded-md font-medium transition-colors";
@@ -36,9 +28,9 @@ export function Link({
 }
 
 /** Current hash page id ("login", "register", "home"). */
-export function useHashPage(): [string, (page: string) => void] {
+export function useHashPage() {
   const page = window.location.hash.replace("#", "") || "landing";
-  const navigate = useCallbackShim((p: string) => {
+  const navigate = useCallbackShim((p) => {
     window.location.hash = p;
   }, []);
   return [page, navigate];

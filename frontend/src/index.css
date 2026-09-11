@@ -44,11 +44,22 @@
   padding: 0 2rem;
 }
 
-/* Navbar */
+/* Navbar — sticky, gains shadow/blur once the page scrolls */
 .landing-page header {
-  background: #ffffff;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-color);
   padding: 1.25rem 0;
+  transition: box-shadow 0.2s, padding 0.2s;
+}
+
+.landing-page header.scrolled {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  padding: 0.9rem 0;
 }
 
 .landing-page .nav-container {
@@ -97,6 +108,66 @@
 
 .landing-page .btn-login:hover {
   background: #000000;
+}
+
+/* Mobile nav toggle (hidden on desktop) */
+.landing-page .nav-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  font-size: 1.15rem;
+  color: var(--text-dark);
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* Mobile drawer (below 768px) */
+.landing-page #landing-mobile-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .landing-page .nav-links,
+  .landing-page header .nav-container > .btn-login {
+    display: none;
+  }
+
+  .landing-page .nav-toggle {
+    display: inline-flex;
+  }
+
+  .landing-page #landing-mobile-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem 1rem;
+  }
+
+  .landing-page #landing-mobile-nav[hidden] {
+    display: none;
+  }
+
+  .landing-page #landing-mobile-nav a {
+    text-decoration: none;
+    color: var(--text-dark);
+    font-size: 0.95rem;
+    padding: 0.65rem 0.25rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .landing-page #landing-mobile-nav a:hover,
+  .landing-page #landing-mobile-nav a.active {
+    color: var(--primary);
+  }
+
+  .landing-page #landing-mobile-nav .btn-login {
+    align-self: flex-start;
+    margin-top: 0.75rem;
+    border: none;
+    cursor: pointer;
+  }
 }
 
 /* Hero Section */

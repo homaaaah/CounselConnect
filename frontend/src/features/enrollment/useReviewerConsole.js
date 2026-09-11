@@ -9,43 +9,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request, ApiError } from "../../services/apiClient";
 
-export interface PendingApplication {
-  verification: {
-    verification_id: number;
-    status: string;
-    submitted_at: string;
-    decision_at: string | null;
-    reviewed_by_user_id: number | null;
-    reviewer_note: string | null;
-    valid_until: string | null;
-  };
-  student: {
-    user_id: number;
-    email: string;
-    first_name: string;
-    middle_name: string | null;
-    last_name: string;
-    student_number?: string;
-    year_level?: number;
-    section?: string;
-  };
-  file: { file_id: number; size_bytes: number; expires_at: string } | null;
-}
-
 const API = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 export function useReviewerConsole() {
-  const [queue, setQueue] = useState<PendingApplication[]>([]);
-  const [history, setHistory] = useState<PendingApplication[]>([]);
-  const [historyFilter, setHistoryFilter] = useState<string>("");
+  const [queue, setQueue] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [historyFilter, setHistoryFilter] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ kind: "ok" | "warn"; text: string } | null>(null);
-  const pdfBlobs = useRef<Record<number, string>>({});
-  const pdfGeneration = useRef<Record<number, number>>({});
+  const [message, setMessage] = useState(null);
+  const [toast, setToast] = useState(null);
+  const pdfBlobs = useRef({});
+  const pdfGeneration = useRef({});
   const mounted = useRef(true);
 
-  function discardPdf(verificationId: number) {
+  function discardPdf(verificationId) {
     pdfGeneration.current[verificationId] = (pdfGeneration.current[verificationId] ?? 0) + 1;
     const url = pdfBlobs.current[verificationId];
     if (url) URL.revokeObjectURL(url);
@@ -71,8 +48,8 @@ export function useReviewerConsole() {
     setLoading(true);
     try {
       const [pending, all] = await Promise.all([
-        request<PendingApplication[]>("/enrollment-verifications/pending"),
-        request<PendingApplication[]>(
+        request("/enrollment-verifications/pending"),
+        request(
           historyFilter
             ? `/enrollment-verifications/history?status=${historyFilter}`
             : "/enrollment-verifications/history"
@@ -96,9 +73,9 @@ export function useReviewerConsole() {
     void refresh();
   }, [refresh]);
 
-  async function approve(verificationId: number): Promise<void> {
+  async function approve(verificationId) {
     try {
-      const result = await request<{ email_queued?: boolean }>(
+      const result = await request(
         `/enrollment-verifications/${verificationId}/approve`,
         { method: "POST", body: JSON.stringify({ valid_months: 12 }) }
       );
@@ -121,13 +98,13 @@ export function useReviewerConsole() {
     }
   }
 
-  async function reject(verificationId: number, comment: string): Promise<void> {
+  async function reject(verificationId, comment) {
     if (!comment.trim()) {
       setToast({ kind: "warn", text: "A rejection comment is required." });
       return;
     }
     try {
-      const result = await request<{ email_queued?: boolean }>(
+      const result = await request(
         `/enrollment-verifications/${verificationId}/reject`,
         { method: "POST", body: JSON.stringify({ comment }) }
       );
@@ -150,7 +127,7 @@ export function useReviewerConsole() {
     }
   }
 
-  async function openCorPdf(verificationId: number): Promise<void> {
+  async function openCorPdf(verificationId) {
     const generation = pdfGeneration.current[verificationId] ?? 0;
     if (pdfBlobs.current[verificationId]) {
       window.open(pdfBlobs.current[verificationId], "_blank");

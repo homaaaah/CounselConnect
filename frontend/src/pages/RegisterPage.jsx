@@ -1,26 +1,22 @@
 import { useState } from "react";
-import { useRegistration, EMPTY_FORM, RegistrationForm } from "../features/accounts";
+import { useRegistration, EMPTY_FORM } from "../features/accounts";
 
 /**
  * Student registration (DFD 1.1 + 1.2): details + COR PDF, ONE submit.
  * Capstone card styling. inModal renders the same card without the
  * full-page shell, with an in-modal sign-in switch (landing overlay).
  */
-export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin }: {
-  inModal?: boolean;
-  onClose?: () => void;
-  onSwitchToLogin?: () => void;
-}) {
+export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin }) {
   const { campuses, programs, register, submitting } = useRegistration();
-  const [form, setForm] = useState<RegistrationForm>(EMPTY_FORM);
-  const [corFile, setCorFile] = useState<File | null>(null);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [corFile, setCorFile] = useState(null);
+  const [result, setResult] = useState(null);
 
-  function set<K extends keyof RegistrationForm>(key: K, value: string) {
+  function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setResult(await register(form, corFile));
   }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useReviewerConsole } from "../features/enrollment";
 
-const STATUS_STYLES: Record<string, string> = {
+const STATUS_STYLES = {
   PENDING: "bg-amber-100 text-amber-700",
   APPROVED: "bg-emerald-100 text-emerald-700",
   REJECTED: "bg-red-100 text-red-700",
@@ -30,8 +30,8 @@ export default function ReviewerPage() {
     reject,
     openCorPdf,
   } = useReviewerConsole();
-  const [tab, setTab] = useState<"pending" | "history">("pending");
-  const [comments, setComments] = useState<Record<number, string>>({});
+  const [tab, setTab] = useState("pending");
+  const [comments, setComments] = useState({});
 
   return (
     <main className="min-h-screen bg-slate-50">

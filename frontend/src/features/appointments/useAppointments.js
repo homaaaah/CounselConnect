@@ -1,44 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "../../services/apiClient";
 
-export type AppointmentMode = "ONLINE" | "FACE_TO_FACE";
-export interface Campus { campus_id: number; campus_name: string; guidance_office_location: string | null }
-export interface Slot {
-  slot_id: number; counselor_user_id: number; counselor_name: string; campus_id: number; campus_name: string;
-  guidance_office_location: string | null; delivery_mode: AppointmentMode | "BOTH";
-  starts_at: string; ends_at: string; status: "AVAILABLE" | "RESERVED";
-}
-export interface Appointment {
-  appointment_id: number; student_user_id: number; student_name: string; counselor_user_id: number;
-  counselor_name: string; availability_slot_id: number; campus_id: number; campus_name: string;
-  starts_at: string; ends_at: string; appointment_mode: AppointmentMode; meeting_location: string | null;
-  conversation_id: number | null; status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "REJECTED" | "NO_SHOW";
-  rejection_note: string | null; created_at: string; updated_at: string;
-}
-interface Page<T> { items: T[]; page: number; page_size: number; total: number }
-export interface CalendarDay { calendar_date: string; is_weekday: boolean; is_blocked: boolean; available_times: string[] }
-export interface CalendarData { timezone: string; business_hours: string; days: CalendarDay[] }
-export interface WeeklySchedule {
-  weekly_schedule_id: number; counselor_user_id: number; campus_id: number; day_of_week: number;
-  start_time: string; end_time: string; slot_duration_minutes: number; delivery_mode: AppointmentMode | "BOTH";
-  is_active: boolean; created_at: string; updated_at: string;
-}
-export interface AvailabilityBlock {
-  availability_block_id: number; counselor_user_id: number; starts_at: string; ends_at: string;
-  is_all_day: boolean; reason: string | null; created_at: string; updated_at: string;
-}
-export const formatSchedule = (value: string) => new Intl.DateTimeFormat("en-PH", {
+export const formatSchedule = (value) => new Intl.DateTimeFormat("en-PH", {
   timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short",
 }).format(new Date(value));
-export const manilaInputToUTC = (value: string) => new Date(value + ":00+08:00").toISOString();
+export const manilaInputToUTC = (value) => new Date(value + ":00+08:00").toISOString();
+/** Current Philippine calendar date (YYYY-MM-DD), independent of the browser timezone. */
+export const manilaToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
+/** Manila-local "YYYY-MM-DDTHH:MM" string for datetime-local input bounds. */
+export const manilaLocalInput = (date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(date);
+  const get = (type) => parts.find(part => part.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+};
+/** True when the slot's scheduled start (UTC ISO) has already passed. */
+export const slotIsPast = (slot, now = new Date()) => new Date(slot.starts_at).getTime() <= now.getTime();
 
 export function useAppointments(role = "") {
-  const [campuses, setCampuses] = useState<Campus[]>([]);
-  const [slots, setSlots] = useState<Page<Slot>>({ items: [], page: 1, page_size: 20, total: 0 });
-  const [appointments, setAppointments] = useState<Page<Appointment>>({ items: [], page: 1, page_size: 20, total: 0 });
-  const [calendar, setCalendar] = useState<CalendarData | null>(null);
-  const [weeklySchedules, setWeeklySchedules] = useState<WeeklySchedule[]>([]);
-  const [availabilityBlocks, setAvailabilityBlocks] = useState<AvailabilityBlock[]>([]);
+  const [campuses, setCampuses] = useState([]);
+  const [slots, setSlots] = useState({ items: [], page: 1, page_size: 20, total: 0 });
+  const [appointments, setAppointments] = useState({ items: [], page: 1, page_size: 20, total: 0 });
+  const [calendar, setCalendar] = useState(null);
+  const [weeklySchedules, setWeeklySchedules] = useState([]);
+  const [availabilityBlocks, setAvailabilityBlocks] = useState([]);
   const [campusId, setCampusId] = useState("");
   const [mode, setMode] = useState("");
   const [date, setDate] = useState("");
@@ -61,9 +46,11 @@ export function useAppointments(role = "") {
     const params = new URLSearchParams({ page: String(slotPage), page_size: "20" });
     if (campusId) params.set("campus_id", campusId);
     if (mode) params.set("appointment_mode", mode);
-    if (date) {
-      params.set("starts_after", new Date(date + "T00:00:00+08:00").toISOString());
-      params.set("ends_before", new Date(new Date(date + "T00:00:00+08:00").getTime() + 86400000).toISOString());
+    const todayManila = manilaToday();
+    const effectiveDate = date && date >= todayManila ? date : "";
+    if (effectiveDate) {
+      params.set("starts_after", new Date(effectiveDate + "T00:00:00+08:00").toISOString());
+      params.set("ends_before", new Date(new Date(effectiveDate + "T00:00:00+08:00").getTime() + 86400000).toISOString());
     }
     const appParams = new URLSearchParams({ page: String(appointmentPage), page_size: "20" });
     if (status) appParams.set("status", status);
@@ -74,17 +61,22 @@ export function useAppointments(role = "") {
       const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(end);
       const calendarParams = new URLSearchParams({ start_date: manilaDate, end_date: endDate });
       const headers = background ? { "X-Background-Refresh": "1" } : undefined;
-      const calendarData = await request<CalendarData>("/calendar?" + calendarParams, { headers });
+      const calendarData = await request("/calendar?" + calendarParams, { headers });
       const isCounselor = role === "COUNSELOR";
       const [campusData, slotData, appointmentData, scheduleData, blockData] = await Promise.all([
-        request<Page<Campus>>("/accounts/campuses", { headers }),
-        request<Page<Slot>>("/availability-slots?" + params, { headers }),
-        request<Page<Appointment>>("/appointments?" + appParams, { headers }),
-        isCounselor ? request<WeeklySchedule[]>("/weekly-schedules", { headers }) : Promise.resolve([] as WeeklySchedule[]),
-        isCounselor ? request<AvailabilityBlock[]>("/availability-blocks", { headers }) : Promise.resolve([] as AvailabilityBlock[]),
+        request("/accounts/campuses", { headers }),
+        request("/availability-slots?" + params, { headers }),
+        request("/appointments?" + appParams, { headers }),
+        isCounselor ? request("/weekly-schedules", { headers }) : Promise.resolve([]),
+        isCounselor ? request("/availability-blocks", { headers }) : Promise.resolve([]),
       ]);
       if (current !== sequence.current || !mounted.current) return;
-      setCampuses(campusData.items); setSlots(slotData); setAppointments(appointmentData); setCalendar(calendarData);
+      setCampuses(campusData.items);
+      // A slot becomes unbookable the moment its start passes; the backend
+      // already excludes past slots, this covers the gap until refresh.
+      const stillFuture = slotData.items.filter(slot => new Date(slot.starts_at).getTime() > Date.now());
+      setSlots({ ...slotData, items: stillFuture, total: slotData.total });
+      setAppointments(appointmentData); setCalendar(calendarData);
       setWeeklySchedules(scheduleData); setAvailabilityBlocks(blockData);
     } catch (err) {
       if (current === sequence.current && mounted.current) {
@@ -102,7 +94,7 @@ export function useAppointments(role = "") {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  async function mutate(path: string, body?: unknown, method = "POST", success = "Appointment updated.") {
+  async function mutate(path, body, method = "POST", success = "Appointment updated.") {
     if (mutating.current) return false;
     mutating.current = true; setBusy(true); setError(""); setMessage("");
     try {

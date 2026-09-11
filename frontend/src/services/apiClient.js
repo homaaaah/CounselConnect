@@ -13,16 +13,8 @@
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-export interface ApiErrorEnvelope {
-  error: { code: string; message: string; details?: Record<string, unknown> };
-}
-
 export class ApiError extends Error {
-  code: string;
-  status: number;
-  details: Record<string, unknown>;
-
-  constructor(status: number, envelope: ApiErrorEnvelope) {
+  constructor(status, envelope) {
     super(envelope.error.message);
     this.code = envelope.error.code;
     this.status = status;
@@ -31,22 +23,22 @@ export class ApiError extends Error {
 }
 
 /** In-memory CSRF token (survives navigation, cleared on reload/logout). */
-let csrfToken: string | null = null;
+let csrfToken = null;
 
-export function setCsrfToken(token: string | null): void {
+export function setCsrfToken(token) {
   csrfToken = token;
 }
 
-export function getCsrfToken(): string | null {
+export function getCsrfToken() {
   return csrfToken;
 }
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request(path, init = {}) {
   const sentCsrfToken = csrfToken;
   const isFormData = init.body instanceof FormData;
-  const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
+  const headers = { ...init.headers };
   if (!isFormData) {
     headers["Content-Type"] = "application/json";
   }
@@ -63,7 +55,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     credentials: "include",
   });
   if (!response.ok) {
-    const envelope = (await response.json().catch(() => null)) as ApiErrorEnvelope | null;
+    const envelope = await response.json().catch(() => null);
     if (response.status === 401 && csrfToken === sentCsrfToken) {
       setCsrfToken(null); // session gone/invalid — force re-login
     }
@@ -72,7 +64,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     });
   }
   if (response.status === 204) {
-    return undefined as T;
+    return undefined;
   }
-  return (await response.json()) as T;
+  return await response.json();
 }

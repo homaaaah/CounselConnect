@@ -7,22 +7,18 @@
 import { useEffect, useState } from "react";
 import { request } from "../services/apiClient";
 
-interface HealthResponse {
-  status: string;
-}
-
 export function useHealth() {
-  const [status, setStatus] = useState<string>("checking...");
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState("checking...");
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    request<HealthResponse>("/health")
-      .then((data: HealthResponse) => {
+    request("/health")
+      .then((data) => {
         if (!cancelled) setStatus(data.status);
       })
-      .catch((err: Error) => {
+      .catch((err) => {
         if (!cancelled) setError(err.message);
       });
 

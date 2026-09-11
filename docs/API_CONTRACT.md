@@ -163,7 +163,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `GET /availability-blocks` | Counselor: own temporary unavailable time ranges. |
 | `POST /availability-blocks` | Counselor; aware `starts_at`/`ends_at`, `is_all_day`, optional `reason` (max 255); 201 block. Rejected with `BLOCK_CONFLICT` when it would overlap a `PENDING`/`CONFIRMED` appointment. |
 | `DELETE /availability-blocks/{availability_block_id}` | Counselor; removes one of their blocks; 204. |
-| `GET /calendar` | Active Student/Counselor; `start_date`/`end_date` (max 63 days); calendar days with blocked dates and slot availability in `Asia/Manila`. |
+| `GET /calendar` | Active Student/Counselor; `start_date`/`end_date` (max 63 days); calendar days with `is_past`, blocked dates, and slot availability in `Asia/Manila`. |
 | `POST /calendar/blocks` | Counselor; whole-day blocked date with optional `reason` (max 255); 201. |
 | `DELETE /calendar/blocks/{blocked_date}` | Counselor; removes a whole-day blocked date; 204. |
 | `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1–200 concrete slots. |
@@ -180,7 +180,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 
 Transitions return 200 appointment responses. Responses include the schedule, campus/counselor names, and (only in authorized appointment responses) student name and booking-time `meeting_location`. `conversation_id` remains nullable; there is no chat-join endpoint in this scheduling delivery. All scheduling responses are `no-store`; schema validation excludes unknown request fields and returns sanitized errors. Exact shapes are generated in `contracts/openapi.json`.
 
-Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMENT_NOT_FOUND`/`CAMPUS_NOT_FOUND`; and 409 `SLOT_UNAVAILABLE`, `SCHEDULE_CONFLICT`, `MODE_INCOMPATIBLE`, `GUIDANCE_OFFICE_REQUIRED`, `SLOT_IN_PAST`, `INVALID_APPOINTMENT_TRANSITION`, `SESSION_NOT_STARTED`, `SESSION_ALREADY_LINKED`, `PARTICIPANT_UNAVAILABLE`, `APPOINTMENT_CHANGED`, or `CONVERSATION_MISMATCH`. Unauthenticated and missing/invalid CSRF requests use the existing auth errors. Naive datetime inputs and invalid pagination/ranges/enums receive sanitized 422 errors.
+Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMENT_NOT_FOUND`/`CAMPUS_NOT_FOUND`; and 409 `SLOT_UNAVAILABLE`, `SCHEDULE_CONFLICT`, `MODE_INCOMPATIBLE`, `GUIDANCE_OFFICE_REQUIRED`, `SLOT_IN_PAST`, `APPOINTMENT_DATE_PASSED`, `APPOINTMENT_TIME_PASSED`, `INVALID_APPOINTMENT_TRANSITION`, `SESSION_NOT_STARTED`, `SESSION_ALREADY_LINKED`, `PARTICIPANT_UNAVAILABLE`, `APPOINTMENT_CHANGED`, or `CONVERSATION_MISMATCH`. Unauthenticated and missing/invalid CSRF requests use the existing auth errors. Naive datetime inputs and invalid pagination/ranges/enums receive sanitized 422 errors.
 
 ### Messaging
 

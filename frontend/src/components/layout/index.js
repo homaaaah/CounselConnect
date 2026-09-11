@@ -3,4 +3,4 @@
  * Role visibility here is usability only; backend authorization
  * is authoritative (docs/USER_ROLES.md).
  */
-export {};
+export { default as AppNavBar } from "./AppNavBar";

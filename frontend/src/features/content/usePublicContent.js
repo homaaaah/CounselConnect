@@ -5,31 +5,11 @@
 import { useEffect, useState } from "react";
 import { request } from "../../services/apiClient";
 
-export interface ContentItem {
-  content_id: number;
-  content_type: "CMS_BLOCK" | "FAQ" | "ANNOUNCEMENT";
-  content_key: string | null;
-  title: string | null;
-  body: string;
-  updated_at: string;
-}
-
-export interface EmergencyContact {
-  contact_id: number;
-  name: string;
-  contact_number: string;
-  description: string | null;
-}
-
-interface ListEnvelope<T> {
-  items: T[];
-}
-
 export function usePublicContent() {
-  const [cmsBlocks, setCmsBlocks] = useState<ContentItem[]>([]);
-  const [faqs, setFaqs] = useState<ContentItem[]>([]);
-  const [announcements, setAnnouncements] = useState<ContentItem[]>([]);
-  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [cmsBlocks, setCmsBlocks] = useState([]);
+  const [faqs, setFaqs] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,10 +17,10 @@ export function usePublicContent() {
     (async () => {
       try {
         const [b, f, a, c] = await Promise.all([
-          request<ListEnvelope<ContentItem>>("/content/cms-blocks"),
-          request<ListEnvelope<ContentItem>>("/content/faqs"),
-          request<ListEnvelope<ContentItem>>("/content/announcements"),
-          request<ListEnvelope<EmergencyContact>>("/content/emergency-contacts"),
+          request("/content/cms-blocks"),
+          request("/content/faqs"),
+          request("/content/announcements"),
+          request("/content/emergency-contacts"),
         ]);
         if (!cancelled) {
           setCmsBlocks(b.items);

@@ -70,16 +70,32 @@ class AppointmentsService(BaseService[Appointment]):
         self.authorize(actor)
         if end_date < start_date or (end_date - start_date).days > 62:
             raise AppError("INVALID_CALENDAR_RANGE", "Choose a calendar range of 63 days or less.", status_code=422)
-        self.ensure_schedule_slots(start_date, end_date, actor.user_id if actor.role_code == "COUNSELOR" else None)
+        today = manila_today()
+        self.ensure_schedule_slots(max(start_date, today), end_date, actor.user_id if actor.role_code == "COUNSELOR" else None)
         counselor_ids = [actor.user_id] if actor.role_code == "COUNSELOR" else self.repository.active_counselor_ids()
         blocked = self.repository.blocked_dates(counselor_ids, start_date, end_date) if counselor_ids else set()
         days = []
         for offset in range((end_date - start_date).days + 1):
             day = start_date + timedelta(days=offset)
             weekday = day.weekday() < 5
+            is_past = day < today
             is_blocked = day in blocked
-            days.append({"calendar_date": day, "is_weekday": weekday, "is_blocked": is_blocked,
-                "available_times": [] if not weekday or is_blocked else [f"{hour:02d}:00" for hour in range(8, 16)]})
+            if weekday and not is_blocked and not is_past:
+                available = [f"{hour:02d}:00" for hour in range(8, 16)]
+                if day == today:
+                    now_local = datetime.now(ZoneInfo("Asia/Manila"))
+                    available = [
+                        time
+                        for time in available
+                        if now_local < datetime.combine(
+                            day, datetime.strptime(time, "%H:%M").time(), tzinfo=ZoneInfo("Asia/Manila")
+                        )
+                    ]
+                times = available
+            else:
+                times = []
+            days.append({"calendar_date": day, "is_weekday": weekday, "is_blocked": is_blocked, "is_past": is_past,
+                "available_times": times})
         return {"timezone": "Asia/Manila", "business_hours": "Monday-Friday, 8:00 AM-4:00 PM", "days": days}
 
     def block_date(self, actor, blocked_date, reason=None):
@@ -387,9 +403,26 @@ class AppointmentsService(BaseService[Appointment]):
         )
 
     def _validate_slot(self, slot, mode, student_id, exclude_id=None):
-        if slot is None or slot.status != "AVAILABLE" or slot.starts_at <= utcnow():
+        if slot is None or slot.status != "AVAILABLE":
             raise AppError(
                 "SLOT_UNAVAILABLE", "The selected slot is no longer available."
+            )
+        if slot.starts_at <= utcnow():
+            slot_manila_date = (
+                slot.starts_at.replace(tzinfo=timezone.utc)
+                .astimezone(ZoneInfo("Asia/Manila"))
+                .date()
+            )
+            if slot_manila_date < manila_today():
+                raise AppError(
+                    "APPOINTMENT_DATE_PASSED",
+                    "This appointment date has already passed. "
+                    "Please select another available date.",
+                )
+            raise AppError(
+                "APPOINTMENT_TIME_PASSED",
+                "This appointment time is no longer available. "
+                "Please select another available time.",
             )
         if slot.delivery_mode not in (mode, "BOTH"):
             raise AppError("MODE_INCOMPATIBLE", "Select a mode supported by this slot.")

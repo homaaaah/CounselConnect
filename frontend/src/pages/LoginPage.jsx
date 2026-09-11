@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLogin, type AuthResult } from "../features/auth";
+import { useLogin } from "../features/auth";
 
 /**
  * Sign-in page (ADR-019): opaque session cookie + CSRF. Capstone card styling.
@@ -7,19 +7,12 @@ import { useLogin, type AuthResult } from "../features/auth";
  * audience/register switches and a close button (landing overlay).
  */
 export default function LoginPage({ onSignedIn, audience = "student", inModal = false,
-  onClose, onSwitchAudience, onSwitchToRegister }: {
-  onSignedIn: (auth: AuthResult) => void;
-  audience?: "student" | "staff";
-  inModal?: boolean;
-  onClose?: () => void;
-  onSwitchAudience?: () => void;
-  onSwitchToRegister?: () => void;
-}) {
+  onClose, onSwitchAudience, onSwitchToRegister }) {
   const isStudent = audience === "student";
   const { login, submitting } = useLogin();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [result, setResult] = useState<{ ok: boolean; message: string; role?: string } | null>(null);
+  const [result, setResult] = useState(null);
 
   useEffect(() => {
     if (result?.ok && result.role) {
@@ -32,7 +25,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
     }
   }, [result]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     const r = await login(identifier, password);
     if (r.ok && r.auth) onSignedIn(r.auth);

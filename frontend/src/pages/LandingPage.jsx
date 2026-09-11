@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { usePublicContent } from "../features/content";
 import LoginPage from "./LoginPage";
 import RegisterPage from "./RegisterPage";
-import type { AuthResult } from "../features/auth";
-
-type ModalState = { kind: "login" | "register"; audience: "student" | "staff" } | null;
 
 /**
  * Public landing page (DFD Master System Flow entry) — Capstone design
@@ -17,35 +14,92 @@ type ModalState = { kind: "login" | "register"; audience: "student" | "staff" } 
  * (LoginPage / RegisterPage in inModal mode) instead of navigating away;
  * the full-page #login / #staff-login / #register hash routes remain.
  */
-export default function LandingPage({ onSignedIn }: { onSignedIn: (auth: AuthResult) => void }) {
+export default function LandingPage({ onSignedIn }) {
   const { cmsBlocks, faqs, announcements, loading } = usePublicContent();
-  const [modal, setModal] = useState<ModalState>(null);
+  const [modal, setModal] = useState(null);
+  const [scrolled, setScrolled] = useState(false);
+  const [activeSection, setActiveSection] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const hero = cmsBlocks.find((b) => b.content_key === "landing_hero");
 
   useEffect(() => {
     if (!modal) return;
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e) => {
       if (e.key === "Escape") setModal(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [modal]);
 
-  const openLogin = (audience: "student" | "staff") => setModal({ kind: "login", audience });
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (visible[0]) setActiveSection(visible[0].target.id);
+      },
+      { rootMargin: "-40% 0px -55% 0px" },
+    );
+    for (const id of ["features", "news", "faq"]) {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    }
+    return () => observer.disconnect();
+  }, [loading]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
+  const openLogin = (audience) => setModal({ kind: "login", audience });
+
+  const navSections = [
+    { id: "features", label: "Features" },
+    { id: "news", label: "News" },
+    { id: "faq", label: "FAQ" },
+  ];
 
   return (
     <div className="landing-page">
       {/* Header */}
-      <header>
+      <header className={scrolled ? "scrolled" : undefined}>
         <div className="container nav-container">
           <a href="#landing" className="logo">CounselConnect</a>
           <ul className="nav-links">
             <li><a href="#landing" className="active">Home</a></li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="#news">News</a></li>
+            {navSections.map((section) => (
+              <li key={section.id}>
+                <a href={"#" + section.id}
+                  className={activeSection === section.id ? "active" : undefined}>{section.label}</a>
+              </li>
+            ))}
           </ul>
           <button type="button" className="btn-login" onClick={() => openLogin("student")}>LOG IN</button>
+          <button type="button" className="nav-toggle" aria-expanded={mobileNavOpen}
+            aria-controls="landing-mobile-nav" aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}>
+            <i className={mobileNavOpen ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>
+          </button>
+        </div>
+        <div id="landing-mobile-nav" className={mobileNavOpen ? "open" : undefined} hidden={!mobileNavOpen}>
+          <a href="#landing" onClick={() => setMobileNavOpen(false)}>Home</a>
+          {navSections.map((section) => (
+            <a key={section.id} href={"#" + section.id} onClick={() => setMobileNavOpen(false)}>{section.label}</a>
+          ))}
+          <button type="button" className="btn-login" onClick={() => { setMobileNavOpen(false); openLogin("student"); }}>LOG IN</button>
         </div>
       </header>
 
@@ -140,7 +194,7 @@ export default function LandingPage({ onSignedIn }: { onSignedIn: (auth: AuthRes
       </section>
 
       {/* FAQ Section */}
-      <section className="faq-section">
+      <section className="faq-section" id="faq">
         <div className="container">
           <div className="section-title-center">
             <span className="section-tag">QUESTIONS?</span>
