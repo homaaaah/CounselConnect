@@ -17,7 +17,11 @@ export const manilaLocalInput = (date) => {
 /** True when the slot's scheduled start (UTC ISO) has already passed. */
 export const slotIsPast = (slot, now = new Date()) => new Date(slot.starts_at).getTime() <= now.getTime();
 
-export function useAppointments(role = "") {
+/**
+ * initialStatus seeds the records filter (e.g. "CONFIRMED" default on the
+ * appointments page); empty string loads all statuses.
+ */
+export function useAppointments(role = "", initialStatus = "") {
   const [campuses, setCampuses] = useState([]);
   const [slots, setSlots] = useState({ items: [], page: 1, page_size: 20, total: 0 });
   const [appointments, setAppointments] = useState({ items: [], page: 1, page_size: 20, total: 0 });
@@ -27,7 +31,7 @@ export function useAppointments(role = "") {
   const [campusId, setCampusId] = useState("");
   const [mode, setMode] = useState("");
   const [date, setDate] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
   const [slotPage, setSlotPage] = useState(1);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [loading, setLoading] = useState(true);

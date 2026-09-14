@@ -1,68 +1,40 @@
 /**
- * AppNavBar — signed-in app shell navigation (role-aware menu).
+ * AppNavBar — signed-in app shell navigation (role-aware).
+ *
+ * Counselor (2026-09-13): fixed left sidebar — Dashboard (#home),
+ *   Users (#review, the COR verification console), Library, Appointments
+ *   (#appointments), Settings. Library and Settings have no routes yet,
+ *   so they render as non-navigable "coming soon" placeholders. On
+ *   mobile/tablet the sidebar becomes a hamburger drawer.
+ * Student / Guidance Staff: top bar as before (Home, Appointments for
+ *   active students, Messages/Resources coming soon).
  *
  * Role visibility here is usability only; backend authorization
- * is authoritative (docs/USER_ROLES.md). Coming-soon entries are
- * non-navigable placeholders; the session pill is a passive display
- * (ADR-019) — the 401 path in apiClient handles real expiry, and the
- * 60s background poll never renews idle activity (X-Background-Refresh).
+ * is authoritative (docs/USER_ROLES.md). Real session expiry is
+ * handled by the 401 path in apiClient (ADR-019) — the passive
+ * session-ends indicator was removed (2026-09-12).
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { request } from "../../services/apiClient";
+import { useEffect, useState } from "react";
 
-const COMING_SOON = ["Messages", "SOS", "Resources", "Assistant"];
+// Roadmap entries: rendered as non-navigable "coming soon" placeholders
+// (no href, aria-disabled) until their features ship.
+const COMING_SOON = ["Messages", "Resources"];
 
 const roleLabel = (code) =>
   code === "COUNSELOR" ? "Counselor" : code === "GUIDANCE_STAFF" ? "Guidance Staff" : "Student";
 
-const timeFormatter = new Intl.DateTimeFormat("en-PH", {
-  timeZone: "Asia/Manila",
-  hour: "numeric",
-  minute: "2-digit",
-});
+/** Counselor sidebar items; "soon" entries have no route yet. */
+const COUNSELOR_NAV = [
+  { label: "Dashboard", href: "#home", icon: "fa-gauge-high" },
+  { label: "Users", href: "#review", icon: "fa-users" },
+  { label: "Library", icon: "fa-book-open", soon: true },
+  { label: "Appointments", href: "#appointments", icon: "fa-calendar" },
+  { label: "Settings", icon: "fa-gear", soon: true },
+];
 
-/** Earlier of idle/absolute expiry; null when both are absent. */
-function earliestExpiry(idle, absolute) {
-  if (idle && absolute) return idle <= absolute ? idle : absolute;
-  return idle ?? absolute;
-}
-
-export default function AppNavBar({ user, page, idleExpiresAt, absoluteExpiresAt, onSignOut }) {
+export default function AppNavBar({ user, page, onSignOut }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [syncedIdle, setSyncedIdle] = useState(idleExpiresAt);
-  const [syncedAbsolute, setSyncedAbsolute] = useState(absoluteExpiresAt);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => { setSyncedIdle(idleExpiresAt); setSyncedAbsolute(absoluteExpiresAt); },
-    [idleExpiresAt, absoluteExpiresAt]);
-
-  // Passive re-sync: GET /auth/csrf never renews idle activity because it is
-  // sent with X-Background-Refresh: 1 (backend ignores it for activity).
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const auth = await request("/auth/csrf", { headers: { "X-Background-Refresh": "1" } });
-        if (!cancelled) { setSyncedIdle(auth.idle_expires_at); setSyncedAbsolute(auth.absolute_expires_at); }
-      } catch { /* keep last known values; the 401 path handles real expiry */ }
-    };
-    const syncTimer = setInterval(() => { void poll(); }, 60_000);
-    const tickTimer = setInterval(() => { setTick((n) => n + 1); }, 30_000);
-    return () => { cancelled = true; clearInterval(syncTimer); clearInterval(tickTimer); };
-  }, []);
-
-  const { pillText, pillAmber } = useMemo(() => {
-    void tick;
-    const endsAt = earliestExpiry(syncedIdle, syncedAbsolute);
-    if (!endsAt) return { pillText: null, pillAmber: false };
-    const minutes = Math.floor((new Date(endsAt).getTime() - Date.now()) / 60_000);
-    const amber = minutes >= 0 && minutes <= 5;
-    const text = amber
-      ? `Session ends in ${minutes < 1 ? "<1m" : minutes + "m"}`
-      : `Session ends ${timeFormatter.format(new Date(endsAt))}`;
-    return { pillText: text, pillAmber: amber };
-  }, [syncedIdle, syncedAbsolute, tick]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -71,18 +43,99 @@ export default function AppNavBar({ user, page, idleExpiresAt, absoluteExpiresAt
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
+  if (user.role_code === "COUNSELOR") {
+    return <CounselorShell user={user} page={page} onSignOut={onSignOut} open={menuOpen} setOpen={setMenuOpen} />;
+  }
+  return <TopBarNav user={user} page={page} onSignOut={onSignOut} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />;
+}
+
+/* ------------------------ Counselor sidebar ------------------------ */
+
+function SidebarContent({ user, page, onSignOut, onNavigate }) {
+  return <div className="flex h-full flex-col">
+    <div className="border-b border-slate-200 px-5 py-4">
+      <a href="#home" className="block text-base font-semibold tracking-tight text-emerald-800">CounselConnect</a>
+      <span className="mt-1.5 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        {roleLabel(user.role_code)}
+      </span>
+    </div>
+    <nav aria-label="Counselor navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      {COUNSELOR_NAV.map((nav) => {
+        if (nav.soon) return <span key={nav.label} aria-disabled="true" title="Coming soon"
+          className="flex cursor-default items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-300">
+          <i className={"fa-solid " + nav.icon + " w-4 text-center"} aria-hidden="true"></i>
+          {nav.label}
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>
+        </span>;
+        const current = nav.href === "#" + page;
+        return <a key={nav.href} href={nav.href} onClick={onNavigate}
+          {...(current ? { "aria-current": "page" } : {})}
+          className={"flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors " +
+            (current
+              ? "bg-counseling-bg-tint text-counseling-active-focus"
+              : "text-zinc-900 hover:bg-slate-50 hover:text-counseling-active-focus")}>
+          <i className={"fa-solid " + nav.icon + " w-4 text-center"} aria-hidden="true"></i>
+          {nav.label}
+        </a>;
+      })}
+    </nav>
+    <div className="border-t border-slate-200 px-5 py-4">
+      <p className="text-sm text-slate-700">{user.first_name} {user.last_name}</p>
+      <button type="button" onClick={onSignOut}
+        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+        Sign out
+      </button>
+    </div>
+  </div>;
+}
+
+function CounselorShell({ user, page, onSignOut, open, setOpen }) {
+  return <>
+    {/* Mobile/tablet top bar with the drawer toggle */}
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white lg:hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <button type="button" aria-expanded={open} aria-controls="counselor-sidebar"
+          aria-label={open ? "Close menu" : "Open menu"} onClick={() => setOpen(!open)}
+          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">
+          <i className={open ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>
+        </button>
+        <a href="#home" className="text-base font-semibold tracking-tight text-emerald-800">CounselConnect</a>
+        <button type="button" onClick={onSignOut}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+          Sign out
+        </button>
+      </div>
+    </header>
+
+    {/* Mobile/tablet drawer */}
+    {open && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" aria-hidden="true" onClick={() => setOpen(false)}></div>}
+    <aside id="counselor-sidebar" aria-label="Counselor sidebar"
+      className={"fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-200 lg:hidden " +
+        (open ? "translate-x-0" : "-translate-x-full pointer-events-none")}>
+      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => setOpen(false)} />
+    </aside>
+
+    {/* Desktop sidebar */}
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-white lg:block">
+      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => {}} />
+    </aside>
+  </>;
+}
+
+/* ---------------- Top bar (Student / Guidance Staff) ---------------- */
+
+function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
   const links = [{ label: "Home", href: "#home" }];
   const activeStudent = user.role_code === "STUDENT" && user.account_status === "ACTIVE";
-  if (activeStudent || user.role_code === "COUNSELOR") links.push({ label: "Appointments", href: "#appointments" });
-  if (user.role_code === "COUNSELOR") links.push({ label: "COR Verification", href: "#review" });
-  const showComingSoon = user.role_code === "STUDENT" || user.role_code === "COUNSELOR";
+  if (activeStudent) links.push({ label: "Appointments", href: "#appointments" });
+  const showComingSoon = user.role_code === "STUDENT";
 
   const linkClass = (href) => {
     const current = href === "#" + page;
     return "px-1 py-4 text-sm font-medium transition-colors " +
       (current
-        ? "border-b-2 border-emerald-600 text-emerald-700"
-        : "border-b-2 border-transparent text-slate-600 hover:text-emerald-700");
+        ? "border-b-2 border-counseling-active-focus text-zinc-900"
+        : "border-b-2 border-transparent text-zinc-900 hover:text-counseling-active-focus");
   };
 
   const bannerText = user.role_code !== "STUDENT" || user.account_status === "ACTIVE" ? null
@@ -112,14 +165,6 @@ export default function AppNavBar({ user, page, idleExpiresAt, absoluteExpiresAt
             ))}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            {pillText && (
-              <span className={"hidden items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium sm:inline-flex " +
-                (pillAmber ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600")}
-                title={pillAmber ? "Your session is about to end" : "Your session ends at this time (Asia/Manila)"}>
-                <i className="fa-regular fa-clock" aria-hidden="true"></i>
-                {pillText}
-              </span>
-            )}
             <span className="hidden items-center gap-2 sm:inline-flex">
               <span className="text-sm text-slate-700">
                 {user.first_name} {user.last_name}
@@ -147,7 +192,7 @@ export default function AppNavBar({ user, page, idleExpiresAt, absoluteExpiresAt
           className="border-t border-slate-200 bg-white px-4 pb-3 md:hidden">
           {links.map((link) => (
             <a key={link.href} href={link.href} className={"block py-2.5 text-sm font-medium " +
-              (link.href === "#" + page ? "text-emerald-700" : "text-slate-600")}
+              (link.href === "#" + page ? "text-counseling-active-focus" : "text-zinc-900")}
               {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
               onClick={() => setMenuOpen(false)}>{link.label}</a>
           ))}
@@ -161,12 +206,6 @@ export default function AppNavBar({ user, page, idleExpiresAt, absoluteExpiresAt
           {user.role_code === "STUDENT" && user.account_status !== "ACTIVE" && (
             <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
               {user.account_status === "PENDING_VERIFICATION" ? "Verification pending" : "Verification expired"}
-            </span>
-          )}
-          {pillText && (
-            <span className={"mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium " +
-              (pillAmber ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600")}>
-              {pillText}
             </span>
           )}
         </div>

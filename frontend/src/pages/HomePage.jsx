@@ -1,40 +1,86 @@
-import { useRef } from "react";
-import { usePublicContent } from "../features/content";
-import { useAppointments, formatSchedule } from "../features/appointments";
+import { useState } from "react";
+import { useAppointments, useAppointmentCount } from "../features/appointments";
+import BookingModal from "../components/appointments/BookingModal.jsx";
 
 /**
- * Homepage after sign-in (DFD Master System Flow "Student services") —
- * homescreen design ported into React and wired to real data: upcoming
- * appointments from /appointments, emergency contacts from
- * /content/emergency-contacts. The static mock (fake counselor, hardcoded
- * calendar, alert-based booking) is retired.
+ * Homepage after sign-in (DFD Master System Flow "Student services").
+ * Students: homescreen hero; Schedule opens the booking modal
+ * (2026-09-13). Counselors: dashboard with stat cards — "Total users"
+ * is a PLACEHOLDER (no documented user-count endpoint yet; see
+ * useAppointmentCount.js TODO) and "Appointments" uses the real total
+ * from GET /appointments. Other roles keep the plain hero.
  */
-export default function HomePage({ user }) {
-  const { announcements, contacts } = usePublicContent();
-  const appointments = useAppointments(user?.role_code ?? "");
-  const contactsRef = useRef(null);
 
+function StudentBookingModal({ onClose, user }) {
+  const state = useAppointments(user.role_code);
+  return <BookingModal open={true} onClose={onClose} state={state} />;
+}
+
+/* ------------- Counselor dashboard (stat cards) ------------- */
+
+function StatCard({ label, value, icon, loading, placeholder, href }) {
+  const body = <div className="dashboard-stat-card flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-6">
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-counseling-bg-tint text-xl text-counseling-active-focus">
+      <i className={"fa-solid " + icon} aria-hidden="true"></i>
+    </span>
+    <div className="min-w-0">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-2xl font-semibold text-slate-900">
+        {loading ? "…" : value ?? placeholder}
+      </p>
+    </div>
+  </div>;
+  return href ? <a href={href} className="block">{body}</a> : body;
+}
+
+function CounselorDashboard({ user }) {
+  const appointments = useAppointmentCount();
+  return <main className="home-page">
+    <section className="dashboard-hero px-4 pt-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <h1 className="text-2xl font-bold text-slate-900">Welcome back, {user.first_name}.</h1>
+        <p className="mt-1 text-sm text-slate-500">Here's an overview of your Guidance Office today. Philippine time (Asia/Manila).</p>
+
+        {/* Stat cards.
+            TODO(team): "Total users" has no backend endpoint yet — swap the
+            placeholder for real data when the user-count API ships. */}
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <StatCard label="Total users" value={null} placeholder="—"
+            icon="fa-users" loading={false} />
+          <StatCard label="Appointments" value={appointments.total}
+            icon="fa-calendar" loading={appointments.loading}
+            href={appointments.error ? null : "#appointments"} />
+        </div>
+        {appointments.error && <p role="alert" className="mt-3 text-sm text-red-700">{appointments.error}</p>}
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a href="#appointments" className="btn-action-schedule">
+            <i className="fa-solid fa-calendar"></i> View appointments
+          </a>
+          <a href="#review" className="btn-action-emergency">
+            <i className="fa-solid fa-users"></i> Verify students
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>;
+}
+
+/* ---------------------- Student homepage ---------------------- */
+
+export default function HomePage({ user }) {
   const canBook = user?.role_code === "STUDENT" || user?.role_code === "COUNSELOR";
   const active = canBook && user?.account_status === "ACTIVE";
+  const student = user?.role_code === "STUDENT";
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const canOpenModal = student && active;
 
-  const upcoming = appointments.appointments.items
-    .filter((a) => a.status === "PENDING" || a.status === "CONFIRMED")
-    .filter((a) => new Date(a.ends_at).getTime() > Date.now())
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-    .slice(0, 3);
-
-  const scrollToContacts = () => {
-    contactsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  if (user?.role_code === "COUNSELOR") return <CounselorDashboard user={user} />;
 
   return (
     <main className="home-page">
       {/* Hero */}
       <section className="homescreen-hero">
-        <div className="support-badge">
-          <i className="fa-solid fa-circle-info"></i> Confidential student support services
-        </div>
-
         <h1>Your mental well-being matters to us.</h1>
 
         <p>
@@ -45,9 +91,9 @@ export default function HomePage({ user }) {
 
         <div className="action-buttons">
           {active ? (
-            <a href="#appointments" className="btn-action-schedule">
+            <button type="button" className="btn-action-schedule" onClick={() => setBookingOpen(true)}>
               <i className="fa-solid fa-calendar"></i> Schedule
-            </a>
+            </button>
           ) : canBook ? (
             <span className="btn-action-schedule btn-action-disabled">
               <i className="fa-solid fa-hourglass-half"></i> Verification {user?.account_status === "PENDING_VERIFICATION" ? "pending" : "needed"}
@@ -57,101 +103,16 @@ export default function HomePage({ user }) {
               <i className="fa-solid fa-calendar"></i> Schedule
             </a>
           )}
-          <button type="button" className="btn-action-emergency" onClick={scrollToContacts}>
+          <button type="button" className="btn-action-emergency">
             <i className="fa-solid fa-phone"></i> Emergency
           </button>
         </div>
-
-        <div className="features-footer-row">
-          <div className="feature-item">
-            <i className="fa-solid fa-shield"></i> Fully Private
-          </div>
-          <div className="feature-item">
-            <i className="fa-solid fa-clock"></i> 24/7 Support
-          </div>
-          <div className="feature-item">
-            <i className="fa-solid fa-video"></i> Video/In-person
-          </div>
-        </div>
       </section>
 
-      {/* Upcoming appointments (real data, authorized users only) */}
-      {active && (
-        <section className="home-appointments-section">
-          <div className="home-section-inner">
-            <h2>Your upcoming appointments</h2>
-            {appointments.error && <p className="home-empty" role="alert">{appointments.error}</p>}
-            {upcoming.length === 0 && !appointments.error && (
-              <p className="home-empty">No upcoming appointments yet. Use Schedule to request one.</p>
-            )}
-            {upcoming.length > 0 && (
-              <ul className="home-appointment-list">
-                {upcoming.map((a) => (
-                  <li key={a.appointment_id} className="home-appointment-card">
-                    <div className="home-appointment-when">
-                      <i className="fa-regular fa-calendar"></i>
-                      <div>
-                        <p className="home-appointment-date">{formatSchedule(a.starts_at)}</p>
-                        <p className="home-appointment-meta">Until {formatSchedule(a.ends_at)}</p>
-                      </div>
-                    </div>
-                    <div className="home-appointment-details">
-                      <p>{user?.role_code === "COUNSELOR" ? `Student: ${a.student_name}` : `Counselor: ${a.counselor_name}`}</p>
-                      <p>{a.campus_name} · {a.appointment_mode === "ONLINE" ? "Online" : "Face-to-face"}</p>
-                    </div>
-                    <span className={"home-status-badge " + (a.status === "CONFIRMED" ? "confirmed" : "pending")}>
-                      {a.status === "CONFIRMED" ? "Confirmed" : "Awaiting review"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <a href="#appointments" className="home-manage-link">Manage appointments</a>
-          </div>
-        </section>
+      {/* Student booking modal — calendar, slot details, request */}
+      {canOpenModal && bookingOpen && (
+        <StudentBookingModal onClose={() => setBookingOpen(false)} user={user} />
       )}
-
-      {/* Announcements */}
-      <section className="home-announcements-section">
-        <div className="home-section-inner">
-          <h2>Announcements</h2>
-          {announcements.length === 0 ? (
-            <p className="home-empty">No announcements yet.</p>
-          ) : (
-            <ul className="home-announcement-list">
-              {announcements.map((a) => (
-                <li key={a.content_id} className="home-announcement-item">
-                  <p className="home-announcement-title">{a.title}</p>
-                  <p>{a.body}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      {/* Emergency contacts (real, seeded; Emergency scrolls here) */}
-      <section className="home-contacts-section" ref={contactsRef}>
-        <div className="home-section-inner">
-          <h2><i className="fa-solid fa-phone"></i> Emergency contacts</h2>
-          {contacts.length === 0 ? (
-            <p className="home-empty">No contacts configured yet.</p>
-          ) : (
-            <ul className="home-contact-list">
-              {contacts.map((c) => (
-                <li key={c.contact_id} className="home-contact-item">
-                  <p className="home-contact-name">{c.name}</p>
-                  <p className="home-contact-number">{c.contact_number}</p>
-                  {c.description && <p className="home-contact-desc">{c.description}</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="home-contact-note">
-            In an immediate crisis, contact your local emergency services first.
-          </p>
-        </div>
-      </section>
     </main>
   );
 }

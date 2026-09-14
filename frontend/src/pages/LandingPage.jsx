@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { usePublicContent } from "../features/content";
+import appointmentImg from "../assets/appointment.jpg";
+import communicationImg from "../assets/communication.jpg";
+import libraryImg from "../assets/library.jpg";
+import counselorImg from "../assets/counselor.jpg";
 import LoginPage from "./LoginPage";
 import RegisterPage from "./RegisterPage";
 
@@ -18,6 +22,7 @@ export default function LandingPage({ onSignedIn }) {
   const { cmsBlocks, faqs, announcements, loading } = usePublicContent();
   const [modal, setModal] = useState(null);
   const [scrolled, setScrolled] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [activeSection, setActiveSection] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -33,7 +38,15 @@ export default function LandingPage({ onSignedIn }) {
   }, [modal]);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    // glass nav floats over the hero first; bg-tint bar kicks in after 60px.
+    // back-to-top stays hidden while the hero is on screen.
+    const onScroll = () => {
+      setScrolled(window.scrollY > 60);
+      const features =
+        typeof document !== "undefined" ? document.getElementById("features") : null;
+      const heroBottom = features?.offsetTop ?? 700;
+      setShowBackToTop(window.scrollY > heroBottom);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -73,7 +86,7 @@ export default function LandingPage({ onSignedIn }) {
   ];
 
   return (
-    <div className="landing-page">
+    <div className="landing-page" id="landing">
       {/* Header */}
       <header className={scrolled ? "scrolled" : undefined}>
         <div className="container nav-container">
@@ -127,16 +140,44 @@ export default function LandingPage({ onSignedIn }) {
             </div>
             <div className="why-cards">
               <div className="why-card">
-                <div className="why-card-img"></div>
+                <img
+                  className="why-card-img"
+                  src={appointmentImg}
+                  alt="Student booking a real-time appointment"
+                />
+                <p className="why-card-desc">
+                  {/* TODO: replace dummy copy with real feature descriptions */}
+                  Reserve and manage your guidance sessions in real time —
+                  pick an open slot, confirm instantly, and get reminders
+                  before your schedule.
+                </p>
                 <div className="why-card-title">Real-time Appointments</div>
               </div>
               <div className="why-card">
-                <div className="why-card-img"></div>
+                <img
+                  className="why-card-img"
+                  src={communicationImg}
+                  alt="Live chat communication with a counselor"
+                />
+                <p className="why-card-desc">
+                  {/* TODO: replace dummy copy with real feature descriptions */}
+                  Reach your counselor through secure live messaging whenever
+                  you need someone to listen.
+                </p>
                 <div className="why-card-title">Live Communication</div>
               </div>
               <div className="why-card">
-                <div className="why-card-img"></div>
-                <div className="why-card-title">Curated Library Wellness</div>
+                <img
+                  className="why-card-img"
+                  src={libraryImg}
+                  alt="Curated wellness library resources"
+                />
+                <p className="why-card-desc">
+                  {/* TODO: replace dummy copy with real feature descriptions */}
+                  Explore curated wellness articles and resources recommended
+                  for your personal journey.
+                </p>
+                <div className="why-card-title">Curated Wellness Library</div>
               </div>
             </div>
           </div>
@@ -147,7 +188,11 @@ export default function LandingPage({ onSignedIn }) {
       <section className="bio-section">
         <div className="container">
           <div className="bio-grid">
-            <div className="bio-image-placeholder"></div>
+            <img
+              className="bio-image-placeholder"
+              src={counselorImg}
+              alt="Portrait of the university guidance counselor"
+            />
             <div className="bio-card">
               <h2>Ms. Firstname A. Lastname</h2>
               <p>
@@ -167,8 +212,8 @@ export default function LandingPage({ onSignedIn }) {
           <div className="section-title-center">
             <span className="section-tag">FROM OUR BLOG</span>
             <h2>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit.<br />
-              Bibendum amet at molestie mattis.
+              Guidance, growth, and campus well-being —<br />
+              the latest news from your Counseling Office.
             </h2>
           </div>
 
@@ -197,8 +242,7 @@ export default function LandingPage({ onSignedIn }) {
       <section className="faq-section" id="faq">
         <div className="container">
           <div className="section-title-center">
-            <span className="section-tag">QUESTIONS?</span>
-            <h2>Frequently Asked Questions</h2>
+            <h2 className="faq-heading">Frequently Asked Questions</h2>
           </div>
           {loading ? (
             <p className="blog-empty">Loading FAQs…</p>
@@ -244,7 +288,9 @@ export default function LandingPage({ onSignedIn }) {
 
           <div className="footer-bottom">
             <div>&copy; 2035 by CounselConnect</div>
-            <a href="#landing" className="back-to-top"><i className="fa-solid fa-arrow-up"></i></a>
+            <a href="#landing" className={showBackToTop ? "back-to-top show" : "back-to-top"}>
+              <i className="fa-solid fa-arrow-up"></i>
+            </a>
           </div>
           <p className="dev-review-link">
             <a href="#review">Counselor review console (dev)</a>

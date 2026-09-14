@@ -53,7 +53,7 @@ async function mount(t, component) {
   return root;
 }
 
-test("counselor navbar shows greeting, role chip, active Home, and COR verification link", async (t) => {
+test("counselor sidebar shows greeting, role chip, active Dashboard, Users, and Appointments links", async (t) => {
   environment(t);
   fakeApi(t, authFor(baseUser));
   const root = await mount(t, React.createElement(App));
@@ -61,29 +61,50 @@ test("counselor navbar shows greeting, role chip, active Home, and COR verificat
   assert.ok(rendered.includes("Cora"));
   assert.ok(rendered.includes("Reyes"));
   assert.ok(rendered.includes("Counselor"));
+  assert.ok(rendered.includes("Dashboard"));
+  assert.ok(rendered.includes("Users"));
+  assert.ok(rendered.includes("Library"));
+  assert.ok(rendered.includes("Settings"));
+  // Dashboard (#home) is the current page with the sidebar role label.
   const active = root.root.findAllByProps({ "aria-current": "page" });
   assert.ok(active.length >= 1);
-  for (const node of active) assert.equal(node.children.join(""), "Home");
+  for (const node of active) {
+    const text = node.children.map((c) => (typeof c === "string" ? c : "")).join("").trim();
+    assert.equal(text, "Dashboard");
+  }
   assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
   assert.ok(root.root.findAllByProps({ href: "#review" }).length >= 1);
   assert.ok(root.root.findAllByType("button").some((b) => b.children.includes("Sign out")));
+  // Library and Settings have no routes yet — disabled placeholders.
+  const soon = root.root.findAllByProps({ "aria-disabled": "true" })
+    .filter((node) => node.props.title === "Coming soon");
+  const soonLabels = soon.map((node) => node.children.map((c) => (typeof c === "string" ? c : "")).join("").trim());
+  assert.ok(soonLabels.some((label) => label.includes("Library")), "Library is a coming-soon entry");
+  assert.ok(soonLabels.some((label) => label.includes("Settings")), "Settings is a coming-soon entry");
+  for (const node of soon) assert.equal(node.props.href, undefined);
 });
 
-test("active student sees Appointments link; coming-soon entries are disabled spans without href", async (t) => {
+test("active student sees Appointments link; Messages/Resources render unclickable, SOS/Assistant gone", async (t) => {
   environment(t);
   const student = { ...baseUser, user_id: 2, role_code: "STUDENT",
     first_name: "Ana", last_name: "Santos" };
   fakeApi(t, authFor(student));
   const root = await mount(t, React.createElement(App));
   assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
-  const soon = root.root.findAllByProps({ "aria-disabled": "true" });
+  // Messages/Resources are visible "coming soon" entries: disabled spans
+  // without href (2026-09-13); SOS/Assistant remain removed.
+  const soon = root.root.findAllByProps({ "aria-disabled": "true" })
+    .filter((node) => node.props.title === "Coming soon");
   const labels = soon.map((node) => node.children[0]);
-  for (const label of ["Messages", "SOS", "Resources", "Assistant"]) {
-    assert.ok(labels.includes(label), label + " should be a coming-soon entry");
+  for (const label of ["Messages", "Resources"]) {
+    assert.ok(labels.includes(label), label + " should render as coming soon");
   }
   for (const node of soon) {
-    assert.equal(node.props.href, undefined);
-    assert.equal(node.props.title, "Coming soon");
+    assert.equal(node.props.href, undefined, "coming-soon entries must not navigate");
+  }
+  const rendered = JSON.stringify(root.toJSON());
+  for (const label of ["SOS", "Assistant"]) {
+    assert.ok(!rendered.includes("\"" + label + "\""), label + " should no longer render");
   }
 });
 
@@ -150,7 +171,7 @@ test("landing mobile drawer opens from the hamburger and closes on link click", 
   assert.equal(toggle.props["aria-expanded"], false);
 });
 
-test("session pill shows Session ends text and turns amber near expiry", async (t) => {
+test("removed session pill: no Session ends indicator renders at any expiry", async (t) => {
   environment(t);
   const nearExpiry = new Date(Date.now() + 3 * 60_000).toISOString();
   const root = await mount(t, React.createElement(AppNavBar, {
@@ -158,19 +179,18 @@ test("session pill shows Session ends text and turns amber near expiry", async (
     absoluteExpiresAt: "2099-01-01T12:00:00Z", onSignOut: () => {},
   }));
   const rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("Session ends in"));
-  assert.ok(rendered.includes("bg-amber-100"));
+  assert.ok(!rendered.includes("Session ends"));
+  assert.ok(!rendered.includes("bg-amber-100 text-amber-800") || rendered.includes("Verification"));
 });
 
-test("session pill renders the formatted end time when not near expiry", async (t) => {
+test("sign out button still works without the pill and expiry props", async (t) => {
   environment(t);
   const root = await mount(t, React.createElement(AppNavBar, {
-    user: baseUser, page: "home", idleExpiresAt: "2099-01-01T01:00:00Z",
-    absoluteExpiresAt: "2099-01-01T12:00:00Z", onSignOut: () => {},
+    user: baseUser, page: "home", onSignOut: () => {},
   }));
   const rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("Session ends"));
-  assert.ok(!rendered.includes("Session ends in"));
+  assert.ok(!rendered.includes("Session ends"));
+  assert.ok(root.root.findAllByType("button").some((b) => b.children.includes("Sign out")));
 });
 
 test("landing renders FAQ link and LOG IN still opens the student login modal", async (t) => {
