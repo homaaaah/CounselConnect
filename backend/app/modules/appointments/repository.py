@@ -41,7 +41,13 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         return list(self.session.scalars(stmt))
 
     def deactivate_weekly_schedule(self, counselor_id, weekly_schedule_id):
-        schedule = self.session.scalar(
+        schedule = self.lock_weekly_schedule(counselor_id, weekly_schedule_id)
+        if schedule:
+            schedule.is_active = False
+        return schedule
+
+    def lock_weekly_schedule(self, counselor_id, weekly_schedule_id):
+        return self.session.scalar(
             select(CounselorWeeklySchedule)
             .where(
                 CounselorWeeklySchedule.counselor_user_id == counselor_id,
@@ -49,9 +55,20 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             )
             .with_for_update()
         )
-        if schedule:
-            schedule.is_active = False
-        return schedule
+
+    def matching_weekly_schedule(self, counselor_id, data, *, exclude_id=None):
+        stmt = select(CounselorWeeklySchedule).where(
+            CounselorWeeklySchedule.counselor_user_id == counselor_id,
+            CounselorWeeklySchedule.campus_id == data.campus_id,
+            CounselorWeeklySchedule.day_of_week == data.day_of_week,
+            CounselorWeeklySchedule.start_time == data.start_time,
+            CounselorWeeklySchedule.end_time == data.end_time,
+            CounselorWeeklySchedule.slot_duration_minutes == data.slot_duration_minutes,
+            CounselorWeeklySchedule.delivery_mode == data.delivery_mode,
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(CounselorWeeklySchedule.weekly_schedule_id != exclude_id)
+        return self.session.scalar(stmt.limit(1).with_for_update())
 
     def overlapping_weekly_schedule(self, counselor_id, day_of_week, start_time, end_time, *, exclude_id=None):
         stmt = select(CounselorWeeklySchedule).where(
@@ -244,7 +261,25 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         page,
         page_size,
     ):
-        stmt = select(AvailabilitySlot).where(AvailabilitySlot.starts_at > now)
+        # Filter before count/offset/limit so every page and its total describe
+        # the same visible slots. Fixed offsets avoid requiring MySQL timezone
+        # tables; persisted timestamps are UTC and Manila is UTC+08:00.
+        blocked_by_date = select(CounselorBlockedDate.blocked_date_id).where(
+            CounselorBlockedDate.counselor_user_id == AvailabilitySlot.counselor_user_id,
+            CounselorBlockedDate.blocked_date == func.date(
+                func.convert_tz(AvailabilitySlot.starts_at, "+00:00", "+08:00")
+            ),
+        ).exists()
+        blocked_by_time = select(CounselorAvailabilityBlock.availability_block_id).where(
+            CounselorAvailabilityBlock.counselor_user_id == AvailabilitySlot.counselor_user_id,
+            CounselorAvailabilityBlock.starts_at < AvailabilitySlot.ends_at,
+            CounselorAvailabilityBlock.ends_at > AvailabilitySlot.starts_at,
+        ).exists()
+        stmt = select(AvailabilitySlot).where(
+            AvailabilitySlot.starts_at > now,
+            ~blocked_by_date,
+            ~blocked_by_time,
+        )
         if actor.role_code == "COUNSELOR":
             stmt = stmt.where(AvailabilitySlot.counselor_user_id == actor.user_id)
         else:

@@ -17,6 +17,8 @@ export const manilaLocalInput = (date) => {
 /** True when the slot's scheduled start (UTC ISO) has already passed. */
 export const slotIsPast = (slot, now = new Date()) => new Date(slot.starts_at).getTime() <= now.getTime();
 
+const SELECTED_DATE_SLOT_PAGE_SIZE = 100;
+
 /**
  * initialStatus seeds the records filter (e.g. "CONFIRMED" default on the
  * appointments page); empty string loads all statuses.
@@ -35,8 +37,12 @@ export function useAppointments(role = "", initialStatus = "") {
   const [slotPage, setSlotPage] = useState(1);
   const [appointmentPage, setAppointmentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [recordsLoading, setRecordsLoading] = useState(true);
+  const [availabilityBlocksLoading, setAvailabilityBlocksLoading] = useState(role === "COUNSELOR");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [recordsError, setRecordsError] = useState("");
+  const [availabilityBlocksError, setAvailabilityBlocksError] = useState("");
   const [message, setMessage] = useState("");
   const sequence = useRef(0);
   const mounted = useRef(true);
@@ -45,51 +51,108 @@ export function useAppointments(role = "", initialStatus = "") {
 
   const refresh = useCallback(async (background = false) => {
     const current = ++sequence.current;
+    const isCounselor = role === "COUNSELOR";
     setLoading(true);
+    if (!background) setRecordsLoading(true);
+    if (isCounselor && !background) setAvailabilityBlocksLoading(true);
     setError("");
-    const params = new URLSearchParams({ page: String(slotPage), page_size: "20" });
-    if (campusId) params.set("campus_id", campusId);
-    if (mode) params.set("appointment_mode", mode);
     const todayManila = manilaToday();
     const effectiveDate = date && date >= todayManila ? date : "";
+    // A calendar time may represent slots from several counselors. Once the
+    // visitor chooses a date, load every page for that date so the modal can
+    // offer each matching slot instead of treating page one as exhaustive.
+    const selectedDatePage = effectiveDate ? 1 : slotPage;
+    const selectedDatePageSize = effectiveDate ? SELECTED_DATE_SLOT_PAGE_SIZE : 20;
+    const params = new URLSearchParams({
+      page: String(selectedDatePage),
+      page_size: String(selectedDatePageSize),
+    });
+    if (campusId) params.set("campus_id", campusId);
+    if (mode) params.set("appointment_mode", mode);
     if (effectiveDate) {
       params.set("starts_after", new Date(effectiveDate + "T00:00:00+08:00").toISOString());
       params.set("ends_before", new Date(new Date(effectiveDate + "T00:00:00+08:00").getTime() + 86400000).toISOString());
     }
     const appParams = new URLSearchParams({ page: String(appointmentPage), page_size: "20" });
     if (status) appParams.set("status", status);
+    const today = new Date();
+    const manilaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(today);
+    const end = new Date(today); end.setDate(end.getDate() + 30);
+    const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(end);
+    const calendarParams = new URLSearchParams({ start_date: manilaDate, end_date: endDate });
+    const headers = background ? { "X-Background-Refresh": "1" } : undefined;
     try {
-      const today = new Date();
-      const manilaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(today);
-      const end = new Date(today); end.setDate(end.getDate() + 30);
-      const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(end);
-      const calendarParams = new URLSearchParams({ start_date: manilaDate, end_date: endDate });
-      const headers = background ? { "X-Background-Refresh": "1" } : undefined;
-      const calendarData = await request("/calendar?" + calendarParams, { headers });
-      const isCounselor = role === "COUNSELOR";
-      const [campusData, slotData, appointmentData, scheduleData, blockData] = await Promise.all([
+      const [calendarResult, campusResult, firstSlotResult, appointmentsResult, schedulesResult, blocksResult] = await Promise.allSettled([
+        request("/calendar?" + calendarParams, { headers }),
         request("/accounts/campuses", { headers }),
         request("/availability-slots?" + params, { headers }),
         request("/appointments?" + appParams, { headers }),
         isCounselor ? request("/weekly-schedules", { headers }) : Promise.resolve([]),
         isCounselor ? request("/availability-blocks", { headers }) : Promise.resolve([]),
       ]);
-      if (current !== sequence.current || !mounted.current) return;
-      setCampuses(campusData.items);
-      // A slot becomes unbookable the moment its start passes; the backend
-      // already excludes past slots, this covers the gap until refresh.
-      const stillFuture = slotData.items.filter(slot => new Date(slot.starts_at).getTime() > Date.now());
-      setSlots({ ...slotData, items: stillFuture, total: slotData.total });
-      setAppointments(appointmentData); setCalendar(calendarData);
-      setWeeklySchedules(scheduleData); setAvailabilityBlocks(blockData);
-    } catch (err) {
-      if (current === sequence.current && mounted.current) {
-        setSlots({ items: [], page: slotPage, page_size: 20, total: 0 });
-        setAppointments({ items: [], page: appointmentPage, page_size: 20, total: 0 });
-        setError(err instanceof Error ? err.message : "Could not load appointments.");
+      let slotData = null;
+      let availabilityError = "";
+      if (firstSlotResult.status === "fulfilled") {
+        slotData = firstSlotResult.value;
+      } else {
+        availabilityError = "Could not load available appointment times.";
       }
+      if (slotData && effectiveDate && slotData.total > slotData.items.length) {
+        const extraPages = Math.ceil(slotData.total / slotData.page_size) - 1;
+        const extraSlots = await Promise.allSettled(
+          Array.from({ length: extraPages }, (_, index) => {
+            const pageParams = new URLSearchParams(params);
+            pageParams.set("page", String(index + 2));
+            return request("/availability-slots?" + pageParams, { headers });
+          })
+        );
+        if (extraSlots.every((result) => result.status === "fulfilled")) {
+          slotData = {
+            ...slotData,
+            items: slotData.items.concat(...extraSlots.map((result) => result.value.items)),
+          };
+        } else {
+          availabilityError = "Could not load every available appointment time for that date.";
+        }
+      }
+      if (current !== sequence.current || !mounted.current) return;
+      if (calendarResult.status === "fulfilled") setCalendar(calendarResult.value);
+      else availabilityError ||= "Could not load the availability calendar.";
+      if (campusResult.status === "fulfilled") setCampuses(campusResult.value.items);
+      else availabilityError ||= "Could not load campus information.";
+      if (slotData) {
+        // A slot becomes unbookable the moment its start passes; the backend
+        // already excludes past slots, this covers the gap until refresh.
+        const stillFuture = slotData.items.filter(slot => new Date(slot.starts_at).getTime() > Date.now());
+        setSlots({ ...slotData, items: stillFuture, total: slotData.total });
+      }
+      if (appointmentsResult.status === "fulfilled") {
+        setAppointments(appointmentsResult.value);
+        setRecordsError("");
+      } else {
+        setRecordsError(appointmentsResult.reason instanceof Error
+          ? appointmentsResult.reason.message : "Could not load appointment records.");
+      }
+      if (schedulesResult.status === "fulfilled") setWeeklySchedules(schedulesResult.value);
+      else if (isCounselor) availabilityError ||= "Could not load weekly availability.";
+      if (blocksResult.status === "fulfilled") {
+        setAvailabilityBlocks(blocksResult.value);
+        setAvailabilityBlocksError("");
+      } else if (isCounselor) {
+        setAvailabilityBlocksError(blocksResult.reason instanceof Error
+          ? blocksResult.reason.message : "Could not load unavailable times.");
+      }
+      setError(availabilityError);
+    } catch (err) {
+      if (current === sequence.current && mounted.current) setError(
+        err instanceof Error ? err.message : "Could not load appointment availability."
+      );
     } finally {
-      if (current === sequence.current && mounted.current) setLoading(false);
+      if (current === sequence.current && mounted.current) {
+        setLoading(false);
+        setRecordsLoading(false);
+        if (isCounselor) setAvailabilityBlocksLoading(false);
+      }
     }
   }, [role, campusId, mode, date, status, slotPage, appointmentPage]);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -113,7 +176,7 @@ export function useAppointments(role = "", initialStatus = "") {
       if (mounted.current) setBusy(false);
     }
   }
-  return { campuses, slots, appointments, calendar, weeklySchedules, availabilityBlocks, loading, busy, error, message, refresh, mutate,
+  return { campuses, slots, appointments, calendar, weeklySchedules, availabilityBlocks, loading, recordsLoading, availabilityBlocksLoading, busy, error, recordsError, availabilityBlocksError, message, refresh, mutate,
     campusId, setCampusId, mode, setMode, date, setDate, status, setStatus,
     slotPage, setSlotPage, appointmentPage, setAppointmentPage };
 }

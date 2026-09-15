@@ -215,12 +215,11 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
 
     # ---------------------------------------------------------- review
 
-    def list_pending(
-        self,
-    ) -> list[tuple[EnrollmentVerification, User, EnrollmentVerificationFile]]:
+    def list_pending(self, reviewer: User) -> list[tuple[EnrollmentVerification, User, EnrollmentVerificationFile]]:
         """Pending queue with applicant details for the reviewer screen."""
         result = []
-        for verification in self.repository.list_pending():
+        assigned_staff_id = self._reviewer_assignment_scope(reviewer)
+        for verification in self.repository.list_pending(assigned_staff_id):
             student = self.accounts.get(verification.student_user_id)
             file_row = self.repository.find_active_file(verification.verification_id)
             if student is not None and file_row is not None:
@@ -228,7 +227,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         return result
 
     def list_history(
-        self, status: str | None = None
+        self, reviewer: User, status: str | None = None
     ) -> list[tuple[EnrollmentVerification, User]]:
         """Permanent review record: all applications with applicant details.
 
@@ -237,7 +236,8 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         history rows carry no file — by design.)
         """
         result = []
-        for verification in self.repository.list_all(status):
+        assigned_staff_id = self._reviewer_assignment_scope(reviewer)
+        for verification in self.repository.list_all(status, assigned_staff_id):
             student = self.accounts.get(verification.student_user_id)
             if student is not None:
                 result.append((verification, student))
@@ -257,9 +257,10 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         file_row = self.repository.find_active_file(verification_id)
         return verification, student, profile, file_row
 
-    def read_cor_pdf(self, verification_id: int) -> bytes:
+    def read_cor_pdf(self, reviewer: User, verification_id: int) -> bytes:
         """COR bytes for the reviewer's in-app PDF preview."""
         verification = self._lock_verification(verification_id)
+        self._authorize_case_reviewer(reviewer, verification)
         self._require_current_cor(verification)
         file_row = self.repository.find_active_file(verification_id, lock=True)
         if file_row is None:
@@ -271,10 +272,11 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         return self._read_cor_bytes(file_row.storage_key)
 
     def approve(
-        self, verification_id: int, reviewer_user_id: int, valid_months: int = 12
+        self, reviewer: User, verification_id: int, valid_months: int = 12
     ) -> tuple[EnrollmentVerification, bool]:
         """Approve: activate the student account with a validity window."""
         verification = self._lock_verification(verification_id)
+        self._authorize_case_reviewer(reviewer, verification)
         if verification.status != "PENDING":
             raise AppError(
                 code="DECISION_ALREADY_MADE",
@@ -286,7 +288,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         now = datetime.now(timezone.utc)
         verification.status = "APPROVED"
         verification.decision_at = now
-        verification.reviewed_by_user_id = reviewer_user_id
+        verification.reviewed_by_user_id = reviewer.user_id
         verification.valid_until = (now + timedelta(days=30 * valid_months)).date()
         # v4.1 invariant: APPROVED rows must carry decision+reviewer+valid_until.
         for field in APPROVED_NEEDS:
@@ -311,7 +313,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         return verification, email_queued
 
     def reject(
-        self, verification_id: int, reviewer_user_id: int, reason: str
+        self, reviewer: User, verification_id: int, reason: str
     ) -> tuple[EnrollmentVerification, bool]:
         """Reject with a REQUIRED comment; account stays non-active."""
         comment = (reason or "").strip()
@@ -322,6 +324,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
                 status_code=422,
             )
         verification = self._lock_verification(verification_id)
+        self._authorize_case_reviewer(reviewer, verification)
         if verification.status != "PENDING":
             raise AppError(
                 code="DECISION_ALREADY_MADE",
@@ -332,7 +335,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         self._require_current_cor(verification)
         verification.status = "REJECTED"
         verification.decision_at = datetime.now(timezone.utc)
-        verification.reviewed_by_user_id = reviewer_user_id
+        verification.reviewed_by_user_id = reviewer.user_id
         verification.reason_code = "REJECTED_BY_REVIEWER"
         verification.reviewer_note = comment[:500]
         # v4.1 invariant: REJECTED rows must carry decision+reviewer+reason.
@@ -355,6 +358,32 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
             verification, student, approved=False, comment=comment
         )
         return verification, email_queued
+
+    def assign_guidance_staff(self, counselor: User, verification_id: int, guidance_staff_user_id: int) -> EnrollmentVerification:
+        if counselor.role_code != "COUNSELOR":
+            raise AppError("FORBIDDEN_ROLE", "Only a Counselor may assign verification cases.", status_code=403)
+        verification = self._lock_verification(verification_id)
+        if verification.status != "PENDING":
+            raise AppError("DECISION_ALREADY_MADE", "Only pending verification cases can be assigned.", status_code=409)
+        staff = self.accounts.lock_user(guidance_staff_user_id)
+        if staff is None or staff.role_code != "GUIDANCE_STAFF" or staff.account_status != "ACTIVE":
+            raise AppError("GUIDANCE_STAFF_NOT_FOUND", "Guidance Staff member is unavailable.", status_code=404)
+        verification.assigned_guidance_staff_user_id = staff.user_id
+        self.repository.session.commit()
+        return verification
+
+    @staticmethod
+    def _reviewer_assignment_scope(reviewer: User) -> int | None:
+        if reviewer.role_code == "COUNSELOR":
+            return None
+        if reviewer.role_code == "GUIDANCE_STAFF":
+            return reviewer.user_id
+        raise AppError("FORBIDDEN_ROLE", "You do not have permission to review verification cases.", status_code=403)
+
+    def _authorize_case_reviewer(self, reviewer: User, verification: EnrollmentVerification) -> None:
+        staff_id = self._reviewer_assignment_scope(reviewer)
+        if staff_id is not None and verification.assigned_guidance_staff_user_id != staff_id:
+            raise AppError("FORBIDDEN_ROLE", "This verification case is not assigned to you.", status_code=403)
 
     def _purge_cor_files(self, verification_id: int) -> None:
         """Delete only committed cleanup work, retaining failed rows for retry."""

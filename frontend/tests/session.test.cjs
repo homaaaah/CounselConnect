@@ -43,13 +43,15 @@ function environment(t, initialHash = "#review") {
 function fakeApi(t, recover = () => json(auth)) {
   const calls = [];
   t.mock.method(global, "fetch", async (url, init = {}) => {
-    calls.push({ path: new URL(url).pathname, ...init });
+    calls.push({ path: new URL(url, "http://localhost:5173").pathname, ...init });
     if (url.endsWith("/auth/csrf")) return recover();
     if (url.endsWith("/auth/login")) return json(auth);
     if (url.endsWith("/auth/logout")) return new Response(null, { status: 204 });
     if (url.endsWith("/pending")) return json([application]);
     if (url.endsWith("/history")) return json([]);
+    if (url.endsWith("/guidance-staff")) return json([{ user_id: 3, first_name: "Gia", last_name: "Staff", role_code: "GUIDANCE_STAFF", account_status: "ACTIVE" }]);
     if (url.endsWith("/approve")) return json({ email_queued: false });
+    if (url.endsWith("/assign")) return json({ ...application.verification, assigned_guidance_staff_user_id: 3 });
     if (url.endsWith("/health")) return json({ status: "ok" });
     if (url.endsWith("/cor")) return new Response("%PDF-test");
     return json({ items: [] });
@@ -124,7 +126,7 @@ test("a Student cannot mount the reviewer console", async (t) => {
   environment(t);
   const calls = fakeApi(t, () => json({ ...auth, user: { ...auth.user, role_code: "STUDENT" } }));
   const root = await mount(t);
-  assert.match(JSON.stringify(root.toJSON()), /requires a Counselor account/);
+  assert.match(JSON.stringify(root.toJSON()), /requires a Counselor or Guidance Staff account/);
   assert.equal(calls.some((call) => call.path.includes("enrollment-verifications")), false);
 });
 
@@ -217,4 +219,41 @@ test("a preview still downloading at decision time is discarded", async (t) => {
   await act(async () => { await reviewer.approve(7); });
   await act(async () => { resolvePdf(new Response("%PDF-test")); await pendingPreview; });
   assert.equal(createUrl.mock.callCount(), 0);
+});
+
+test("counselor assigns a pending verification case to Guidance Staff", async (t) => {
+  environment(t);
+  const calls = fakeApi(t);
+  const root = await mount(t);
+  const assignment = root.root.findAllByType("select").find((select) => select.props.value === "");
+  assert.ok(assignment, "counselor sees a Guidance Staff assignment control");
+  await act(async () => { await assignment.props.onChange({ target: { value: "3" } }); });
+  const sent = calls.find((call) => call.path.endsWith("/enrollment-verifications/7/assign"));
+  assert.equal(sent.method, "POST");
+  assert.deepEqual(JSON.parse(sent.body), { guidance_staff_user_id: 3 });
+});
+
+test("reviewer keeps pending applications when history loading fails and recovers", async (t) => {
+  environment(t);
+  let historyAttempts = 0;
+  t.mock.method(global, "fetch", async (url) => {
+    if (url.endsWith("/pending")) return json([application]);
+    if (url.includes("/history")) {
+      return historyAttempts++ === 0
+        ? json({ error: { code: "HISTORY_UNAVAILABLE", message: "Application history is unavailable." } }, 503)
+        : json([application]);
+    }
+    return json({ items: [] });
+  });
+  let reviewer;
+  function Harness() { reviewer = useReviewerConsole(); return null; }
+  await mount(t, React.createElement(Harness));
+  assert.equal(reviewer.queue.length, 1, "pending data remains available");
+  assert.equal(reviewer.history.length, 0);
+  assert.equal(reviewer.queueError, null);
+  assert.equal(reviewer.historyError, "Application history is unavailable.");
+  await act(async () => { await reviewer.refresh(); });
+  assert.equal(reviewer.queue.length, 1);
+  assert.equal(reviewer.history.length, 1, "history is restored after retry");
+  assert.equal(reviewer.historyError, null);
 });

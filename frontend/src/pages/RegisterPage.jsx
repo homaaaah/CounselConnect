@@ -7,7 +7,7 @@ import { useRegistration, EMPTY_FORM } from "../features/accounts";
  * full-page shell, with an in-modal sign-in switch (landing overlay).
  */
 export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin }) {
-  const { campuses, programs, register, submitting } = useRegistration();
+  const { campuses, programs, register, submitting, referenceLoading, referenceError, retryReferenceData } = useRegistration();
   const [form, setForm] = useState(EMPTY_FORM);
   const [corFile, setCorFile] = useState(null);
   const [result, setResult] = useState(null);
@@ -39,6 +39,10 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
       </div>
 
       <form onSubmit={handleSubmit} encType="multipart/form-data">
+        {referenceLoading && <p role="status" className="form-hint">Loading campus and program options...</p>}
+        {referenceError && <div role="alert" className="form-message error">
+          {referenceError} <button type="button" className="linklike" onClick={retryReferenceData}>Retry options</button>
+        </div>}
         <div className="form-row">
           <div className="form-group">
             <label className="form-group-label">First name</label>

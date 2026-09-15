@@ -142,6 +142,16 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 - API responses must not expose public or durable COR URLs.
 - Assigned Guidance Staff may access only their assigned verification cases; Counselor retains the approved broader authority.
 
+| Method/path | Allowed caller and behavior |
+|---|---|
+| `GET /accounts/guidance-staff` | Active Counselor; active Guidance Staff account summaries for assignment. |
+| `GET /enrollment-verifications/pending` | Counselor: all pending cases. Guidance Staff: only assigned pending cases. |
+| `GET /enrollment-verifications/history` | Counselor: all case history. Guidance Staff: only assigned case history; optional `status`. |
+| `GET /enrollment-verifications/{verification_id}/cor` | Counselor or the assigned Guidance Staff member; private, no-store PDF preview. |
+| `POST /enrollment-verifications/{verification_id}/assign` | Counselor; assigns a pending case to an active Guidance Staff member. |
+| `POST /enrollment-verifications/{verification_id}/approve` | Counselor or assigned Guidance Staff member; approves the assigned pending case. |
+| `POST /enrollment-verifications/{verification_id}/reject` | Counselor or assigned Guidance Staff member; rejects the assigned pending case with a required comment. |
+
 ### Appointments
 
 - Slot `delivery_mode` is `ONLINE`, `FACE_TO_FACE`, or `BOTH`.
@@ -159,6 +169,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `GET /availability-slots` | Student: future available slots; Counselor: own future slots. Optional `campus_id`, `appointment_mode`, aware `starts_after`/`ends_before`; `page=1`, `page_size=20` (max 100). |
 | `GET /weekly-schedules` | Counselor: own weekly schedule definitions. |
 | `POST /weekly-schedules` | Counselor; `campus_id`, `day_of_week` (1–7 ISO), `start_time`/`end_time` (local times), `slot_duration_minutes` (15–240, whole slots), `delivery_mode`; 201 schedule. |
+| `POST /weekly-schedules/{weekly_schedule_id}/replace` | Counselor; atomically deactivates that active definition and creates or reactivates the replacement after overlap/location validation; 200 schedule. Existing concrete slots and appointments are unchanged. |
 | `DELETE /weekly-schedules/{weekly_schedule_id}` | Counselor; deactivates one of their schedules; 204. |
 | `GET /availability-blocks` | Counselor: own temporary unavailable time ranges. |
 | `POST /availability-blocks` | Counselor; aware `starts_at`/`ends_at`, `is_all_day`, optional `reason` (max 255); 201 block. Rejected with `BLOCK_CONFLICT` when it would overlap a `PENDING`/`CONFIRMED` appointment. |

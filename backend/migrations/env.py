@@ -28,7 +28,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Inject the runtime database URL from application settings.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 # Register every module's models so autogenerate sees full metadata.
 import_all_models()

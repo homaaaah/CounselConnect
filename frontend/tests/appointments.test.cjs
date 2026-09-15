@@ -6,6 +6,7 @@ require("./register-app.cjs");
 const AppointmentsPage = require("../src/pages/AppointmentsPage.jsx").default;
 const HomePage = require("../src/pages/HomePage.jsx").default;
 const CalendarGrid = require("../src/components/appointments/CalendarGrid.jsx").default;
+const BookingModal = require("../src/components/appointments/BookingModal.jsx").default;
 const App = require("../src/App.jsx").default;
 const { manilaInputToUTC, formatSchedule } = require("../src/features/appointments");
 const { setCsrfToken } = require("../src/services/apiClient");
@@ -21,24 +22,27 @@ const appointment = { appointment_id: 5, student_user_id: 2, student_name: "Ana 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const envelope = items => ({ items, total: items.length, page: 1, page_size: 20 });
 
-function setup(t, { user = student, appointments = [], failure = false, calendar } = {}) {
+function setup(t, { user = student, appointments = [], failure = false, calendar, calendarFailure = false, slotsResponse, availabilityBlocks = [] } = {}) {
   const calls = [];
   global.window = { location: { hash: "#appointments" }, addEventListener() {}, removeEventListener() {} };
   setCsrfToken("synthetic-csrf");
   t.mock.method(global, "fetch", async (url, init = {}) => {
-    const path = new URL(url).pathname;
-    calls.push({ path, ...init });
+    const parsed = new URL(url, "http://localhost:5173");
+    const path = parsed.pathname;
+    calls.push({ path, query: Object.fromEntries(parsed.searchParams), ...init });
     if (path.endsWith("/auth/csrf")) return json({ user, csrf_token: "synthetic-csrf" });
     if (init.method === "POST") {
       if (failure) return json({ error: { code: "SLOT_UNAVAILABLE", message: "The selected slot is no longer available." } }, 409);
       return json(appointment, 201);
     }
     if (path.endsWith("/accounts/campuses")) return json(envelope([{ campus_id: 1, campus_name: "Main", guidance_office_location: "Room 201" }]));
-    if (path.endsWith("/availability-slots")) return json(envelope([slot]));
+    if (path.endsWith("/availability-slots")) return json(slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]));
     if (path.endsWith("/appointments")) return json(envelope(appointments));
     if (path.endsWith("/weekly-schedules")) return json([{ weekly_schedule_id: 3, campus_id: 1, day_of_week: 1, start_time: "08:00:00", end_time: "10:00:00", slot_duration_minutes: 30, delivery_mode: "BOTH", is_active: true }]);
-    if (path.endsWith("/availability-blocks")) return json([]);
+    if (path.endsWith("/availability-blocks")) return typeof availabilityBlocks === "function"
+      ? availabilityBlocks() : json(availabilityBlocks);
     if (path.includes("/calendar")) {
+      if (calendarFailure) return json({ error: { code: "CALENDAR_UNAVAILABLE", message: "Calendar is unavailable." } }, 503);
       if (calendar) return json(calendar);
       const now = new Date();
       const iso = date => date.toISOString().slice(0, 10);
@@ -107,6 +111,57 @@ test("booking modal shows the revealed campus/time details before requesting", a
   assert.ok(rendered.includes("9:00 AM"), "slot time is revealed");
 });
 
+test("booking loads every selected-date slot page and lets the student choose a matching counselor", async t => {
+  const matchingSlots = Array.from({ length: 101 }, (_, index) => ({
+    ...slot,
+    slot_id: index + 10,
+    counselor_name: `Counselor ${index + 1}`,
+    campus_name: `Campus ${index + 1}`,
+  }));
+  const calls = setup(t, {
+    calendar: calendar(),
+    slotsResponse: (query) => {
+      const page = Number(query.get("page") || "1");
+      const pageSize = Number(query.get("page_size") || "20");
+      if (!query.has("starts_after")) return envelope([slot]);
+      const items = matchingSlots.slice((page - 1) * pageSize, page * pageSize);
+      return { items, total: matchingSlots.length, page, page_size: pageSize };
+    },
+  });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.ok(calls.some(call => call.path.endsWith("/availability-slots") && call.query.page === "2" && call.query.page_size === "100"));
+  const option = root.root.findAllByType("button").find(b => b.props["aria-label"] === "Choose Counselor 101 at Campus 101");
+  assert.ok(option, "the second API page is offered as a booking choice");
+  await act(async () => option.props.onClick());
+  await act(async () => formFor(root, "Confirm booking").props.onSubmit({ preventDefault() {} }));
+  const post = calls.filter(call => call.method === "POST").at(-1);
+  assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 110, appointment_mode: "ONLINE" });
+});
+
+test("a background slot refresh preserves a selected compatible appointment mode", async t => {
+  global.window = { addEventListener() {}, removeEventListener() {} };
+  const modalState = (slots) => ({
+    calendar: calendar(), date: "", setDate() {}, slotPage: 1, setSlotPage() {},
+    loading: false, slots: { items: slots, total: slots.length, page: 1, page_size: 20 },
+    busy: false, error: "", mutate: async () => true,
+  });
+  let root;
+  await act(async () => { root = create(React.createElement(BookingModal, { open: true, state: modalState([slot]) })); });
+  t.after(async () => { await act(async () => root.unmount()); });
+  await act(async () => root.root.findByType(CalendarGrid).props.onPickTime("2099-01-01", "09:00"));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  let mode = root.root.findByType("select");
+  await act(async () => mode.props.onChange({ target: { value: "FACE_TO_FACE" } }));
+  assert.equal(root.root.findByType("select").props.value, "FACE_TO_FACE");
+  await act(async () => root.update(React.createElement(BookingModal, { open: true, state: modalState([{ ...slot }]) })));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.equal(root.root.findByType("select").props.value, "FACE_TO_FACE");
+});
+
 test("server booking conflict keeps the modal open and shows the slot-unavailable error", async t => {
   setup(t, { failure: true, calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
@@ -147,6 +202,38 @@ test("records view defaults to the confirmed tab and can switch statuses", async
   assert.ok(!rendered.includes("Find an available slot"), "slot list is gone from the records page");
 });
 
+test("calendar failure does not prevent appointment records from loading", async t => {
+  const calls = setup(t, { appointments: [appointment], calendarFailure: true });
+  const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
+  assert.ok(calls.some(call => call.path.endsWith("/appointments")), "records request still runs");
+  const rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("Cora Test"), "successful records remain visible");
+  assert.ok(rendered.includes("Could not load the availability calendar."));
+});
+
+test("availability-block failure preserves counselor records and can recover", async t => {
+  let attempts = 0;
+  const block = { availability_block_id: 7, counselor_user_id: 1, starts_at: "2099-01-01T01:00:00Z", ends_at: "2099-01-01T02:00:00Z", is_all_day: false, reason: "Training" };
+  const calls = setup(t, {
+    user: counselor,
+    appointments: [appointment],
+    availabilityBlocks: () => attempts++ === 0
+      ? json({ error: { code: "BLOCKS_UNAVAILABLE", message: "Unavailable times are temporarily unavailable." } }, 503)
+      : json([block]),
+  });
+  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
+  let rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("Ana Test"), "successful counselor records remain visible");
+  assert.ok(rendered.includes("Unavailable times are temporarily unavailable."));
+  await act(async () => {
+    button(root, "Retry unavailable times").props.onClick();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("Training"), "the recovered block list is displayed");
+  assert.equal(calls.filter(call => call.path.endsWith("/availability-blocks")).length, 2);
+});
+
 test("counselor blocks an unavailable calendar date", async t => {
   const calls = setup(t, { user: counselor });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
@@ -181,15 +268,15 @@ test("counselor edit mode seeds the form and replaces a weekly schedule", async 
   const endTime = root.root.findAllByProps({ type: "time" })[1];
   await act(async () => endTime.props.onChange({ target: { value: "11:00" } }));
   await act(async () => formFor(root, "Save changes").props.onSubmit({ preventDefault() {} }));
-  // Replace flow: POST the corrected definition, then DELETE the old one.
+  // Replacement is one atomic API action; the client never leaves two active
+  // definitions if a second request fails.
   const posts = calls.filter(c => c.method === "POST");
-  const schedulePost = posts.find(c => c.path.endsWith("/weekly-schedules"));
+  const schedulePost = posts.find(c => c.path.endsWith("/weekly-schedules/3/replace"));
   assert.deepEqual(JSON.parse(schedulePost.body), {
     campus_id: 1, day_of_week: 2, start_time: "08:00:00", end_time: "11:00:00",
     slot_duration_minutes: 30, delivery_mode: "BOTH",
   });
-  const del = calls.find(c => c.method === "DELETE" && c.path.endsWith("/weekly-schedules/3"));
-  assert.ok(del, "the replaced definition is deactivated");
+  assert.equal(calls.some(c => c.method === "DELETE" && c.path.endsWith("/weekly-schedules/3")), false);
 });
 
 test("counselor page shows student records and availability sections distinctly from the student page", async t => {
@@ -232,6 +319,24 @@ test("calendar month grid renders disabled past days and today highlight", async
   assert.ok(bookable.length > 0, "bookable future days remain selectable");
   assert.ok(rendered.includes("Already passed"));
   assert.ok(rendered.includes("Mon") && rendered.includes("Sun"), "weekday header row is rendered");
+});
+
+test("calendar permits a weekend date when it has counselor availability", async t => {
+  setup(t);
+  const picks = [];
+  const cal = { business_hours: "Availability set by counselors", days: [{
+    calendar_date: "2026-09-19", is_weekday: false, is_blocked: false, is_past: false,
+    available_times: ["09:00"],
+  }] };
+  const root = await mount(t, React.createElement(CalendarGrid, {
+    calendar: cal, onPickTime: (...args) => picks.push(args),
+  }));
+  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2026-09-19"));
+  assert.equal(saturday.props.disabled, false);
+  assert.match(saturday.props["aria-label"], /1 times available/);
+  await act(async () => saturday.props.onClick());
+  await act(async () => button(root, "09:00").props.onClick());
+  assert.deepEqual(picks, [["2026-09-19", "09:00"]]);
 });
 
 test("calendar month navigation stays within loaded data", async t => {

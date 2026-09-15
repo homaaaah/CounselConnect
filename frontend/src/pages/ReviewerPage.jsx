@@ -17,21 +17,29 @@ const STATUS_STYLES = {
  * Auth (ADR-019): requires a signed-in COUNSELOR session (enforced by
  * the backend). There is no admin role — the Counselor is the authority.
  */
-export default function ReviewerPage() {
+export default function ReviewerPage({ user }) {
   const {
     queue,
     history,
     historyFilter,
     setHistoryFilter,
     loading,
+    queueLoading,
+    historyLoading,
+    queueError,
+    historyError,
+    guidanceStaff,
     message,
     toast,
     approve,
     reject,
+    assign,
+    refresh,
     openCorPdf,
-  } = useReviewerConsole();
+  } = useReviewerConsole(user?.role_code);
   const [tab, setTab] = useState("pending");
   const [comments, setComments] = useState({});
+  const isCounselor = user?.role_code === "COUNSELOR";
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -89,7 +97,16 @@ export default function ReviewerPage() {
         )}
 
         {/* ------------------------------ PENDING TAB ---------------- */}
-        {tab === "pending" && !loading && queue.length === 0 && (
+        {tab === "pending" && queueError && (
+          <div role="alert" className="mt-6 rounded-md bg-red-50 p-4 text-sm text-red-700">
+            <p>{queueError}</p>
+            <button type="button" className="mt-2 font-medium underline" onClick={() => void refresh()}>Retry pending applications</button>
+          </div>
+        )}
+
+        {tab === "pending" && queueLoading && queue.length === 0 && <p role="status" className="mt-6 text-sm text-slate-400">Loading pending applications...</p>}
+
+        {tab === "pending" && !queueLoading && !queueError && queue.length === 0 && (
           <p className="mt-6 rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
             No pending applications.
           </p>
@@ -128,6 +145,16 @@ export default function ReviewerPage() {
                     </button>
                   </div>
                 )}
+
+                {isCounselor && <label className="mt-4 block text-sm text-slate-600">
+                  Assign to Guidance Staff
+                  <select className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    value={verification.assigned_guidance_staff_user_id ?? ""}
+                    onChange={(event) => void assign(verification.verification_id, event.target.value)}>
+                    <option value="" disabled>Choose staff member</option>
+                    {guidanceStaff.map((staff) => <option key={staff.user_id} value={staff.user_id}>{staff.first_name} {staff.last_name}</option>)}
+                  </select>
+                </label>}
 
                 <div className="mt-4 flex flex-wrap items-start gap-3">
                   <button
@@ -184,7 +211,16 @@ export default function ReviewerPage() {
               ))}
             </div>
 
-            {!loading && history.length === 0 && (
+            {historyError && (
+              <div role="alert" className="mt-6 rounded-md bg-red-50 p-4 text-sm text-red-700">
+                <p>{historyError}</p>
+                <button type="button" className="mt-2 font-medium underline" onClick={() => void refresh()}>Retry application history</button>
+              </div>
+            )}
+
+            {historyLoading && history.length === 0 && <p role="status" className="mt-6 text-sm text-slate-400">Loading application history...</p>}
+
+            {!historyLoading && !historyError && history.length === 0 && (
               <p className="mt-6 rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
                 No applications in this view yet.
               </p>

@@ -126,6 +126,7 @@ function CounselorShell({ user, page, onSignOut, open, setOpen }) {
 
 function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
   const links = [{ label: "Home", href: "#home" }];
+  if (user.role_code === "GUIDANCE_STAFF") links.push({ label: "Verify students", href: "#review" });
   const activeStudent = user.role_code === "STUDENT" && user.account_status === "ACTIVE";
   if (activeStudent) links.push({ label: "Appointments", href: "#appointments" });
   const showComingSoon = user.role_code === "STUDENT";

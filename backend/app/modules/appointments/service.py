@@ -94,13 +94,16 @@ class AppointmentsService(BaseService[Appointment]):
             weekday = day.weekday() < 5
             is_past = day < today
             is_blocked = day in blocked
-            if weekday and not is_blocked and not is_past:
+            # Weekly schedules support every ISO day (1 Monday through 7
+            # Sunday). `is_weekday` remains descriptive for consumers, but
+            # real weekend availability must remain bookable.
+            if not is_blocked and not is_past:
                 times = sorted(times_by_date.get(day, set()))
             else:
                 times = []
             days.append({"calendar_date": day, "is_weekday": weekday, "is_blocked": is_blocked, "is_past": is_past,
                 "available_times": times})
-        return {"timezone": "Asia/Manila", "business_hours": "Monday-Friday, 8:00 AM-4:00 PM", "days": days}
+        return {"timezone": "Asia/Manila", "business_hours": "Availability set by counselors", "days": days}
 
     def block_date(self, actor, blocked_date, reason=None):
         self.authorize(actor, ("COUNSELOR",))
@@ -138,13 +141,7 @@ class AppointmentsService(BaseService[Appointment]):
         """Store recurring university-local availability without changing appointments."""
         self.authorize(actor, ("COUNSELOR",))
         self._participants(None, actor.user_id)
-        campus = self._campus(data.campus_id)
-        if data.delivery_mode != "ONLINE" and not (campus.guidance_office_location or "").strip():
-            raise AppError("GUIDANCE_OFFICE_REQUIRED", "Configure the campus Guidance Office location first.")
-        if self.repository.overlapping_weekly_schedule(
-            actor.user_id, data.day_of_week, data.start_time, data.end_time
-        ):
-            raise AppError("SCHEDULE_CONFLICT", "This weekly period overlaps an active schedule.")
+        self._validate_weekly_schedule(actor, data)
         schedule = self.repository.create_weekly_schedule(
             counselor_user_id=actor.user_id,
             campus_id=data.campus_id,
@@ -157,6 +154,53 @@ class AppointmentsService(BaseService[Appointment]):
         self.repository.session.flush()
         self.audit.record(actor.user_id, "weekly_schedule_created", "counselor_weekly_schedule", schedule.weekly_schedule_id)
         return schedule
+
+    def replace_weekly_schedule(self, actor, weekly_schedule_id, data):
+        """Atomically replace one active recurring definition without changing slots."""
+        self.authorize(actor, ("COUNSELOR",))
+        self._participants(None, actor.user_id)
+        previous = self.repository.lock_weekly_schedule(actor.user_id, weekly_schedule_id)
+        if previous is None or not previous.is_active:
+            raise AppError("SCHEDULE_NOT_FOUND", "Weekly schedule not found.", status_code=404)
+        if self._weekly_schedule_matches(previous, data):
+            return previous
+        self._validate_weekly_schedule(actor, data, exclude_id=weekly_schedule_id)
+        replacement = self.repository.matching_weekly_schedule(
+            actor.user_id, data, exclude_id=weekly_schedule_id
+        )
+        if replacement is None:
+            replacement = self.repository.create_weekly_schedule(
+                counselor_user_id=actor.user_id,
+                campus_id=data.campus_id,
+                day_of_week=data.day_of_week,
+                start_time=data.start_time,
+                end_time=data.end_time,
+                slot_duration_minutes=data.slot_duration_minutes,
+                delivery_mode=data.delivery_mode,
+            )
+        else:
+            replacement.is_active = True
+        previous.is_active = False
+        self.repository.session.flush()
+        self.audit.record(actor.user_id, "weekly_schedule_replaced", "counselor_weekly_schedule", previous.weekly_schedule_id)
+        return replacement
+
+    def _validate_weekly_schedule(self, actor, data, *, exclude_id=None):
+        campus = self._campus(data.campus_id)
+        if data.delivery_mode != "ONLINE" and not (campus.guidance_office_location or "").strip():
+            raise AppError("GUIDANCE_OFFICE_REQUIRED", "Configure the campus Guidance Office location first.")
+        if self.repository.overlapping_weekly_schedule(
+            actor.user_id, data.day_of_week, data.start_time, data.end_time,
+            exclude_id=exclude_id,
+        ):
+            raise AppError("SCHEDULE_CONFLICT", "This weekly period overlaps an active schedule.")
+
+    @staticmethod
+    def _weekly_schedule_matches(schedule, data):
+        return all(
+            getattr(schedule, field) == getattr(data, field)
+            for field in ("campus_id", "day_of_week", "start_time", "end_time", "slot_duration_minutes", "delivery_mode")
+        )
 
     def list_weekly_schedules(self, actor):
         self.authorize(actor, ("COUNSELOR",))
@@ -339,33 +383,6 @@ class AppointmentsService(BaseService[Appointment]):
             page,
             page_size,
         )
-        counselor_ids = {slot.counselor_user_id for slot in items}
-        if counselor_ids:
-            blocked = self.repository.blocked_dates(counselor_ids, manila_today(), manila_today() + timedelta(days=370))
-            # Time-range availability blocks exclude matching slots for both roles.
-            time_blocks = [
-                block
-                for counselor_id in counselor_ids
-                for block in self.repository.overlapping_availability_blocks(
-                    counselor_id,
-                    min(slot.starts_at for slot in items),
-                    max(slot.ends_at for slot in items),
-                )
-            ]
-            def blocked_by_time_range(slot):
-                return any(
-                    block.counselor_user_id == slot.counselor_user_id
-                    and block.starts_at < slot.ends_at
-                    and block.ends_at > slot.starts_at
-                    for block in time_blocks
-                )
-            items = [
-                slot
-                for slot in items
-                if slot.starts_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Asia/Manila")).date() not in blocked
-                and not blocked_by_time_range(slot)
-            ]
-            total = len(items)
         return dict(
             items=[self.slot_response(s) for s in items],
             total=total,

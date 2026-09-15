@@ -10,8 +10,8 @@
  * - Errors use the standard envelope: { "error": { code, message, details } }.
  */
 
-const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+export const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL?.trim() || "/api/v1").replace(/\/+$/, "");
 
 /**
  * Coerce any error body to the standard envelope shape.
@@ -71,7 +71,7 @@ export async function request(path, init = {}) {
   if (UNSAFE_METHODS.has(method) && csrfToken) {
     headers["X-CSRF-Token"] = csrfToken;
   }
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
     credentials: "include",

@@ -57,10 +57,10 @@ export default function App() {
             ? <AppointmentsPage key={session.user.user_id} user={session.user} />
             : <p role="alert" className="p-6">Appointments require an active Student or Counselor account.</p>
           : <LoginPage onSignedIn={session.accept} />)}
-        {page === "review" && (session.user?.role_code === "COUNSELOR"
-          ? <ReviewerPage />
+        {page === "review" && (["COUNSELOR", "GUIDANCE_STAFF"].includes(session.user?.role_code)
+          ? <ReviewerPage user={session.user} />
           : session.user
-            ? <p role="alert" className="p-6">This page requires a Counselor account.</p>
+            ? <p role="alert" className="p-6">This page requires a Counselor or Guidance Staff account.</p>
             : <LoginPage audience="staff" onSignedIn={session.accept} />)}
         {!["login", "staff-login", "register", "home", "review", "appointments"].includes(page) && (
           <LandingPage onSignedIn={session.accept} />

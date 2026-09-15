@@ -7,15 +7,18 @@
  * header; requires the COUNSELOR role server-side.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { request, ApiError } from "../../services/apiClient";
+import { request, ApiError, API_BASE_URL } from "../../services/apiClient";
 
-const API = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
-
-export function useReviewerConsole() {
+export function useReviewerConsole(role = "") {
   const [queue, setQueue] = useState([]);
   const [history, setHistory] = useState([]);
   const [historyFilter, setHistoryFilter] = useState("");
   const [loading, setLoading] = useState(false);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [queueError, setQueueError] = useState(null);
+  const [historyError, setHistoryError] = useState(null);
+  const [guidanceStaff, setGuidanceStaff] = useState([]);
   const [message, setMessage] = useState(null);
   const [toast, setToast] = useState(null);
   const pdfBlobs = useRef({});
@@ -46,28 +49,44 @@ export function useReviewerConsole() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setQueueLoading(true);
+    setHistoryLoading(true);
     try {
-      const [pending, all] = await Promise.all([
+      const [pending, all, staff] = await Promise.allSettled([
         request("/enrollment-verifications/pending"),
         request(
           historyFilter
             ? `/enrollment-verifications/history?status=${historyFilter}`
             : "/enrollment-verifications/history"
         ),
+        role === "COUNSELOR" ? request("/accounts/guidance-staff") : Promise.resolve([]),
       ]);
-      setQueue(pending);
-      setHistory(all);
+      if (pending.status === "fulfilled") {
+        setQueue(pending.value);
+        setQueueError(null);
+      } else {
+        setQueueError(pending.reason instanceof ApiError
+          ? pending.reason.message : "Could not load pending applications.");
+      }
+      if (all.status === "fulfilled") {
+        setHistory(all.value);
+        setHistoryError(null);
+      } else {
+        setHistoryError(all.reason instanceof ApiError
+          ? all.reason.message : "Could not load application history.");
+      }
+      if (staff.status === "fulfilled") setGuidanceStaff(staff.value);
       setMessage(null);
     } catch (err) {
-      setQueue([]);
-      setHistory([]);
       setMessage(
         err instanceof ApiError ? err.message : "Could not load the applications."
       );
     } finally {
       setLoading(false);
+      setQueueLoading(false);
+      setHistoryLoading(false);
     }
-  }, [historyFilter]);
+  }, [historyFilter, role]);
 
   useEffect(() => {
     void refresh();
@@ -127,6 +146,20 @@ export function useReviewerConsole() {
     }
   }
 
+  async function assign(verificationId, guidanceStaffUserId) {
+    if (!guidanceStaffUserId) return;
+    try {
+      await request(`/enrollment-verifications/${verificationId}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ guidance_staff_user_id: Number(guidanceStaffUserId) }),
+      });
+      setToast({ kind: "ok", text: `Application #${verificationId} assigned.` });
+      await refresh();
+    } catch (err) {
+      setToast({ kind: "warn", text: err instanceof ApiError ? err.message : "Could not assign the application." });
+    }
+  }
+
   async function openCorPdf(verificationId) {
     const generation = pdfGeneration.current[verificationId] ?? 0;
     if (pdfBlobs.current[verificationId]) {
@@ -137,7 +170,7 @@ export function useReviewerConsole() {
       // Fetch with cookies (a plain <a> tag cannot send credentials
       // cross-origin), then open the blob URL in a new tab.
       const res = await fetch(
-        `${API}/enrollment-verifications/${verificationId}/cor`,
+        `${API_BASE_URL}/enrollment-verifications/${verificationId}/cor`,
         { credentials: "include", cache: "no-store" }
       );
       if (!res.ok) throw new Error("fetch failed");
@@ -158,10 +191,16 @@ export function useReviewerConsole() {
     historyFilter,
     setHistoryFilter,
     loading,
+    queueLoading,
+    historyLoading,
+    queueError,
+    historyError,
+    guidanceStaff,
     message,
     toast,
     approve,
     reject,
+    assign,
     refresh,
     openCorPdf,
   };

@@ -50,6 +50,19 @@ def test_calendar_counselor_scope_and_past_dates(monkeypatch):
     assert service.repository.calendar_slots.call_args.args[0] == [2]
 
 
+def test_calendar_keeps_scheduled_weekend_times_bookable(monkeypatch):
+    service = calendar_service(monkeypatch)
+    saturday = date(2026, 9, 12)
+    student = SimpleNamespace(role_code="STUDENT", account_status="ACTIVE", user_id=3)
+    service.repository.calendar_slots.return_value = [
+        SimpleNamespace(counselor_user_id=1, starts_at=datetime(2026, 9, 12, 1, 0))
+    ]
+    day = service.calendar(student, saturday, saturday)["days"][0]
+    assert day["is_weekday"] is False
+    assert day["available_times"] == ["09:00"]
+    assert service.calendar(student, saturday, saturday)["business_hours"] == "Availability set by counselors"
+
+
 @pytest.mark.parametrize("role,status", [("GUIDANCE_STAFF", "ACTIVE"), ("STUDENT", "PENDING_VERIFICATION")])
 def test_calendar_rejects_unauthorized_before_loading(monkeypatch, role, status):
     service = calendar_service(monkeypatch)

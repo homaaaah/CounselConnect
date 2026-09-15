@@ -17,7 +17,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
   useEffect(() => {
     if (result?.ok && result.role) {
       // Route by role: counselors land on the review console.
-      const target = result.role === "COUNSELOR" ? "#review" : result.role === "STUDENT" ? "#home" : "#landing";
+      const target = ["COUNSELOR", "GUIDANCE_STAFF"].includes(result.role) ? "#review" : result.role === "STUDENT" ? "#home" : "#landing";
       const t = setTimeout(() => {
         window.location.hash = target;
       }, 700);

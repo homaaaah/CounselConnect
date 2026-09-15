@@ -16,6 +16,7 @@ from app.modules.appointments.models import Appointment, AvailabilitySlot
 from app.modules.appointments.schemas import (
     AvailabilitySlotCreateRequest,
     AppointmentCreateRequest,
+    WeeklyScheduleCreateRequest,
 )
 from app.modules.appointments.service import AppointmentsService
 from app.modules.audit.models import AuditEvent
@@ -274,6 +275,56 @@ def test_location_required_at_creation_and_booking(db_session, actors):
     check_error(
         "GUIDANCE_OFFICE_REQUIRED", lambda: book(svc, users[2], ftf, "FACE_TO_FACE")
     )
+
+
+def test_weekly_schedule_replacement_is_atomic_and_keeps_existing_slots(db_session, actors):
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    initial = WeeklyScheduleCreateRequest(
+        campus_id=campus.campus_id, day_of_week=1, start_time="08:00",
+        end_time="10:00", slot_duration_minutes=30, delivery_mode="ONLINE",
+    )
+    original = svc.create_weekly_schedule(users[0], initial)
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3)
+    existing_slot = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", starts_at=start, ends_at=start + timedelta(minutes=30),
+        status="AVAILABLE", weekly_schedule_id=original.weekly_schedule_id,
+    )
+    db_session.add(existing_slot)
+    db_session.flush()
+    replacement = svc.replace_weekly_schedule(
+        users[0], original.weekly_schedule_id,
+        WeeklyScheduleCreateRequest(
+            campus_id=campus.campus_id, day_of_week=1, start_time="08:00",
+            end_time="11:00", slot_duration_minutes=30, delivery_mode="ONLINE",
+        ),
+    )
+    db_session.refresh(original)
+    db_session.refresh(existing_slot)
+    assert original.is_active is False
+    assert replacement.is_active is True
+    assert replacement.weekly_schedule_id != original.weekly_schedule_id
+    assert existing_slot.weekly_schedule_id == original.weekly_schedule_id
+    svc.create_weekly_schedule(
+        users[0],
+        WeeklyScheduleCreateRequest(
+            campus_id=campus.campus_id, day_of_week=1, start_time="12:00",
+            end_time="14:00", slot_duration_minutes=30, delivery_mode="ONLINE",
+        ),
+    )
+    check_error(
+        "SCHEDULE_CONFLICT",
+        lambda: svc.replace_weekly_schedule(
+            users[0], replacement.weekly_schedule_id,
+            WeeklyScheduleCreateRequest(
+                campus_id=campus.campus_id, day_of_week=1, start_time="09:00",
+                end_time="13:00", slot_duration_minutes=30, delivery_mode="ONLINE",
+            ),
+        ),
+    )
+    db_session.refresh(replacement)
+    assert replacement.is_active is True
 
 
 def test_conflicts_and_release(db_session, actors):
@@ -626,3 +677,59 @@ def test_simultaneous_confirm_reject(mysql_test_engine):
         assert db.get(AvailabilitySlot, ids[2]).status == (
             "RESERVED" if appt.status == "CONFIRMED" else "AVAILABLE"
         )
+
+
+@pytest.mark.parametrize("role_index", [0, 2])
+def test_slot_blocks_are_filtered_before_pagination(db_session, actors, role_index):
+    from app.modules.appointments.models import CounselorAvailabilityBlock
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    start = datetime.now(timezone.utc).replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0) + timedelta(days=3)
+    slots = [AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start + timedelta(minutes=15 * i),
+        ends_at=start + timedelta(minutes=15 * (i + 1)),
+    ) for i in range(50)]
+    db_session.add_all(slots)
+    # Two overlapping blocks must not duplicate results; their union hides 5 slots.
+    db_session.add_all([CounselorAvailabilityBlock(
+        counselor_user_id=users[0].user_id, starts_at=start,
+        ends_at=start + timedelta(minutes=minutes), is_all_day=False,
+    ) for minutes in (45, 75)])
+    db_session.flush()
+    # Campus scoping keeps exact totals independent of the concurrency
+    # tests, which commit on separate connections into the shared schema.
+    pages = [svc.list_slots(users[role_index], campus_id=campus.campus_id, page=n) for n in range(1, 5)]
+    assert [p["total"] for p in pages] == [45] * 4
+    assert [len(p["items"]) for p in pages] == [20, 20, 5, 0]
+    assert [item.slot_id for p in pages for item in p["items"]] == [s.slot_id for s in slots[5:]]
+
+
+def test_slot_date_blocks_are_owner_scoped_and_use_manila_date(db_session, actors):
+    from app.modules.appointments.models import CounselorBlockedDate
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    # 16:00 UTC is midnight on the following Philippine calendar date.
+    start = datetime.now(timezone.utc).replace(tzinfo=None, hour=16, minute=0, second=0, microsecond=0) + timedelta(days=3)
+    slots = [AvailabilitySlot(
+        counselor_user_id=owner.user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start + timedelta(minutes=offset),
+        ends_at=start + timedelta(minutes=offset + 15),
+    ) for owner, offset in [(users[0], -15), (users[0], 0), (users[1], 0)]]
+    db_session.add_all(slots)
+    db_session.add(CounselorBlockedDate(
+        counselor_user_id=users[0].user_id,
+        blocked_date=(start + timedelta(hours=8)).date(),
+    ))
+    db_session.flush()
+    # Campus scoping: see test_slot_blocks_are_filtered_before_pagination.
+    result = svc.list_slots(users[2], campus_id=campus.campus_id, page_size=1)
+    assert result["total"] == 2
+    assert [s.slot_id for s in result["items"]] == [slots[0].slot_id]
+    assert [s.slot_id for s in svc.list_slots(users[2], campus_id=campus.campus_id, page=2, page_size=1)["items"]] == [slots[2].slot_id]
+    # Counselor scope remains private even when another counselor is unblocked.
+    assert [s.slot_id for s in svc.list_slots(users[0])["items"]] == [slots[0].slot_id]

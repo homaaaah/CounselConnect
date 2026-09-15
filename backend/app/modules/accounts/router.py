@@ -14,8 +14,10 @@ from app.modules.accounts.schemas import (
     ProgramResponse,
     RegistrationResultResponse,
     StudentRegistrationRequest,
+    UserResponse,
 )
 from app.modules.accounts.service import AccountsService, get_accounts_service
+from app.shared.dependencies import CurrentUser
 from app.shared.pagination import ListEnvelope, paginate
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -111,3 +113,11 @@ def list_campuses(service: AccountsService = Depends(get_accounts_service)):
 def list_programs(service: AccountsService = Depends(get_accounts_service)):
     items = [ProgramResponse.model_validate(p) for p in service.list_active_programs()]
     return paginate(items, page=1, page_size=max(len(items), 1))
+
+
+@router.get("/guidance-staff", response_model=list[UserResponse])
+def list_guidance_staff(
+    actor: CurrentUser,
+    service: AccountsService = Depends(get_accounts_service),
+):
+    return [UserResponse.model_validate(user) for user in service.list_active_guidance_staff(actor)]

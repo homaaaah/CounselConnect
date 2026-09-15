@@ -39,6 +39,13 @@ class AccountsRepository(BaseRepository[User]):
     def find_user_by_email(self, email: str) -> User | None:
         return self.session.scalar(select(User).where(User.email == email))
 
+    def list_active_guidance_staff(self) -> list[User]:
+        return list(self.session.scalars(
+            select(User)
+            .where(User.role_code == "GUIDANCE_STAFF", User.account_status == "ACTIVE")
+            .order_by(User.last_name, User.first_name, User.user_id)
+        ))
+
     def lock_user(self, user_id: int) -> User | None:
         """Serialize verification submissions/decisions for one student."""
         return self.session.scalar(

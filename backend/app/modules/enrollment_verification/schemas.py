@@ -70,3 +70,7 @@ class RejectRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     valid_months: int = Field(default=12, ge=1, le=24)
+
+
+class VerificationAssignmentRequest(BaseModel):
+    guidance_staff_user_id: int = Field(gt=0)

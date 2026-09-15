@@ -6,7 +6,9 @@ import { secondaryClass } from "./ui.js";
  * CalendarGrid — month grid of counselor availability from GET /calendar.
  * Extracted from the old AppointmentsPage CalendarView (2026-09-13) so the
  * HomePage booking modal and the counselor records view share one grid.
- * A day is bookable when it is a weekday, not blocked, and not past. The
+ * A day is bookable when it has real available times, is not blocked, and is
+ * not past. Weekend dates stay disabled unless a counselor has scheduled
+ * availability for them. The
  * 1s clock hides times whose start has already passed (client-side live
  * gap until the next server refresh). Clicking a bookable day reveals
  * that day's available times; onSelect/onPickTime notify the parent
@@ -54,7 +56,7 @@ export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
   return <div>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="text-base font-medium">{monthTitle}</h3>
-        <p className="mt-1 text-xs text-slate-500">{calendar?.business_hours || "Monday-Friday, 8:00 AM-4:00 PM"} · Philippine time</p></div>
+        <p className="mt-1 text-xs text-slate-500">{calendar?.business_hours || "Availability set by counselors"} · Philippine time</p></div>
       <div className="flex items-center gap-2">
         <button type="button" aria-label="Previous month" disabled={!hasData(month) || month <= rangeStart.slice(0, 7)} onClick={() => shiftMonth(-1)} className={secondaryClass + " !px-2 !py-1"}>‹</button>
         <button type="button" aria-label="Next month" disabled={!hasData(month) || month >= rangeEnd.slice(0, 7)} onClick={() => shiftMonth(1)} className={secondaryClass + " !px-2 !py-1"}>›</button>
@@ -67,19 +69,20 @@ export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
       {cellDates.map((cellDate, i) => {
         if (cellDate === null) return <div key={"blank" + i} className="min-h-20 bg-slate-50/50" />;
         const day = byDate.get(cellDate);
-        const state = !day ? "outofrange" : day.is_past ? "past" : day.is_blocked ? "blocked" : !day.is_weekday ? "weekend" : "open";
-        const bookable = day && !day.is_past && !day.is_blocked && day.is_weekday;
+        const weekendWithoutAvailability = day && !day.is_weekday && day.available_times.length === 0;
+        const state = !day ? "outofrange" : day.is_past ? "past" : day.is_blocked ? "blocked" : weekendWithoutAvailability ? "weekend" : "open";
+        const bookable = day && !day.is_past && !day.is_blocked && !weekendWithoutAvailability;
         const isToday = cellDate === today;
         const isSelected = cellDate === selected;
-        const label = !day ? "" : day.is_past ? "Already passed" : day.is_blocked ? "Unavailable" : !day.is_weekday ? "Weekend" : day.available_times.length === 0 ? "No available time slots" : `${day.available_times.length} times available`;
+        const label = !day ? "" : day.is_past ? "Already passed" : day.is_blocked ? "Unavailable" : weekendWithoutAvailability ? "Weekend" : day.available_times.length === 0 ? "No available time slots" : `${day.available_times.length} times available`;
         return <button key={cellDate} type="button" disabled={!bookable}
           onClick={() => { setSelected(cellDate); onSelect?.(cellDate); }}
           aria-label={cellDate + " — " + label}
           className={`group min-h-20 bg-white p-1.5 text-left transition-colors ${!bookable ? "cursor-default" : "hover:bg-emerald-50"} ${state === "past" ? "text-slate-300" : state === "blocked" ? "bg-red-50" : state === "weekend" ? "bg-slate-50 text-slate-400" : ""} ${isSelected ? "ring-2 ring-inset ring-emerald-600" : ""}`}>
           <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${isToday ? "bg-emerald-600 text-white" : ""}`}>{Number(cellDate.slice(8))}</span>
-          {day && !day.is_past && day.is_weekday && !day.is_blocked && <p className="mt-1 hidden truncate text-[10px] font-medium text-emerald-700 sm:block">
+          {day && !day.is_past && !weekendWithoutAvailability && !day.is_blocked && <p className="mt-1 hidden truncate text-[10px] font-medium text-emerald-700 sm:block">
             {day.available_times.length > 0 ? day.available_times.length + " open" : "No times left"}</p>}
-          {day && (day.is_past || day.is_blocked || !day.is_weekday) && <p className="mt-1 hidden truncate text-[10px] text-slate-400 sm:block">{day.is_blocked ? "Blocked" : day.is_past ? "Passed" : "—"}</p>}
+          {day && (day.is_past || day.is_blocked || weekendWithoutAvailability) && <p className="mt-1 hidden truncate text-[10px] text-slate-400 sm:block">{day.is_blocked ? "Blocked" : day.is_past ? "Passed" : "—"}</p>}
         </button>;
       })}
     </div>

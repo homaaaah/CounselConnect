@@ -24,6 +24,7 @@ from app.modules.enrollment_verification.schemas import (
     PendingItemResponse,
     RejectRequest,
     StudentSummaryResponse,
+    VerificationAssignmentRequest,
     VerificationFileMeta,
     VerificationResponse,
 )
@@ -31,7 +32,7 @@ from app.modules.enrollment_verification.service import (
     EnrollmentVerificationService,
     get_enrollment_verification_service,
 )
-from app.shared.dependencies import require_counselor, require_roles
+from app.shared.dependencies import CurrentUser, require_roles
 
 router = APIRouter(prefix="/enrollment-verifications", tags=["enrollment_verification"])
 
@@ -57,12 +58,11 @@ def upload_cor(
 @router.get(
     "/pending",
     response_model=list[PendingItemResponse],
-    summary="Counselor: pending queue with applicant details",
-    dependencies=[Depends(require_counselor)],
+    summary="Counselor queue or assigned Guidance Staff pending cases",
 )
-def list_pending(service: EnrollmentVerificationService = Depends(get_enrollment_verification_service)):
+def list_pending(actor: CurrentUser, service: EnrollmentVerificationService = Depends(get_enrollment_verification_service)):
     items = []
-    for verification, student, file_row in service.list_pending():
+    for verification, student, file_row in service.list_pending(actor):
         items.append(
             PendingItemResponse(
                 verification=VerificationResponse.model_validate(verification),
@@ -78,10 +78,10 @@ def list_pending(service: EnrollmentVerificationService = Depends(get_enrollment
 @router.get(
     "/history",
     response_model=list[PendingItemResponse],
-    summary="Counselor: permanent review record (all applications; optional status filter)",
-    dependencies=[Depends(require_counselor)],
+    summary="Counselor history or assigned Guidance Staff case history",
 )
 def list_history(
+    actor: CurrentUser,
     status: str | None = None,
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
@@ -92,7 +92,7 @@ def list_history(
     per the privacy boundary.
     """
     items = []
-    for verification, student in service.list_history(status):
+    for verification, student in service.list_history(actor, status):
         items.append(
             PendingItemResponse(
                 verification=VerificationResponse.model_validate(verification),
@@ -111,11 +111,11 @@ def list_history(
 )
 def get_cor_pdf(
     verification_id: int,
-    counselor: User = Depends(require_counselor),
+    actor: CurrentUser,
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
     """Serves the PDF for the counselor's in-app preview (session cookie)."""
-    content = service.read_cor_pdf(verification_id)
+    content = service.read_cor_pdf(actor, verification_id)
     return Response(
         content=content,
         media_type="application/pdf",
@@ -133,13 +133,13 @@ def get_cor_pdf(
 )
 def approve(
     verification_id: int,
+    actor: CurrentUser,
     data: ApproveRequest | None = None,
-    counselor: User = Depends(require_counselor),
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
     months = data.valid_months if data is not None else 12
     verification, email_queued = service.approve(
-        verification_id, reviewer_user_id=counselor.user_id, valid_months=months
+        actor, verification_id, valid_months=months
     )
     verification.email_queued = email_queued
     return verification
@@ -153,11 +153,25 @@ def approve(
 def reject(
     verification_id: int,
     data: RejectRequest,
-    counselor: User = Depends(require_counselor),
+    actor: CurrentUser,
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
     verification, email_queued = service.reject(
-        verification_id, reviewer_user_id=counselor.user_id, reason=data.comment
+        actor, verification_id, reason=data.comment
     )
     verification.email_queued = email_queued
     return verification
+
+
+@router.post(
+    "/{verification_id}/assign",
+    response_model=VerificationResponse,
+    summary="Counselor: assign a pending case to active Guidance Staff",
+)
+def assign_guidance_staff(
+    verification_id: int,
+    data: VerificationAssignmentRequest,
+    actor: CurrentUser,
+    service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
+):
+    return service.assign_guidance_staff(actor, verification_id, data.guidance_staff_user_id)

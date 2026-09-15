@@ -20,13 +20,15 @@ import CalendarGrid from "./CalendarGrid.jsx";
 export default function BookingModal({ open, onClose, state, rescheduleId = null }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [pickedTime, setPickedTime] = useState(null);
+  const [slotCandidates, setSlotCandidates] = useState([]);
+  const [selectedSlotId, setSelectedSlotId] = useState(null);
   const [slotDetails, setSlotDetails] = useState(null);
   const [mode, setMode] = useState("ONLINE");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
   const resetSelection = () => {
-    setSelectedDate(null); setPickedTime(null); setSlotDetails(null);
+    setSelectedDate(null); setPickedTime(null); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null);
     setMode("ONLINE"); setDone(false);
   };
 
@@ -46,14 +48,24 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
     if (state.slotPage !== 1) state.setSlotPage(1);
   }, [open, selectedDate, state.date, state.slotPage, state.setDate, state.setSlotPage]);
 
-  // Match the picked time to a loaded slot once that date's slots arrive.
+  // Match the picked time to every loaded slot once that date's slots arrive.
+  // A calendar start is intentionally distinct from a concrete slot: several
+  // counselors or campuses may be available at that same Manila time.
   useEffect(() => {
     if (!open || !selectedDate || !pickedTime || state.loading) return;
     const startEpoch = new Date(selectedDate + "T" + pickedTime + ":00+08:00").getTime();
-    const match = state.slots.items.find(s => new Date(s.starts_at).getTime() === startEpoch) ?? null;
-    setSlotDetails(match);
-    if (match) setMode(match.delivery_mode === "FACE_TO_FACE" ? "FACE_TO_FACE" : "ONLINE");
+    const matches = state.slots.items.filter(s => new Date(s.starts_at).getTime() === startEpoch);
+    setSlotCandidates(matches);
+    setSelectedSlotId((current) => matches.some((slot) => slot.slot_id === current)
+      ? current : (matches[0]?.slot_id ?? null));
   }, [open, selectedDate, pickedTime, state.loading, state.slots]);
+
+  useEffect(() => {
+    const selected = slotCandidates.find((slot) => slot.slot_id === selectedSlotId) ?? null;
+    setSlotDetails(selected);
+    if (selected?.delivery_mode === "FACE_TO_FACE") setMode("FACE_TO_FACE");
+    if (selected?.delivery_mode === "ONLINE") setMode("ONLINE");
+  }, [slotCandidates, selectedSlotId]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -99,8 +111,10 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
               : <>
                   <div className="mt-4">
                     <CalendarGrid calendar={state.calendar}
-                      onSelect={() => { setPickedTime(null); setSlotDetails(null); }}
-                      onPickTime={(date, time) => { setSelectedDate(date); setPickedTime(time); }} />
+                      onSelect={() => { setPickedTime(null); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null); setMode("ONLINE"); }}
+                      onPickTime={(date, time) => {
+                        setSelectedDate(date); setPickedTime(time); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null); setMode("ONLINE");
+                      }} />
                   </div>
 
                   {state.error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}
@@ -112,6 +126,21 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
                     <p role="alert" className="mt-3 text-sm text-amber-700">That time is no longer available. Please pick another time.</p>}
 
                   {pickedTime && !state.loading && slotDetails && <form className="mt-5 rounded-lg bg-white p-4" onSubmit={submit}>
+                    {slotCandidates.length > 1 && <fieldset className="mb-4">
+                      <legend className="text-sm font-medium">Choose an available counselor and campus</legend>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {slotCandidates.map((candidate) => <button key={candidate.slot_id} type="button"
+                          aria-pressed={selectedSlotId === candidate.slot_id}
+                          aria-label={`Choose ${candidate.counselor_name} at ${candidate.campus_name}`}
+                          className={selectedSlotId === candidate.slot_id
+                            ? "rounded-md border border-emerald-700 bg-emerald-50 p-3 text-left text-sm"
+                            : "rounded-md border border-slate-300 p-3 text-left text-sm hover:bg-slate-50"}
+                          onClick={() => setSelectedSlotId(candidate.slot_id)}>
+                          <span className="block font-medium">{candidate.counselor_name}</span>
+                          <span className="block text-slate-600">{candidate.campus_name} · {modeLabel(candidate.delivery_mode)}</span>
+                        </button>)}
+                      </div>
+                    </fieldset>}
                     <p className="text-sm font-medium">Additional information</p>
                     <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                       <div><dt className="text-slate-500">Campus</dt><dd className="font-medium">{slotDetails.campus_name}</dd></div>

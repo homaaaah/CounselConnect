@@ -452,6 +452,67 @@
         }
       }
     },
+    "/api/v1/accounts/guidance-staff": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List Guidance Staff",
+        "operationId": "list_guidance_staff_api_v1_accounts_guidance_staff_get",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  },
+                  "title": "Response List Guidance Staff Api V1 Accounts Guidance Staff Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Guidance Staff Api V1 Accounts Guidance Staff Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/enrollment-verifications/cor": {
       "post": {
         "tags": [
@@ -524,7 +585,7 @@
         "tags": [
           "enrollment_verification"
         ],
-        "summary": "Counselor: pending queue with applicant details",
+        "summary": "Counselor queue or assigned Guidance Staff pending cases",
         "operationId": "list_pending_api_v1_enrollment_verifications_pending_get",
         "parameters": [
           {
@@ -585,7 +646,7 @@
         "tags": [
           "enrollment_verification"
         ],
-        "summary": "Counselor: permanent review record (all applications; optional status filter)",
+        "summary": "Counselor history or assigned Guidance Staff case history",
         "description": "Permanent record of every registration application and its decision.\n\nDecided rows keep decision_at, reviewer, comment, and valid_until.\n`file` is omitted (null) because COR bytes are purged after decisions\nper the privacy boundary.",
         "operationId": "list_history_api_v1_enrollment_verifications_history_get",
         "parameters": [
@@ -882,6 +943,82 @@
         }
       }
     },
+    "/api/v1/enrollment-verifications/{verification_id}/assign": {
+      "post": {
+        "tags": [
+          "enrollment_verification"
+        ],
+        "summary": "Counselor: assign a pending case to active Guidance Staff",
+        "operationId": "assign_guidance_staff_api_v1_enrollment_verifications__verification_id__assign_post",
+        "parameters": [
+          {
+            "name": "verification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Verification Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationAssignmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Assign Guidance Staff Api V1 Enrollment Verifications  Verification Id  Assign Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/weekly-schedules": {
       "get": {
         "tags": [
@@ -1041,6 +1178,122 @@
                     }
                   ],
                   "title": "Response 422 Create Weekly Schedule Api V1 Weekly Schedules Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/weekly-schedules/{weekly_schedule_id}/replace": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Replace Weekly Schedule",
+        "operationId": "replace_weekly_schedule_api_v1_weekly_schedules__weekly_schedule_id__replace_post",
+        "parameters": [
+          {
+            "name": "weekly_schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Weekly Schedule Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeeklyScheduleCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Replace Weekly Schedule Api V1 Weekly Schedules  Weekly Schedule Id  Replace Post"
                 }
               }
             }
@@ -5015,6 +5268,20 @@
           "message"
         ],
         "title": "ValidationFieldError"
+      },
+      "VerificationAssignmentRequest": {
+        "properties": {
+          "guidance_staff_user_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Guidance Staff User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guidance_staff_user_id"
+        ],
+        "title": "VerificationAssignmentRequest"
       },
       "VerificationFileMeta": {
         "properties": {

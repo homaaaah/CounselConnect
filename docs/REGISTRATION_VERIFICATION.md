@@ -33,8 +33,8 @@ If still pending after seven days: delete COR, set verification `EXPIRED`, and k
 
 ## Authorization
 
-- Guidance Staff: assigned cases only.
-- Counselor: authorized queue, decisions, and permitted academic corrections.
+- Guidance Staff: assigned cases only; the pending queue, history, COR preview, and decision actions are scoped to `assigned_guidance_staff_user_id`.
+- Counselor: authorized queue, decisions, permitted academic corrections, and assignment of a pending case to an active Guidance Staff member.
 - Pending/expired Student: own account and COR re-verification only.
 
 ## Required tests

@@ -22,26 +22,35 @@ export function useRegistration() {
   const [campuses, setCampuses] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+  const [referenceError, setReferenceError] = useState("");
+  const [referenceVersion, setReferenceVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      request("/accounts/campuses"),
-      request("/accounts/programs"),
-    ])
-      .then(([c, p]) => {
-        if (!cancelled) {
-          setCampuses(c.items);
-          setPrograms(p.items);
-        }
-      })
-      .catch(() => {
-        /* reference data unavailable; the form shows empty selects */
-      });
+    async function loadReferenceData() {
+      setReferenceLoading(true);
+      setReferenceError("");
+      const [campusResult, programResult] = await Promise.allSettled([
+        request("/accounts/campuses"),
+        request("/accounts/programs"),
+      ]);
+      if (cancelled) return;
+      const errors = [];
+      if (campusResult.status === "fulfilled") setCampuses(campusResult.value.items);
+      else errors.push("campuses");
+      if (programResult.status === "fulfilled") setPrograms(programResult.value.items);
+      else errors.push("programs");
+      if (errors.length) {
+        setReferenceError(`Could not load ${errors.join(" and ")}. Please retry.`);
+      }
+      setReferenceLoading(false);
+    }
+    void loadReferenceData();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [referenceVersion]);
 
   async function register(form, corFile) {
     if (corFile === null) {
@@ -96,5 +105,13 @@ export function useRegistration() {
     }
   }
 
-  return { campuses, programs, register, submitting };
+  return {
+    campuses,
+    programs,
+    register,
+    submitting,
+    referenceLoading,
+    referenceError,
+    retryReferenceData: () => setReferenceVersion((version) => version + 1),
+  };
 }

@@ -73,6 +73,19 @@ def create_weekly_schedule(
     return service.create_weekly_schedule(actor, data)
 
 
+@router.post(
+    "/weekly-schedules/{weekly_schedule_id}/replace",
+    response_model=WeeklyScheduleResponse,
+)
+def replace_weekly_schedule(
+    weekly_schedule_id: int,
+    data: WeeklyScheduleCreateRequest,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.replace_weekly_schedule(actor, weekly_schedule_id, data)
+
+
 @router.delete("/weekly-schedules/{weekly_schedule_id}", status_code=204)
 def deactivate_weekly_schedule(
     weekly_schedule_id: int,

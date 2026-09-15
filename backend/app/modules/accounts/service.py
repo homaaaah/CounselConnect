@@ -123,6 +123,11 @@ class AccountsService(BaseService[User]):
     def list_active_programs(self):
         return self.repository.list_active_programs()
 
+    def list_active_guidance_staff(self, actor):
+        if actor.role_code != "COUNSELOR" or actor.account_status != "ACTIVE":
+            raise AppError("FORBIDDEN_ROLE", "Only an active Counselor may view Guidance Staff.", status_code=403)
+        return self.repository.list_active_guidance_staff()
+
     def scheduling_user(self, user_id: int, *, lock: bool = False):
         """Internal scheduling reference; callers enforce participant scope."""
         return self.repository.lock_user(user_id) if lock else self.repository.get(user_id)

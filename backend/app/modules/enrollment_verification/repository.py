@@ -71,32 +71,43 @@ class EnrollmentVerificationRepository(BaseRepository[EnrollmentVerification]):
             .execution_options(populate_existing=True)
         )
 
-    def list_pending(self) -> list[EnrollmentVerification]:
+    def list_pending(
+        self, assigned_guidance_staff_user_id: int | None = None
+    ) -> list[EnrollmentVerification]:
         """Pending queue ordered oldest-first (fairness)."""
+        stmt = (
+            select(EnrollmentVerification)
+            .where(EnrollmentVerification.status == "PENDING")
+            .where(
+                EnrollmentVerification.submitted_at
+                > datetime.now(timezone.utc) - timedelta(days=7)
+            )
+            .where(
+                select(EnrollmentVerificationFile.file_id)
+                .where(
+                    EnrollmentVerificationFile.verification_id
+                    == EnrollmentVerification.verification_id,
+                    EnrollmentVerificationFile.cleanup_state == "PENDING",
+                    EnrollmentVerificationFile.expires_at
+                    > datetime.now(timezone.utc),
+                )
+                .exists()
+            )
+        )
+        if assigned_guidance_staff_user_id is not None:
+            stmt = stmt.where(
+                EnrollmentVerification.assigned_guidance_staff_user_id
+                == assigned_guidance_staff_user_id
+            )
         return list(
             self.session.scalars(
-                select(EnrollmentVerification)
-                .where(EnrollmentVerification.status == "PENDING")
-                .where(
-                    EnrollmentVerification.submitted_at
-                    > datetime.now(timezone.utc) - timedelta(days=7)
-                )
-                .where(
-                    select(EnrollmentVerificationFile.file_id)
-                    .where(
-                        EnrollmentVerificationFile.verification_id
-                        == EnrollmentVerification.verification_id,
-                        EnrollmentVerificationFile.cleanup_state == "PENDING",
-                        EnrollmentVerificationFile.expires_at
-                        > datetime.now(timezone.utc),
-                    )
-                    .exists()
-                )
-                .order_by(EnrollmentVerification.submitted_at.asc())
+                stmt.order_by(EnrollmentVerification.submitted_at.asc())
             )
         )
 
-    def list_all(self, status: str | None = None) -> list[EnrollmentVerification]:
+    def list_all(
+        self, status: str | None = None, assigned_guidance_staff_user_id: int | None = None
+    ) -> list[EnrollmentVerification]:
         """Every application (optionally filtered by status), newest-first.
 
         Permanent review record: decided rows keep decision_at, reviewer,
@@ -106,6 +117,11 @@ class EnrollmentVerificationRepository(BaseRepository[EnrollmentVerification]):
         stmt = select(EnrollmentVerification)
         if status is not None:
             stmt = stmt.where(EnrollmentVerification.status == status)
+        if assigned_guidance_staff_user_id is not None:
+            stmt = stmt.where(
+                EnrollmentVerification.assigned_guidance_staff_user_id
+                == assigned_guidance_staff_user_id
+            )
         return list(
             self.session.scalars(
                 stmt.order_by(EnrollmentVerification.submitted_at.desc())

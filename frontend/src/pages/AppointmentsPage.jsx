@@ -117,11 +117,12 @@ function StudentAppointmentsPage({ user }) {
           <h2 className="text-lg font-semibold">Your records</h2>
           <RecordsTabs state={state} />
         </div>
-        {!state.loading && <ul className="mt-4 space-y-4">{state.appointments.items.map(a =>
+        {state.recordsError && <p role="alert" className="mt-4 text-sm text-red-700">{state.recordsError}</p>}
+        {!state.recordsLoading && <ul className="mt-4 space-y-4">{state.appointments.items.map(a =>
           <AppointmentCard key={a.appointment_id} appointment={a} state={state} counselor={false} onReschedule={setRescheduleId} />)}</ul>}
-        {!state.loading && !state.error && state.appointments.items.length === 0 &&
+        {!state.recordsLoading && !state.recordsError && state.appointments.items.length === 0 &&
           <p className="mt-4 text-sm text-slate-500">No {state.status ? state.status.replaceAll("_", " ").toLowerCase() : ""} appointments yet. Use Schedule on the homepage to request one.</p>}
-        <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.loading} />
+        <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.recordsLoading} />
       </section>
 
       {/* Reschedule uses the same booking modal as the homepage */}
@@ -174,15 +175,13 @@ function WeeklyScheduleEditor({ state }) {
 
   const submit = async (event, replacingId = null) => {
     event.preventDefault();
-    const saved = await state.mutate("/weekly-schedules", {
+    const path = replacingId
+      ? "/weekly-schedules/" + replacingId + "/replace"
+      : "/weekly-schedules";
+    const saved = await state.mutate(path, {
       campus_id: Number(campusId), day_of_week: Number(day), start_time: start + ":00", end_time: end + ":00",
       slot_duration_minutes: Number(duration), delivery_mode: mode,
     }, "POST", replacingId ? "Availability updated." : "Weekly schedule saved.");
-    if (saved && replacingId) {
-      // Replace flow: deactivate the old definition after the new one
-      // exists (documented DELETE /weekly-schedules/{id} = deactivate).
-      await state.mutate("/weekly-schedules/" + replacingId, undefined, "DELETE", "Availability updated.");
-    }
     if (saved) { setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("10:00"); setDuration("30"); setMode("ONLINE"); }
   };
 
@@ -275,6 +274,12 @@ function AvailabilityBlocksSection({ state }) {
         </div>
       </form>
       : <button className={buttonClass + " mt-4"} disabled={state.busy} onClick={() => setBlocking(true)}>Block unavailable time</button>}
+    {state.availabilityBlocksError && <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+      <p>{state.availabilityBlocksError}</p>
+      <button type="button" className={secondaryClass + " mt-2"} disabled={state.busy || state.availabilityBlocksLoading} onClick={() => void state.refresh()}>Retry unavailable times</button>
+    </div>}
+    {state.availabilityBlocksLoading && state.availabilityBlocks.length === 0 && <p role="status" className="mt-4 text-sm text-slate-500">Loading unavailable timesâ€¦</p>}
+    {!state.availabilityBlocksLoading && !state.availabilityBlocksError && state.availabilityBlocks.length === 0 && <p className="mt-4 text-sm text-slate-500">No temporary unavailable times.</p>}
     {Array.isArray(state.availabilityBlocks) && state.availabilityBlocks.length > 0 && <ul className="mt-5 space-y-2">
       {state.availabilityBlocks.map(b => <li key={b.availability_block_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm">
         <span>{formatSchedule(b.starts_at)} – {formatSchedule(b.ends_at)}{b.reason ? " · " + b.reason : ""}</span>
@@ -304,11 +309,12 @@ function CounselorAppointmentsPage({ user }) {
           <h2 className="text-lg font-semibold">Student records</h2>
           <RecordsTabs state={state} />
         </div>
-        {!state.loading && <ul className="mt-4 space-y-4">{state.appointments.items.map(a =>
+        {state.recordsError && <p role="alert" className="mt-4 text-sm text-red-700">{state.recordsError}</p>}
+        {!state.recordsLoading && <ul className="mt-4 space-y-4">{state.appointments.items.map(a =>
           <AppointmentCard key={a.appointment_id} appointment={a} state={state} counselor={true} onReschedule={setRescheduleId} />)}</ul>}
-        {!state.loading && !state.error && state.appointments.items.length === 0 &&
+        {!state.recordsLoading && !state.recordsError && state.appointments.items.length === 0 &&
           <p className="mt-4 text-sm text-slate-500">No {state.status ? state.status.replaceAll("_", " ").toLowerCase() : ""} student appointments yet.</p>}
-        <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.loading} />
+        <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.recordsLoading} />
       </section>
 
       <BookingModal open={rescheduleId !== null} onClose={() => setRescheduleId(null)} state={state} rescheduleId={rescheduleId} />

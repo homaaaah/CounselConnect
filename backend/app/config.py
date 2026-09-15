@@ -8,6 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
@@ -49,10 +50,15 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Sync SQLAlchemy URL for PyMySQL (utf8mb4, UTC connection)."""
-        return (
-            f"mysql+pymysql://{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
-        )
+        return URL.create(
+            "mysql+pymysql",
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
+            query={"charset": "utf8mb4"},
+        ).render_as_string(hide_password=False)
 
 
 @lru_cache

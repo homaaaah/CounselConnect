@@ -37,7 +37,7 @@ function environment(t, initialHash = "#home") {
 function fakeApi(t, auth) {
   const calls = [];
   t.mock.method(global, "fetch", async (url, init = {}) => {
-    calls.push({ path: new URL(url).pathname, ...init });
+    calls.push({ path: new URL(url, "http://localhost:5173").pathname, ...init });
     if (url.endsWith("/auth/csrf")) return json(auth);
     if (url.endsWith("/auth/logout")) return new Response(null, { status: 204 });
     if (url.endsWith("/health")) return json({ status: "ok" });
@@ -120,7 +120,7 @@ test("pending student gets no Appointments link, Verification pending chip, and 
   assert.ok(rendered.includes("Verification pending — scheduling unlocks after COR approval."));
 });
 
-test("guidance staff sees Home only, no coming-soon entries and no banner", async (t) => {
+test("guidance staff sees Home and verification review, with no coming-soon entries or banner", async (t) => {
   environment(t);
   const staff = { ...baseUser, user_id: 3, role_code: "GUIDANCE_STAFF",
     first_name: "Guida", last_name: "Staff" };
@@ -128,7 +128,7 @@ test("guidance staff sees Home only, no coming-soon entries and no banner", asyn
   const root = await mount(t, React.createElement(App));
   assert.ok(root.root.findAllByProps({ href: "#home" }).length >= 1);
   assert.equal(root.root.findAllByProps({ href: "#appointments" }).length, 0);
-  assert.equal(root.root.findAllByProps({ href: "#review" }).length, 0);
+  assert.ok(root.root.findAllByProps({ href: "#review" }).length >= 1);
   assert.equal(root.root.findAllByProps({ "aria-disabled": "true" }).filter(
     (node) => node.props.title === "Coming soon").length, 0);
   const rendered = JSON.stringify(root.toJSON());
