@@ -4,6 +4,7 @@ Always read `.ai/RULES.md` and `.ai/CURRENT_TASK.md`, then only one primary rout
 
 | Route | Additional files |
 |---|---|
+| `ui-refactor` | `.ai/UI_CHANGE_SAFETY.md` plus the owning feature doc from the relevant route below |
 | `project` | `.ai/PROJECT.md` |
 | `architecture` | `.ai/ARCHITECTURE.md`, `.ai/DECISIONS.md` |
 | `requirements` | `.ai/REQUIREMENTS.md` |

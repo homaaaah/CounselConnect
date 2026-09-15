@@ -8,6 +8,7 @@ Conflict order: current human/adviser instruction â†’ latest approved decision â
 
 - Load only the context route needed for the task.
 - Inspect affected code/tests first; make the smallest coherent change.
+- For data-driven UI redesigns or refactors, follow [UI_CHANGE_SAFETY.md](UI_CHANGE_SAFETY.md): declare preserved contracts, verify list completeness and record identity, and test behavior through the API boundary.
 - Reuse existing modules; do not silently replace stack, auth, persistence, transport, or business rules.
 - Follow `.ai/NAMING_CONVENTIONS.md` for APIs, models, database objects, events, and files.
 - Backend authorization is authoritative; hidden UI is not access control.

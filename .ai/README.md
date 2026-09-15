@@ -5,6 +5,7 @@
 | `RULES.md` | every non-trivial task |
 | `CURRENT_TASK.md` | every non-trivial task |
 | `CONTEXT_MAP.md` | choose task-specific context |
+| `UI_CHANGE_SAFETY.md` | redesigning or refactoring a data-driven interface; preserve behavior, identity, and list completeness |
 | `NAMING_CONVENTIONS.md` | API, database, model, file, or event naming |
 | `PROJECT.md` | project-wide scope/facts |
 | `ARCHITECTURE.md` | boundaries or cross-module design |
