@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     cor_storage_root: str = "./var/cor"
     resource_storage_root: str = "./var/resources"
 
-    # --- COR upload (provisional limit; final policy pending ADR-P05) ---
+    # --- COR upload (PDF-only limit; policy ratified by ADR-024) ---
     cor_max_mb: int = 10
 
     # --- Email notifications (Gmail SMTP; skipped silently when unset) ---

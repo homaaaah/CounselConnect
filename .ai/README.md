@@ -10,6 +10,5 @@
 | `ARCHITECTURE.md` | boundaries or cross-module design |
 | `REQUIREMENTS.md` | requirement IDs/acceptance constraints |
 | `DECISIONS.md` | durable approved and pending choices |
-| `CONTRIBUTING.md` | Git/GitHub team workflow (branch-per-task, PR review) |
 
 Default: `RULES` → `CURRENT_TASK` → one `CONTEXT_MAP` route. Detailed feature contracts live in `docs/`; do not bulk-load them.

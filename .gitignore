@@ -27,9 +27,6 @@ graphify-out/
 .opencode/
 .kilocode/
 
-# Local duplicate snapshot of the repo (merge source; do not commit)
-counselconnect-frontend/
-
 # OneDrive / OS noise
 .DS_Store
 Thumbs.db

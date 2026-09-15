@@ -7,7 +7,7 @@ Core rules (docs/VIRTUAL_GUIDANCE_ASSISTANT.md):
   limitation response — never a diagnosis or medical recommendation.
 - No persistent assistant conversation history (not created unless approved).
 
-# TODO: Provider/model integration pending ADR-P08.
+# Deterministic retrieval per ADR-027; no LLM provider in v1.
 """
 
 from __future__ import annotations

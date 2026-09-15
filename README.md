@@ -6,7 +6,7 @@ A centralized guidance-counseling platform for the **University of Caloocan City
 
 | Layer | Technology |
 |---|---|
-| Frontend | React + Vite + TailwindCSS, CapacitorJS wrapper (responsive web) |
+| Frontend | JavaScript (React) + Vite + TailwindCSS, CapacitorJS wrapper (responsive web) |
 | Backend | Python + FastAPI — ONE deployable **modular monolith** |
 | Database | MySQL 8.4 LTS |
 | ORM / driver | SQLAlchemy 2.0 + PyMySQL (sync) |
@@ -16,8 +16,8 @@ A centralized guidance-counseling platform for the **University of Caloocan City
 
 ```text
 backend/    FastAPI modular monolith (see backend/app/modules/)
-frontend/   React + Vite + Tailwind + Capacitor scaffold
-contracts/  Generated OpenAPI snapshot of implemented endpoints (regenerate via `python scripts/export_openapi.py`; never hand-edit)
+frontend/   JavaScript (React) + Vite + Tailwind + Capacitor scaffold
+contracts/  Generated OpenAPI snapshot (placeholder until endpoints exist)
 docs/       READ-ONLY feature contracts and rules (source of truth)
 db/         Approved baseline SQL schemas (v4 design, v4.1 MySQL-8.4 baseline)
 design/     AI-readable design exports (DFD, ERD, Flowchart)
@@ -38,9 +38,9 @@ Only three roles exist: **STUDENT**, **GUIDANCE_STAFF** (assigned COR verificati
 
 ## Pending decisions (do not implement ahead of approval)
 
-ADR-P02 real-time transport · P03 SOS instrument/thresholds/retention · P04 appointment timing/cutoffs/reminders/blocked periods · P05 COR upload limits · P06 expression model · P07 manual publication rule and attachment limits · P08 assistant provider · P09 Capacitor credential transport and reset-email delivery.
+ADR-P01 auth mechanism · P02 real-time transport · P03 SOS instrument/thresholds/retention · P04 appointment timing/cutoffs/reminders · P05 COR upload limits · P06 expression model · P07 manual publication rule · P08 assistant provider.
 
-## Local setup
+## Setup (skeleton stage)
 
 **Backend** — from `backend/`:
 
@@ -65,4 +65,3 @@ npm run dev
 - Cross-module access goes through another module's **service**, never its repository or models.
 - Never persist: COR file contents, facial images/frames/embeddings, expression history, assistant conversation history, mirrored article bodies.
 - Timestamps stored as UTC; enum values are `SCREAMING_SNAKE_CASE`; JSON fields are `snake_case`.
-- Team Git workflow: one branch per task, PR review before merge (`.ai/CONTRIBUTING.md`); never push directly to `main`.

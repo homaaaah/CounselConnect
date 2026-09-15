@@ -3,11 +3,11 @@ const { test } = require("node:test");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
 
-require("./register-typescript.cjs");
+require("./register-app.cjs");
 
-const App = require("../src/App.tsx").default;
-const { setCsrfToken, getCsrfToken, request } = require("../src/services/apiClient.ts");
-const { useReviewerConsole } = require("../src/features/enrollment/useReviewerConsole.ts");
+const App = require("../src/App.jsx").default;
+const { setCsrfToken, getCsrfToken, request, ApiError } = require("../src/services/apiClient.js");
+const { useReviewerConsole } = require("../src/features/enrollment/useReviewerConsole.js");
 
 const auth = {
   user: { user_id: 1, email: "counselor@example.edu", role_code: "COUNSELOR",
@@ -148,6 +148,44 @@ test("a late unauthenticated response cannot erase a newer login token", async (
   resolve(failure(401));
   await pending;
   assert.equal(getCsrfToken(), auth.csrf_token);
+});
+
+test("non-envelope error bodies still throw a safe ApiError", async (t) => {
+  environment(t);
+  // FastAPI default 405: JSON body without the standard error envelope.
+  t.mock.method(global, "fetch", async () => json({ detail: "Method Not Allowed" }, 405));
+  let caught;
+  try {
+    await request("/accounts/programs", { method: "PUT", body: "{}" });
+  } catch (err) {
+    caught = err;
+  }
+  assert.ok(caught, "405 must reject");
+  assert.ok(caught instanceof ApiError, "must be an ApiError");
+  assert.equal(caught.status, 405);
+  assert.equal(caught.code, "REQUEST_FAILED");
+  assert.equal(caught.message, "Method Not Allowed");
+  assert.deepEqual(caught.details, {});
+
+  // Standard envelope keeps its exact code and message.
+  t.mock.method(global, "fetch", async () => failure(409));
+  try {
+    await request("/appointments", { method: "POST", body: "{}" });
+  } catch (err) {
+    caught = err;
+  }
+  assert.equal(caught.code, "TEST_ERROR");
+  assert.equal(caught.message, "Test error");
+
+  // Unparseable body falls back to the generic network error.
+  t.mock.method(global, "fetch", async () => new Response("<html>bad gateway</html>", { status: 502 }));
+  try {
+    await request("/health");
+  } catch (err) {
+    caught = err;
+  }
+  assert.equal(caught.code, "NETWORK_ERROR");
+  assert.equal(caught.message, "Request failed.");
 });
 
 test("COR preview blobs are released when the reviewer unmounts", async (t) => {

@@ -36,6 +36,7 @@ def get_current_user(
         session_cookie,
         request.headers.get("X-CSRF-Token"),
         is_safe_method=request.method.upper() in _SAFE_METHODS,
+        record_activity=request.headers.get("X-Background-Refresh") != "1",
     )
     return user
 

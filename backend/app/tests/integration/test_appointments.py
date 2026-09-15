@@ -86,6 +86,13 @@ def check_error(code, fn):
     assert exc.value.code == code
 
 
+def check_error_message(code, message, fn):
+    with pytest.raises(AppError) as exc:
+        fn()
+    assert exc.value.code == code
+    assert exc.value.message == message
+
+
 @pytest.mark.parametrize(
     "supported,selected,allowed",
     [
@@ -117,6 +124,136 @@ def test_modes_and_location_snapshot(db_session, actors, supported, selected, al
         == appt.meeting_location
     )
     assert appt.model_dump(mode="json")["starts_at"].endswith("Z")
+
+
+def _past_slot(db_session, counselor, campus, *, days, hours=0):
+    """Insert an AVAILABLE slot whose scheduled start is already past."""
+    start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+        days=days, hours=hours
+    )
+    slot = AvailabilitySlot(
+        counselor_user_id=counselor.user_id,
+        campus_id=campus.campus_id,
+        delivery_mode="BOTH",
+        starts_at=start,
+        ends_at=start + timedelta(hours=1),
+        status="AVAILABLE",
+    )
+    db_session.add(slot)
+    db_session.flush()
+    return slot
+
+
+def test_booking_rejected_for_past_date(db_session, actors):
+    from app.modules.appointments.service import manila_today
+    from zoneinfo import ZoneInfo
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    # The slot start maps to a Manila date strictly before today's Manila date.
+    slot = _past_slot(db_session, users[0], campus, days=1)
+    manila_slot_date = slot.starts_at.replace(tzinfo=timezone.utc).astimezone(
+        ZoneInfo("Asia/Manila")
+    ).date()
+    assert manila_slot_date < manila_today()
+    check_error_message(
+        "APPOINTMENT_DATE_PASSED",
+        "This appointment date has already passed. Please select another available date.",
+        lambda: book(svc, users[2], slot),
+    )
+    assert svc.repository.find_slot(slot.slot_id).status == "AVAILABLE"
+
+
+def test_booking_rejected_for_passed_time_today(db_session, actors):
+    from app.modules.appointments.service import manila_today
+    from zoneinfo import ZoneInfo
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    # Earlier today in Manila (a slot start that is past UTC-now but whose
+    # Manila date is still today, which holds whenever Manila is ahead of UTC).
+    start = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
+    slot = AvailabilitySlot(
+        counselor_user_id=users[0].user_id,
+        campus_id=campus.campus_id,
+        delivery_mode="BOTH",
+        starts_at=start,
+        ends_at=start + timedelta(hours=1),
+        status="AVAILABLE",
+    )
+    db_session.add(slot)
+    db_session.flush()
+    manila_slot_date = slot.starts_at.replace(tzinfo=timezone.utc).astimezone(
+        ZoneInfo("Asia/Manila")
+    ).date()
+    if manila_slot_date < manila_today():
+        pytest.skip("Manila already rolled to the next day for this slot time")
+    check_error_message(
+        "APPOINTMENT_TIME_PASSED",
+        "This appointment time is no longer available. Please select another available time.",
+        lambda: book(svc, users[2], slot),
+    )
+    assert svc.repository.find_slot(slot.slot_id).status == "AVAILABLE"
+
+
+def test_reschedule_rejected_for_past_replacement(db_session, actors):
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    first = create_slot(svc, users[0], campus)
+    appt = book(svc, users[2], first)
+    svc.transition(users[0], appt.appointment_id, "confirm")
+    past = _past_slot(db_session, users[0], campus, days=1)
+    data = AppointmentCreateRequest(
+        availability_slot_id=past.slot_id, appointment_mode="ONLINE"
+    )
+    check_error(
+        "APPOINTMENT_DATE_PASSED",
+        lambda: svc.reschedule(users[2], appt.appointment_id, data),
+    )
+    # The original reservation stays intact after the failed replacement.
+    assert svc.repository.find_slot(first.slot_id).status == "RESERVED"
+    assert svc.repository.find_slot(past.slot_id).status == "AVAILABLE"
+
+
+def test_calendar_counts_real_future_unreserved_times(db_session, actors, monkeypatch):
+    from datetime import date
+    from app.modules.appointments import service as module
+    from app.modules.appointments.models import CounselorAvailabilityBlock
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    # Friday, 1:30 PM Manila; use UTC persistence, independent of test host TZ.
+    monkeypatch.setattr(module, "utcnow", lambda: datetime(2026, 9, 11, 5, 30))
+    today = date(2026, 9, 11)
+    assert svc.calendar(users[2], today, today)["days"][0]["available_times"] == []
+    for hour, minute, owner, status in [
+        (5, 0, 0, "AVAILABLE"), (5, 30, 0, "AVAILABLE"),
+        (6, 0, 0, "RESERVED"), (6, 30, 0, "AVAILABLE"),
+        (7, 0, 0, "AVAILABLE"), (7, 30, 0, "AVAILABLE"),
+        (7, 0, 1, "AVAILABLE"),
+    ]:
+        start = datetime(2026, 9, 11, hour, minute)
+        db_session.add(AvailabilitySlot(counselor_user_id=users[owner].user_id,
+            campus_id=campus.campus_id, delivery_mode="ONLINE", status=status,
+            starts_at=start, ends_at=start + timedelta(minutes=30)))
+    db_session.add(CounselorAvailabilityBlock(counselor_user_id=users[0].user_id,
+        starts_at=datetime(2026, 9, 11, 6, 30), ends_at=datetime(2026, 9, 11, 7),
+        is_all_day=False))
+    db_session.flush()
+    result = svc.calendar(users[2], today - timedelta(days=1), today + timedelta(days=3))
+    days = {day["calendar_date"]: day for day in result["days"]}
+    assert days[today]["available_times"] == ["15:00", "15:30"]
+    assert days[today - timedelta(days=1)]["is_past"] is True
+    assert days[today - timedelta(days=1)]["available_times"] == []
+    assert days[today + timedelta(days=3)]["available_times"] == []
+    assert svc.calendar(users[1], today, today)["days"][0]["available_times"] == ["15:00"]
+    # A whole-day block applies only to its owner; another Counselor stays open.
+    svc.repository.add_blocked_date(users[0].user_id, today)
+    db_session.flush()
+    student_day = svc.calendar(users[2], today, today)["days"][0]
+    assert student_day["available_times"] == ["15:00"]
+    assert student_day["is_blocked"] is False
+    assert svc.calendar(users[0], today, today)["days"][0]["available_times"] == []
 
 
 def test_location_required_at_creation_and_booking(db_session, actors):

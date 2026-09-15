@@ -35,6 +35,12 @@ MIGRATION_FILE = (
     / "versions"
     / "20260904_297c92da239d_add_user_sessions_table.py"
 )
+BLOCKED_DATES_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20260909_blocked_dates.py"
+)
+RECURRING_SCHEDULES_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20260910_recurring_schedules_and_blocks.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -60,6 +66,24 @@ def load_migration_module():
     """Import the user_sessions migration file by path (digit-leading name)."""
     spec = importlib.util.spec_from_file_location(
         "user_sessions_migration", MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_blocked_dates_migration_module():
+    spec = importlib.util.spec_from_file_location("blocked_dates_migration", BLOCKED_DATES_MIGRATION_FILE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_recurring_schedules_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "recurring_schedules_migration", RECURRING_SCHEDULES_MIGRATION_FILE
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -132,6 +156,8 @@ def mysql_test_engine():
             ctx = MigrationContext.configure(conn)
             with Operations.context(ctx):
                 load_migration_module().upgrade()
+                load_blocked_dates_migration_module().upgrade()
+                load_recurring_schedules_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

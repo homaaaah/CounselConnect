@@ -8,7 +8,7 @@ Core rules (docs/WELLNESS_RESOURCE_DISCOVERY.md, ARCHITECTURE.md):
 - Counselor review is mandatory before PUBLISHED; reject/disable lifecycle.
 - Manual internal resources (link/article/file) created by Counselor only.
 
-# TODO: Manual publication rule is pending ADR-P07.
+# Manual publication rule set by ADR-026 (single Counselor approval).
 """
 
 from __future__ import annotations

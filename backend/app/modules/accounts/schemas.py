@@ -18,7 +18,7 @@ class StudentRegistrationRequest(BaseModel):
     """DFD 1.1 'Register Student Account' payload.
 
     Creates the pending account + academic profile; COR upload is a
-    separate step (limits pending ADR-P05).
+    separate step (limits ratified by ADR-024).
     """
 
     email: EmailStr

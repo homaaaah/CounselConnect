@@ -12,7 +12,7 @@ class AssistantRepository:
     """No owned tables; kept for layering symmetry.
 
     # TODO: Wire reads through content/wellness services when implemented
-    # (assistant provider decision pending ADR-P08).
+    # (deterministic retrieval per ADR-027; no provider integration in v1).
     """
 
     def __init__(self, session) -> None:  # noqa: ANN001 - SQLAlchemy Session

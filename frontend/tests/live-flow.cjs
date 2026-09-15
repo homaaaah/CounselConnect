@@ -3,9 +3,9 @@
 const assert = require("node:assert/strict");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
-require("./register-typescript.cjs");
-const App = require("../src/App.tsx").default;
-const { setCsrfToken } = require("../src/services/apiClient.ts");
+require("./register-app.cjs");
+const App = require("../src/App.jsx").default;
+const { setCsrfToken } = require("../src/services/apiClient.js");
 
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
 assert.ok(base && new URL(base).hostname === "127.0.0.1", "A disposable loopback API is required");

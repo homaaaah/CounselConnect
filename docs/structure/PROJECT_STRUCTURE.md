@@ -14,7 +14,7 @@ COUNSELCONNECT/
   db/           Reference SQL snapshots and database exports
   design/       Large source diagrams and readable diagram exports
   docs/         Product, workflow, security, and technical documentation
-  frontend/     React/Vite/Tailwind client and Capacitor shell
+  frontend/     JavaScript (React)/Vite/Tailwind client and Capacitor shell
 ```
 
 Root files should stay limited to repository-wide setup, ignore rules, and
@@ -83,7 +83,7 @@ frontend/
     hooks/      Global hooks
     pages/      Current route-level pages
     services/   API client and service adapters
-    types/      Shared TypeScript types
+    types/      Shared API type/shaped modules
     utils/      Shared pure helpers
 ```
 
@@ -100,7 +100,7 @@ features/{feature_name}/
   components/   Feature-only UI components
   hooks/        Feature-only hooks
   pages/        Feature route pages, when they are not shared route shells
-  index.ts      Public exports for the feature
+  index.js     Public exports for the feature
 ```
 
 Keep API DTO fields in `snake_case` to match the backend contract. Convert to

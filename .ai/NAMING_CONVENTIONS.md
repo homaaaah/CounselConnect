@@ -9,8 +9,6 @@ Authoritative for new APIs, schemas, database objects, events, and source files.
 | Student | `STUDENT`, `student` |
 | Guidance Staff | `GUIDANCE_STAFF`, `guidance_staff` |
 | Guidance Counselor / Counselor | `COUNSELOR`, `counselor` |
-| Authenticated user session | `user_sessions`, `session` |
-| Counselor SOS availability | `AVAILABLE`, `BUSY`, `UNAVAILABLE` |
 | Certificate of Registration | `COR`, `cor` |
 | Guidance Office location | `guidance_office_location` |
 | Availability delivery mode | `delivery_mode` |
@@ -27,7 +25,7 @@ Never introduce `ADMIN`, `administrator`, `student_id` evidence, `emotional_base
 | Layer | Convention | Example |
 |---|---|---|
 | Python files/functions/variables | `snake_case` | `enrollment_verification.py`, `approve_verification` |
-| Python/TypeScript types, React components | `PascalCase` | `EnrollmentVerificationResponse`, `SOSCaseCard` |
+| Python/JavaScript classes, React components | `PascalCase` | `EnrollmentVerificationResponse`, `SOSCaseCard` |
 | React hooks | `useCamelCase` | `useAppointmentSlots` |
 | TS/JS variables/functions/props | `camelCase` | `verificationStatus` |
 | Constants/enum values/error codes | `SCREAMING_SNAKE_CASE` | `NEEDS_RESUBMISSION`, `SLOT_UNAVAILABLE` |
@@ -35,7 +33,7 @@ Never introduce `ADMIN`, `administrator`, `student_id` evidence, `emotional_base
 | Database tables | plural `snake_case` | `enrollment_verifications` |
 | URL resource segments | plural `kebab-case` | `/enrollment-verifications` |
 | Environment variables | `COUNSELCONNECT_` + uppercase | `COUNSELCONNECT_DATABASE_URL` |
-| Tests | mirror target + `_test`/`.test` | `test_appointments.py`, `AppointmentCard.test.tsx` |
+| Tests | mirror target + `_test`/`.test` | `test_appointments.py`, `AppointmentCard.test.jsx` |
 
 Keep API DTO fields exactly `snake_case` in frontend API types; use `camelCase` only inside UI logic. Do not add silent global case conversion.
 
@@ -45,7 +43,6 @@ Keep API DTO fields exactly `snake_case` in frontend API types; use `camelCase` 
 - FK: referenced role/entity + `_id` (`student_user_id`, `reviewed_by_user_id`). Add role qualifiers when one table references `users` more than once.
 - Boolean: `is_`, `has_`, or `can_`; timestamp: `_at`; calendar date: established domain name such as `valid_until`.
 - Use created/updated timestamps only when needed. Store timestamps in UTC.
-- Use `user_sessions` for revocable authentication sessions, with `session_id`, `token_hash`, `csrf_token_hash` when server-held, `last_activity_at`, `absolute_expires_at`, and `revoked_at`. Never name or store a raw session token as an identifier.
 - Junction table combines plural entities; composite FKs form the PK (`wellness_resource_categories`).
 - Status columns are `status`; specialized outputs use explicit names (`urgency_result_code`, `cleanup_state`).
 - Use `delivery_mode` for a slot's supported delivery capability and `appointment_mode` for the Student's selected mode.
@@ -69,7 +66,7 @@ The v1 table names in `docs/DATABASE.md` are canonical.
   - `POST /appointments/{appointment_id}/confirm`
   - `POST /sos-cases/{sos_case_id}/close`
   - `POST /wellness-resources/{resource_id}/publish`
-- Auth action exceptions use `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me`, and `/auth/csrf`, plus explicit password-recovery actions.
+- Auth action exceptions use `/auth/login`, `/auth/refresh`, `/auth/logout`.
 - Never use role-specific duplicate routes when authorization can govern one resource route.
 
 ## Payloads and errors
@@ -85,7 +82,6 @@ The v1 table names in `docs/DATABASE.md` are canonical.
 | Domain | Values |
 |---|---|
 | Account | `PENDING_VERIFICATION`, `ACTIVE`, `VERIFICATION_EXPIRED` |
-| Counselor SOS availability | `AVAILABLE`, `BUSY`, `UNAVAILABLE` |
 | Verification | `PENDING`, `APPROVED`, `NEEDS_RESUBMISSION`, `REJECTED`, `EXPIRED` |
 | Availability status | `AVAILABLE`, `RESERVED` |
 | Availability delivery mode | `ONLINE`, `FACE_TO_FACE`, `BOTH` |

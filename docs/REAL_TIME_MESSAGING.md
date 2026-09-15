@@ -14,7 +14,6 @@ A conversation must not be linked to both an appointment and SOS case. All parti
 
 ## Appointment-linked conversations
 
-- Implemented status: the messaging service validates participant/mode/type linkage for an already-linked conversation and closes it when the appointments service reports an authorized terminal outcome; it does not create or open conversations — that awaits the Live Chat transport decision (ADR-P02).
 - The appointments service supplies an authorized confirmed-online-appointment reference when the scheduled start is reached.
 - Messaging revalidates the Student, Counselor, appointment mode/status, and participant match before creating or reopening the conversation.
 - One appointment may link at most one `APPOINTMENT` conversation, and one conversation may belong to at most one appointment.

@@ -1,6 +1,6 @@
 # CounselConnect — Teammate Setup Guide
 
-Everything needed to run the full stack on your own machine: backend (FastAPI + MySQL), frontend (React + Vite), database, seed data, and the working demo flow. Follow top to bottom; each step says exactly what success looks like.
+Everything needed to run the full stack on your own machine: backend (FastAPI + MySQL), frontend (JavaScript/React + Vite), database, seed data, and the working demo flow. Follow top to bottom; each step says exactly what success looks like.
 
 ## What you need installed first
 
@@ -28,7 +28,7 @@ Connect to your local MySQL as any admin user and run:
 CREATE DATABASE counselconnect CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-Keep this connection info (host/user/password) — you'll put it in `backend/.env` next. The approved baseline SQL in step 3 creates all the tables; alembic only adds later migrations on top of it.
+Keep this connection info (host/user/password) — you'll put it in `backend/.env` next. You do NOT need to create any tables by hand; migrations do that.
 
 ## 2. Backend setup
 
@@ -59,16 +59,10 @@ The Gmail app password is NOT your normal password — create one at myaccount.g
 
 ## 3. Create tables + seed data
 
-From `backend/`:
-
 ```bash
-mysql -u your_mysql_user -p < ..\db\CounselConnect_Initial_Database_v4.1.sql
-alembic stamp 8f0f8c585641
-alembic upgrade head     # adds user_sessions → 22 tables total
+alembic upgrade head     # creates all 21 tables
 mysql -u your_mysql_user -p counselconnect < dev_seed.sql
 ```
-
-On Mac/Linux use the forward-slash path `../db/CounselConnect_Initial_Database_v4.1.sql`. The baseline SQL creates the `counselconnect` database itself, so step 1 can be skipped if your MySQL user has rights to create it.
 
 `dev_seed.sql` inserts the shared demo data (2 campuses, 1 department, 2 programs, hero text, 3 FAQs, 1 announcement, 3 emergency contacts). Without it the landing page looks empty and the registration form has no programs to pick.
 
@@ -96,10 +90,9 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 ## 6. Demo flow to verify your setup (5 minutes)
 
 1. **Register** — http://localhost:5173 → *Register* → fill the form, pick a program, attach any PDF (fake is fine, e.g. rename a blank `test.pdf`) → submit. Success = confirmation message.
-2. **Review** — http://localhost:5173/#login → the sign-in page has separate forms: students sign in with their student number, staff (including the counselor) sign in with email. Use the staff form with the seeded counselor: `counselor@ucc.edu.ph` / `counselor-dev-2026` → go to `#review` → your application appears under *Pending* → click the applicant to see details and the PDF preview → **Approve**.
+2. **Review** — http://localhost:5173/#login → sign in as the seeded counselor: email `counselor@ucc.edu.ph`, password `counselor-dev-2026` → go to `#review` → your application appears under *Pending* → click the applicant to see details and the PDF preview → **Approve**.
    - The counselor account comes from `dev_seed.sql` (developer-created per ADR-005). Rotate this password before any real deployment.
 3. **Check result** — *All applications* tab shows `APPROVED` with validity date; your inbox (if SMTP configured) has the decision email.
-4. **Appointments (optional, ~3 min)** — while still signed in as the counselor, go to `#appointments` → create availability (campus, date, time range, slot duration, mode) → then sign the student in (student-number form) → `#appointments` → request an available slot → the request shows `PENDING` → sign the counselor back in → `#appointments` → confirm (or reject) the request.
 
 ## Common problems
 
@@ -123,7 +116,7 @@ From `backend/`, `python -m pytest app/tests -q` runs database-free tests and sk
 
 Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema. The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
 
-From `frontend/`, run `npm test` for session/reviewer component regressions and `npm run build` for TypeScript plus production compilation. With Node and frontend dependencies installed, the backend suite also exercises the actual React app against a temporary loopback FastAPI server and the isolated test schema (login, reload, approval, logout). This is an HTTP/component integration check, not a full browser test. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
+From `frontend/`, run `npm test` for session/reviewer component regressions and `npm run build` for the Vite production compilation. With Node and frontend dependencies installed, the backend suite also exercises the actual React app against a temporary loopback FastAPI server and the isolated test schema (login, reload, approval, logout). This is an HTTP/component integration check, not a full browser test. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
 
 The backend automatically runs COR expiry/deletion retries while serving requests. See `REGISTRATION_VERIFICATION.md` for cleanup monitoring and one-shot scheduling when the application is offline.
 
@@ -131,7 +124,7 @@ The backend automatically runs COR expiry/deletion retries while serving request
 
 - **Never commit `.env`** — Git already blocks it via `.gitignore`; if `git status` shows it, something is wrong, stop and ask in the team chat.
 - **Never commit anything under `backend/var/`** — that folder holds real applicant COR PDFs (private data). It is ignored too.
-- Team Git workflow (`.ai/CONTRIBUTING.md`): one branch per task, open a PR, get review before merge. Never work on or push directly to `main`.
+- Pull before you start working, commit small, push often: `git add -A` → `git commit -m "short message"` → `git push`.
 - `docs/` and `.ai/` are read-only contracts (the "source of truth"). Do not edit them casually — changes go through the team.
 - Auth is ADR-019 (opaque HttpOnly session cookie + CSRF + Argon2id). The dev counselor password must be rotated before any real deployment.
 - Don't share the repo link publicly; it's a private capstone repo.
@@ -139,5 +132,5 @@ The backend automatically runs COR expiry/deletion retries while serving request
 ## Quick reference
 
 - Backend: http://localhost:8000 · API docs: http://localhost:8000/docs · Health: `/api/v1/health`
-- Frontend: http://localhost:5173 · Sign in: `#login` (students: student number; staff: email; counselor: `counselor@ucc.edu.ph` / `counselor-dev-2026`) · Reviewer console: `#review` · Appointments console: `#appointments`
+- Frontend: http://localhost:5173 · Sign in: `#login` (counselor: `counselor@ucc.edu.ph` / `counselor-dev-2026`) · Reviewer console: `#review`
 - Repo: https://github.com/jekjek29/CounselConnect

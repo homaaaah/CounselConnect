@@ -3,7 +3,7 @@
 ## Shape
 
 ```text
-React/Vite/Tailwind (+ Capacitor)
+JavaScript (React)/Vite/Tailwind (+ Capacitor)
           │ HTTPS; web cookie session
        FastAPI modular monolith
           │ routes → schemas → services → repositories

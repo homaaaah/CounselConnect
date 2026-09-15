@@ -1,6 +1,6 @@
 """Appointment scheduling contracts; timestamps serialize in UTC."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -112,5 +112,86 @@ class AppointmentResponse(UTCResponse):
     conversation_id: int | None
     status: AppointmentStatus
     rejection_note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CalendarBlockRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    blocked_date: date
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+
+
+class CalendarDayResponse(BaseModel):
+    calendar_date: date
+    is_weekday: bool
+    is_blocked: bool
+    is_past: bool
+    available_times: list[str]
+
+
+class CalendarResponse(BaseModel):
+    timezone: str
+    business_hours: str
+    days: list[CalendarDayResponse]
+
+
+class WeeklyScheduleCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    campus_id: int = Field(gt=0)
+    day_of_week: int = Field(ge=1, le=7)
+    start_time: time
+    end_time: time
+    slot_duration_minutes: int = Field(ge=15, le=240)
+    delivery_mode: DeliveryMode
+
+    @model_validator(mode="after")
+    def validate_period(self):
+        if self.end_time <= self.start_time:
+            raise ValueError("The end time must be after the start time.")
+        start = self.start_time.hour * 60 + self.start_time.minute
+        end = self.end_time.hour * 60 + self.end_time.minute
+        if (end - start) % self.slot_duration_minutes:
+            raise ValueError("The selected time range must contain whole appointment slots.")
+        return self
+
+
+class WeeklyScheduleResponse(UTCResponse):
+    weekly_schedule_id: int
+    counselor_user_id: int
+    campus_id: int
+    day_of_week: int
+    start_time: time
+    end_time: time
+    slot_duration_minutes: int
+    delivery_mode: DeliveryMode
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AvailabilityBlockCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
+    is_all_day: bool = False
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        self.starts_at = self.starts_at.astimezone(timezone.utc)
+        self.ends_at = self.ends_at.astimezone(timezone.utc)
+        if self.ends_at <= self.starts_at:
+            raise ValueError("The block end must be after its start.")
+        return self
+
+
+class AvailabilityBlockResponse(UTCResponse):
+    availability_block_id: int
+    counselor_user_id: int
+    starts_at: datetime
+    ends_at: datetime
+    is_all_day: bool
+    reason: str | None
     created_at: datetime
     updated_at: datetime

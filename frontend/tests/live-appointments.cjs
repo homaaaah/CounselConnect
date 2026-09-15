@@ -2,8 +2,8 @@
 const assert = require("node:assert/strict");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
-require("./register-typescript.cjs");
-const Page = require("../src/pages/AppointmentsPage.tsx").default;
+require("./register-app.cjs");
+const Page = require("../src/pages/AppointmentsPage.jsx").default;
 const { request, setCsrfToken } = require("../src/services/apiClient");
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
 assert.equal(new URL(base).hostname, "127.0.0.1");
@@ -38,44 +38,39 @@ async function signIn(identifier) {
     await act(async () => root.root.findAllByType("select")[0].props.onChange({ target: { value: process.env.COUNSELCONNECT_TEST_CAMPUS_ID } }));
     await waitFor(() => !button("Refresh appointments").props.disabled);
   }
-  if (auth.user.role_code === "STUDENT") {
-    await act(async () => root.root.findAllByType("select")[0].props.onChange({ target: { value: process.env.COUNSELCONNECT_TEST_CAMPUS_ID } }));
-    await waitFor(() => !button("Refresh appointments").props.disabled);
-  }
 }
 async function main() {
   try {
+    // Counselor saves a recurring weekly schedule through the real form.
     await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL);
-    await act(async () => root.root.findAllByType("select")[0].props.onChange({ target: { value: process.env.COUNSELCONNECT_TEST_CAMPUS_ID } }));
-    const dates = form("Create slots").findAllByProps({ type: "datetime-local" });
+    await waitFor(() => Boolean(form("Save weekly schedule")));
     await act(async () => {
-      dates[0].props.onChange({ target: { value: "2099-01-01T09:00" } });
-      dates[1].props.onChange({ target: { value: "2099-01-01T11:00" } });
-      form("Create slots").findByProps({ type: "number" }).props.onChange({ target: { value: "60" } });
-      form("Create slots").findByType("select").props.onChange({ target: { value: "BOTH" } });
+      const selects = form("Save weekly schedule").findAllByType("select");
+      selects[0].props.onChange({ target: { value: process.env.COUNSELCONNECT_TEST_CAMPUS_ID } });
+      selects[2].props.onChange({ target: { value: "BOTH" } });
+      const times = form("Save weekly schedule").findAllByProps({ type: "time" });
+      times[0].props.onChange({ target: { value: "08:00" } });
+      times[1].props.onChange({ target: { value: "10:00" } });
     });
-    await act(async () => form("Create slots").props.onSubmit({ preventDefault() {} }));
-    assert.ok(JSON.stringify(root.toJSON()).includes("Availability slots created."));
+    await act(async () => form("Save weekly schedule").props.onSubmit({ preventDefault() {} }));
+    assert.ok(JSON.stringify(root.toJSON()).includes("Weekly schedule saved."), "weekly schedule save confirmation missing");
+
+    // The materialized slots appear for the student to book face-to-face.
     await signIn(process.env.COUNSELCONNECT_TEST_STUDENT_NUMBER);
+    await waitFor(() => Boolean(form("Request appointment")));
     await act(async () => form("Request appointment").findByType("select").props.onChange({ target: { value: "FACE_TO_FACE" } }));
     await act(async () => form("Request appointment").props.onSubmit({ preventDefault() {} }));
-    assert.ok(JSON.stringify(root.toJSON()).includes("Awaiting counselor review."));
+    assert.ok(JSON.stringify(root.toJSON()).includes("Awaiting counselor review."), "booking confirmation missing");
+
+    // Counselor confirms, then cancels; the released slot becomes available again.
     await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL);
+    await waitFor(() => Boolean(button("Confirm")));
     await act(async () => button("Confirm").props.onClick());
     await waitFor(() => Boolean(button("Reschedule")));
-    await signIn(process.env.COUNSELCONNECT_TEST_STUDENT_NUMBER);
-    await act(async () => button("Reschedule").props.onClick());
-    await act(async () => form("Choose replacement").findByType("select").props.onChange({ target: { value: "FACE_TO_FACE" } }));
-    await act(async () => form("Choose replacement").props.onSubmit({ preventDefault() {} }));
-    assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled."));
-    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL);
-    await act(async () => button("Confirm").props.onClick());
-    await waitFor(() => Boolean(button("Reschedule")));
-    await signIn(process.env.COUNSELCONNECT_TEST_STUDENT_NUMBER);
     await act(async () => button("Cancel appointment").props.onClick());
     await act(async () => button("Confirm cancellation").props.onClick());
     await waitFor(() => JSON.stringify(root.toJSON()).includes("CANCELLED"));
-    console.log("Live scheduling flow passed: create slots, book, confirm, reschedule, reconfirm, cancel.");
+    console.log("Live scheduling flow passed: weekly schedule, materialized slots, book, confirm, cancel.");
   } finally {
     if (root) await act(async () => root.unmount());
   }

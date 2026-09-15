@@ -9,7 +9,7 @@ Core rules (docs/REAL_TIME_MESSAGING.md, ARCHITECTURE.md):
 - Appointments/SOS modules request conversations through THIS service
   (service contract), never by creating records directly.
 
-# TODO: Real-time transport (WebSocket vs polling) is pending ADR-P02.
+# Real-time transport is native WebSocket per ADR-022 (implementation pending).
 """
 
 from __future__ import annotations

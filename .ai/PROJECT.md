@@ -1,35 +1,40 @@
 # CounselConnect — Project Context
 
-- **Client:** University of Caloocan City Guidance and Counseling Office
-- **Goal:** centralized student guidance workflows plus Counselor-reviewed wellness resource discovery
-- **Team:** four-person capstone team
-- **Users:** Student, Guidance Staff, Guidance Counselor
-- **Architecture:** modular monolith
-- **Stack:** React + Vite + TailwindCSS; FastAPI; MySQL 8.4 LTS; SQLAlchemy 2.0 + PyMySQL; Alembic; CapacitorJS
+CounselConnect is a University of Caloocan City guidance platform for Students, Guidance Staff, and Counselors.
 
-## Feature ownership
+## Product areas
 
-| Area | Contract |
-|---|---|
-| Accounts/enrollment verification | `docs/REGISTRATION_VERIFICATION.md` |
-| Appointments | `docs/APPOINTMENT_SCHEDULING.md` |
-| Messaging | `docs/REAL_TIME_MESSAGING.md` |
-| SOS | `docs/SOS_TRIAGE.md` |
-| Optional local expression cue | `docs/AI_EMOTIONAL_BASELINE.md` |
-| Wellness resources | `docs/WELLNESS_RESOURCE_DISCOVERY.md` |
-| Virtual assistant | `docs/VIRTUAL_GUIDANCE_ASSISTANT.md` |
-| CMS/announcements | `docs/CONTENT_MANAGEMENT.md` |
-| Counselor operations | `docs/COUNSELOR_DASHBOARD.md` |
-| Roles/security/data | `docs/USER_ROLES.md`, `docs/SECURITY.md`, `docs/DATABASE.md` |
+- Registration and temporary COR verification
+- Counselor-managed appointment availability and Student booking
+- Student–Counselor messaging and appointment-linked chat
+- SOS case handling and Counselor presence
+- Counselor-reviewed wellness resources and announcements
+- Assistant navigation and approved FAQ/resource responses
+- Counselor operations, account management, and audit views
 
-## Stable scope
+## Technology
 
-- Student accounts activate only after current-COR approval and remain usable through `valid_until`.
-- Guidance Staff performs assigned COR verification only. Counselor is the highest-authority role and owns counseling plus operational/admin functions.
-- Appointments use concrete availability slots and Counselor approval.
-- Messaging is one Student ↔ one Counselor; bodies are deleted 30 days after closure.
-- SOS is an approved rule-based flow; optional expression output is context only.
-- Automated resources remain `PENDING` until Counselor review; published cards redirect to canonical sources.
-- Assistant answers navigation, approved FAQs, and published resources only; it keeps no persistent chat history.
+The system is a modular monolith:
 
-Open choices are only in `.ai/DECISIONS.md`.
+- Frontend: JavaScript, React, Vite, TailwindCSS, and CapacitorJS
+- Backend: FastAPI with SQLAlchemy 2.0 and PyMySQL
+- Database: MySQL 8.4 LTS, managed with Alembic
+
+Backend routes handle transport, schemas validate contracts, services enforce authorization and business rules, and repositories handle persistence. Web authentication uses secure HttpOnly opaque sessions with CSRF protection.
+
+## Project boundaries
+
+- Backend authorization is authoritative.
+- Store timestamps in UTC and display them in Asia/Manila.
+- COR files are private and temporary; delete them after a decision or seven-day expiry.
+- Facial-expression processing is optional, local-device only, session-only, and non-diagnostic.
+- Do not store biometrics, raw facial media, durable assistant history, or mirrored third-party articles.
+- Wellness content requires Counselor review before publication.
+- The system does not diagnose or provide medical recommendations.
+
+## Related authorities
+
+- [Architecture](ARCHITECTURE.md) — module boundaries and critical flows
+- [Requirements](REQUIREMENTS.md) — approved product behavior
+- [Naming conventions](NAMING_CONVENTIONS.md) — canonical names and values
+- [Decisions](DECISIONS.md) — approved architectural decisions

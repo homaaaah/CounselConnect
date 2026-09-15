@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Anchor jumps (#landing, #features, back-to-top) glide instead of snapping */
+html {
+  scroll-behavior: smooth;
+}
+
 /*
   CounselConnect global stylesheet.
 
@@ -17,15 +22,16 @@
 */
 
 :root {
-  --text: #1c2e28;
-  --background: #faf7f2;
-  --primary: #2d5a4c;
-  --secondary: #f4e2d8;
-  --accent: #e07a5f;
-  --text-dark: #18181b;
-  --text-muted: #71717a;
-  --border-color: #e4e4e7;
-  --card-bg: #ffffff;
+  /* Counseling blue palette — mirrors the `counseling` scale in tailwind.config.js */
+  --counseling-bg-tint: #eff6ff;
+  --counseling-subtle-fill: #dbeafe;
+  --counseling-light-accent: #bfdbfe;
+  --counseling-muted-text: #93c5fd;
+  --counseling-primary: #60a5fa;
+  --counseling-active-focus: #2563eb;
+  --counseling-hover-primary: #3b82f6;
+  --counseling-high-contrast: #1d4ed8;
+  --counseling-deep-contrast: #1e3a8a;
 }
 
 /* ============================================
@@ -33,7 +39,7 @@
    ============================================ */
 
 .landing-page {
-  background-color: #ffffff;
+  background-color: #ececf3;
   color: #18181b;
   line-height: 1.5;
 }
@@ -44,17 +50,88 @@
   padding: 0 2rem;
 }
 
-/* Navbar */
+/* Navbar — fixed glass bar: transparent over the hero (bg.jpg shows through),
+   solid --counseling-bg-tint once the page scrolls. Still pinned at the top. */
 .landing-page header {
-  background: #ffffff;
-  border-bottom: 1px solid var(--border-color);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: transparent;
+  border-bottom: 1px solid transparent;
   padding: 1.25rem 0;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s,
+    padding 0.2s;
 }
 
+/* Glass pill on the nav (LiquidGlass config: blur 4, transparent background,
+   white 1px border @ 0.4 opacity, radius 30, saturate 113, brightness 95) */
 .landing-page .nav-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0.6rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  background: transparent;
+  backdrop-filter: blur(4px) saturate(113%) brightness(95%);
+  -webkit-backdrop-filter: blur(4px) saturate(113%) brightness(95%);
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.landing-page header.scrolled {
+  height: 70px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  background: var(--counseling-bg-tint);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* Solid tinted bar once scrolled — glass blur has nothing left to blur */
+.landing-page header.scrolled .nav-container {
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Nav links — uniform colors in both states (solid, no alpha), with an
+   animated underline line in --counseling-hover-primary on hover */
+.landing-page header.scrolled .nav-links a {
+  color: var(--text-dark);
+}
+
+.landing-page header.scrolled .nav-links a.active {
+  color: #000000;
+}
+
+.landing-page header.scrolled .nav-links a:hover {
+  color: var(--counseling-hover-primary);
+}
+
+/* White nav text while floating over the hero photo — solid white so every
+   link (Home, Features, News, FAQ) reads identically over the glass */
+.landing-page header:not(.scrolled) .logo,
+.landing-page header:not(.scrolled) .nav-toggle {
+  color: #ffffff;
+}
+
+.landing-page header:not(.scrolled) .nav-links a {
+  color: #ffffff;
+}
+
+.landing-page header:not(.scrolled) .nav-links a.active {
+  color: #ffffff;
+}
+
+.landing-page header:not(.scrolled) .nav-links a:hover {
+  color: var(--counseling-hover-primary);
 }
 
 .landing-page .logo {
@@ -70,22 +147,43 @@
   gap: 2.5rem;
   list-style: none;
   font-size: 0.95rem;
-  color: var(--text-muted);
+  color: var(--counseling-muted-text);
 }
 
 .landing-page .nav-links a {
   text-decoration: none;
-  color: var(--text-muted);
-  transition: color 0.2s;
+  color: var(--text-dark);
+  position: relative;
+  padding-bottom: 3px;
+  transition: color 0.15s;
 }
 
-.landing-page .nav-links a:hover,
-.landing-page .nav-links a.active {
-  color: var(--text-dark);
+/* Hover line — slides in under the link in --counseling-hover-primary */
+.landing-page .nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--counseling-hover-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s;
+}
+
+.landing-page .nav-links a:hover::after {
+  transform: scaleX(1);
+}
+
+/* Hover text aligns with the hover line color (both nav states) */
+.landing-page .nav-links a:hover {
+  color: var(--counseling-hover-primary);
 }
 
 .landing-page .btn-login {
-  background: #18181b;
+  background: var(--counseling-deep-contrast);
   color: #ffffff;
   padding: 0.5rem 1.5rem;
   border-radius: 20px;
@@ -93,107 +191,303 @@
   font-weight: 600;
   text-decoration: none;
   letter-spacing: 0.5px;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .landing-page .btn-login:hover {
-  background: #000000;
+  background: var(--counseling-hover-primary);
+}
+
+/* Mobile nav toggle (hidden on desktop) */
+.landing-page .nav-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  font-size: 1.15rem;
+  color: var(--text-dark);
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* Mobile drawer (below 768px) — tinted so links stay readable over the hero */
+.landing-page #landing-mobile-nav {
+  display: none;
+  background: var(--counseling-bg-tint);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+@media (max-width: 767px) {
+  .landing-page .nav-links,
+  .landing-page header .nav-container > .btn-login {
+    display: none;
+  }
+
+  .landing-page .nav-toggle {
+    display: inline-flex;
+  }
+
+  /* stacked layout on small screens — the 70px bar grows when the drawer opens */
+  .landing-page header.scrolled {
+    height: auto;
+    min-height: 70px;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0;
+  }
+
+  .landing-page #landing-mobile-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem 1rem;
+  }
+
+  .landing-page #landing-mobile-nav[hidden] {
+    display: none;
+  }
+
+  .landing-page #landing-mobile-nav a {
+    text-decoration: none;
+    color: var(--text-dark);
+    font-size: 0.95rem;
+    padding: 0.65rem 0.25rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .landing-page #landing-mobile-nav a:hover,
+  .landing-page #landing-mobile-nav a.active {
+    color: var(--primary);
+  }
+
+  .landing-page #landing-mobile-nav .btn-login {
+    align-self: flex-start;
+    margin-top: 0.75rem;
+    border: none;
+    cursor: pointer;
+  }
 }
 
 /* Hero Section */
 .landing-page .hero {
-  background: #ffffff;
-  padding: 80px 0 100px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.356) 100%,
+      rgba(255, 255, 255, 0.99) 40%,
+      rgba(255, 255, 255, 0) 10%
+    ),
+    linear-gradient(
+      to top,
+      var(--counseling-deep-contrast) 1%,
+      transparent 40%
+    ),
+    url("./assets/bg.jpg") center / cover no-repeat;
+  /* top padding clears the fixed glass navbar (~68px tall) */
+  min-height: 700px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 148px 0 100px;
   text-align: center;
-  border-bottom: 1px solid var(--border-color);
+  /* bg-tint drop shadow spilling from the hero's bottom edge; z-index keeps
+     it visible above the next section's background. Deepened toward
+     --counseling-subtle-fill so the glow actually reads against white. */
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    0 12px 28px -10px var(--counseling-subtle-fill),
+    0 32px 64px -24px var(--counseling-subtle-fill);
+}
+
+/* keep anchor targets clear of the fixed navbar for #features/#news/#faq */
+.landing-page #features,
+.landing-page #news,
+.landing-page #faq {
+  scroll-margin-top: 84px;
 }
 
 .landing-page .hero h1 {
   font-family: Georgia, serif;
-  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  font-size: clamp(2.75rem, 4vw, 4.25rem);
   font-weight: 400;
-  margin-bottom: 1.25rem;
-  color: #27272a;
+  line-height: 1.15;
+  margin-bottom: 1.5rem;
+  color: var(--counseling-bg-tint);
 }
 
 .landing-page .hero h1 span {
   font-style: italic;
 }
 
+/* "Gentle Support" — accent headline phrase: weight + color, not size */
+.landing-page .hero h1 i {
+  color: var(--counseling-high-contrast);
+  font-weight: 600;
+  font-style: italic;
+}
+
 .landing-page .hero p {
-  color: var(--text-muted);
-  font-size: 1rem;
+  color: var(--counseling-bg-tint);
+  font-size: 1.125rem;
+  line-height: 1.6;
   max-width: 650px;
-  margin: 0 auto 2rem;
+  margin: 0 auto 2.25rem;
 }
 
 .landing-page .btn-connect {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #27272a;
-  color: white;
-  padding: 0.75rem 1.75rem;
+  background: var(--counseling-deep-contrast);
+  color: #ffffff;
+  padding: 0.85rem 2rem;
   border-radius: 30px;
   text-decoration: none;
   font-weight: 500;
-  font-size: 0.9rem;
-  transition: background 0.2s;
+  font-size: 0.95rem;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .landing-page .btn-connect:hover {
-  background: #18181b;
+  background: var(--counseling-hover-primary);
 }
 
-/* Why Choose Us Section */
+/* Why Choose Us Section — generous whitespace, white background */
 .landing-page .why-section {
-  padding: 80px 0 100px;
+  padding: 120px 0 140px;
+  background: #ffffff;
 }
 
 .landing-page .why-grid {
   display: grid;
   grid-template-columns: 1fr 3fr;
-  gap: 40px;
+  gap: 64px;
   align-items: start;
 }
 
+/* Left column lines up with the container edge — same left alignment as the
+   glass navbar and the hero content above it */
+.landing-page .why-left {
+  align-self: center;
+}
+
 .landing-page .why-left h2 {
-  font-size: 2.5rem;
+  font-size: 2.75rem;
   font-weight: 700;
   line-height: 1.2;
   margin-bottom: 1rem;
-  color: #18181b;
+  color: var(--counseling-high-contrast);
+  text-align: left;
 }
 
 .landing-page .why-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 24px;
 }
 
 .landing-page .why-card {
-  background: var(--card-bg);
+  position: relative;
+  height: 320px;
+  background: white;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
 }
 
+/* photo fills the entire card */
 .landing-page .why-card-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
   background: #e4e4e7;
-  height: 240px;
 }
 
+/* Bottom overlay only — same fade mechanism as the hero's bottom overlay,
+   using bg-tint so the high-contrast title stays readable on the band */
+.landing-page .why-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--counseling-subtle-fill) 0%,
+    var(--counseling-subtle-fill) 3%,
+    transparent 62%
+  );
+  pointer-events: none;
+}
+
+/* Hover veil — fades in behind the description text */
+.landing-page .why-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--counseling-bg-tint);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+.landing-page .why-card:hover::before {
+  opacity: 0.55;
+}
+
+/* title floats above the overlays */
 .landing-page .why-card-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
   padding: 20px;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #18181b;
+  color: var(--text-dark);
 }
 
-/* Bio Section */
+/* description appears on hover, above the title */
+.landing-page .why-card-desc {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 76px;
+  z-index: 1;
+  margin: 0;
+  padding: 0 20px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-dark);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+  pointer-events: none;
+}
+
+.landing-page .why-card:hover .why-card-desc {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Bio Section — bg-tint band framed by subtle-fill borders (no top shadow) */
 .landing-page .bio-section {
   padding: 100px 0;
+  background: var(--counseling-bg-tint);
+  border-top: 1px solid var(--counseling-subtle-fill);
+  border-bottom: 1px solid var(--counseling-subtle-fill);
 }
 
 .landing-page .bio-grid {
@@ -204,13 +498,20 @@
 }
 
 .landing-page .bio-image-placeholder {
-  background: #e4e4e7;
+  width: 100%;
   height: 400px;
+  object-fit: cover;
+  /* portrait photo (1600×2399) has ~400px of empty backdrop above the
+     subject; anchoring at 40% trims most of that dead upper space while
+     keeping headroom and the face inside the 400px-tall crop window */
+  object-position: center 40%;
+  display: block;
+  background: #e4e4e7;
   border-radius: 4px;
 }
 
 .landing-page .bio-card {
-  background: var(--card-bg);
+  background: var(--counseling-subtle-fill);
   padding: 50px;
   border-radius: 4px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
@@ -220,7 +521,7 @@
   font-size: 1.75rem;
   font-weight: 600;
   margin-bottom: 1.5rem;
-  color: #18181b;
+  color: var(--counseling-high-contrast);
 }
 
 .landing-page .bio-card p {
@@ -232,7 +533,7 @@
 
 /* Blog / Announcements Section */
 .landing-page .blog-section {
-  padding: 100px 0;
+  padding: 60px 0;
   background: #ffffff;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
@@ -261,6 +562,11 @@
   color: #18181b;
 }
 
+/* FAQ headline — tag removed, heading carries the high-contrast accent */
+.landing-page .section-title-center .faq-heading {
+  color: var(--counseling-high-contrast);
+}
+
 .landing-page .blog-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -287,6 +593,7 @@
 }
 
 .landing-page .blog-content {
+  background: var(--counseling-subtle-fill);
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -326,7 +633,7 @@
 
 /* FAQ Section (CMS-driven) */
 .landing-page .faq-section {
-  padding: 80px 0 100px;
+  padding: 50px 0 100px;
 }
 
 .landing-page .faq-grid {
@@ -336,7 +643,7 @@
 }
 
 .landing-page .faq-card {
-  background: var(--card-bg);
+  background: var(--counseling-subtle-fill);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 24px;
@@ -355,10 +662,10 @@
   line-height: 1.6;
 }
 
-/* Footer */
+/* Footer — white band */
 .landing-page footer {
-  background: #e4e4e7;
-  padding: 60px 0 30px;
+  background: #ffffff;
+  padding: 30px 0;
   border-top: 1px solid #d4d4d8;
   color: #3f3f46;
 }
@@ -367,7 +674,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 40px;
-  margin-bottom: 50px;
+  margin-bottom: 30px;
 }
 
 .landing-page .footer-col h3 {
@@ -414,21 +721,42 @@
   color: #71717a;
 }
 
+/* Floating back-to-top — fixed to the viewport; hidden while the hero is
+   on screen (the .show class is added once the page scrolls past the hero) */
 .landing-page .back-to-top {
-  width: 40px;
-  height: 40px;
-  background: #3f3f46;
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  background: var(--counseling-deep-contrast);
   color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  transition: background 0.2s;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition:
+    background 0.12s,
+    transform 0.2s,
+    opacity 0.2s,
+    visibility 0.2s;
+}
+
+.landing-page .back-to-top.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 .landing-page .back-to-top:hover {
-  background: #18181b;
+  background: var(--counseling-hover-primary);
+  transform: translateY(-2px);
 }
 
 .landing-page .dev-review-link {
@@ -450,7 +778,7 @@
 
 .modal-card {
   position: relative;
-  background: var(--card-bg);
+  background: var(--counseling-subtle-fill);
   border-radius: 12px;
   width: 100%;
   max-width: 420px;
@@ -608,7 +936,7 @@
 }
 
 .btn-submit.btn-success:hover {
-  background: #24483d;
+  background: var(--counseling-high-contrast);
 }
 
 .btn-submit:disabled {
@@ -736,6 +1064,14 @@
   overflow-y: auto;
 }
 
+/* Booking modal — wider than the auth card; white content surfaces
+   inside for the calendar grid and the revealed slot details */
+.modal-overlay .booking-modal-card {
+  max-width: 680px;
+  padding: 2rem;
+  background: #ffffff;
+}
+
 .modal-close {
   position: absolute;
   top: 14px;
@@ -771,8 +1107,10 @@
 
 /* ============================================
    Home page (homescreen design) — scoped
-   Ported from the Capstone homescreen prototype,
-   wired to real data (appointments, contacts).
+   Ported from the Capstone homescreen prototype.
+   Appointments/announcements/contacts sections
+   were removed (2026-09-12); scheduling lives at
+   #appointments.
    ============================================ */
 
 .home-page {
@@ -788,25 +1126,12 @@
   text-align: center;
 }
 
-.home-page .support-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--secondary);
-  color: var(--primary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.4rem 1rem;
-  border-radius: 20px;
-  margin-bottom: 1.75rem;
-}
-
 .home-page .homescreen-hero h1 {
   font-family: Georgia, serif;
   font-size: clamp(2.25rem, 4vw, 3.25rem);
   font-weight: 400;
   margin-bottom: 1.25rem;
-  color: #27272a;
+  color: var(--counseling-high-contrast);
 }
 
 .home-page .homescreen-hero p {
@@ -828,7 +1153,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #27272a;
+  background: var(--counseling-active-focus);
   color: #ffffff;
   border: none;
   padding: 0.75rem 1.75rem;
@@ -841,7 +1166,7 @@
 }
 
 .home-page .btn-action-schedule:hover {
-  background: #18181b;
+  background: var(--counseling-hover-primary);
 }
 
 .home-page .btn-action-schedule.btn-action-disabled {
@@ -853,9 +1178,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #ffffff;
-  color: var(--accent);
-  border: 1px solid var(--accent);
+  background: var(--counseling-subtle-fill);
+  color: #18181b;
+  border: none;
   padding: 0.75rem 1.75rem;
   border-radius: 30px;
   font-weight: 500;
@@ -866,199 +1191,52 @@
 }
 
 .home-page .btn-action-emergency:hover {
-  background: #fdf0ec;
+  background: var(--counseling-light-accent);
 }
 
-.home-page .features-footer-row {
-  display: flex;
-  justify-content: center;
-  gap: 2.5rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  flex-wrap: wrap;
+/* ---- Homepage responsive (tablet/mobile, Capacitor) ---- */
+
+/* Tablet: comfortable hero spacing, full-width buttons side by side */
+@media (max-width: 1024px) {
+  .home-page .homescreen-hero {
+    padding: 56px 2rem 48px;
+  }
 }
 
-.home-page .feature-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+/* Mobile: tighter hero, stacked full-width buttons, smaller type */
+@media (max-width: 640px) {
+  .home-page .homescreen-hero {
+    padding: 40px 1.25rem 36px;
+  }
+
+  .home-page .homescreen-hero h1 {
+    font-size: 2rem;
+  }
+
+  .home-page .homescreen-hero p {
+    font-size: 0.95rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .home-page .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 2rem;
+  }
+
+  .home-page .btn-action-schedule,
+  .home-page .btn-action-emergency {
+    width: 100%;
+    justify-content: center;
+    padding: 0.85rem 1.5rem;
+  }
 }
 
-/* Shared section shell */
-.home-page .home-section-inner {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 2rem 60px;
-}
-
-.home-page .home-section-inner h2 {
-  font-size: 1.4rem;
-  font-weight: 600;
-  color: #18181b;
-  margin-bottom: 1.25rem;
-}
-
-.home-page .home-empty {
-  color: var(--text-muted);
-  font-size: 0.95rem;
-}
-
-/* Upcoming appointments */
-.home-page .home-appointments-section {
-  border-top: 1px solid var(--border-color);
-  padding-top: 50px;
-}
-
-.home-page .home-appointment-list {
-  list-style: none;
-  display: grid;
-  gap: 14px;
-  margin-bottom: 1.25rem;
-}
-
-.home-page .home-appointment-card {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 16px 18px;
-  flex-wrap: wrap;
-}
-
-.home-page .home-appointment-when {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 220px;
-}
-
-.home-page .home-appointment-when i {
-  color: var(--primary);
-  margin-top: 3px;
-}
-
-.home-page .home-appointment-date {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #18181b;
-}
-
-.home-page .home-appointment-meta {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-
-.home-page .home-appointment-details {
-  flex: 1;
-  min-width: 200px;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.home-page .home-appointment-details p:first-child {
-  color: #18181b;
-  font-weight: 500;
-}
-
-.home-page .home-status-badge {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 0.3rem 0.8rem;
-  border-radius: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.home-page .home-status-badge.confirmed {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.home-page .home-status-badge.pending {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.home-page .home-manage-link {
-  font-size: 0.85rem;
-  color: #2563eb;
-  text-decoration: none;
-}
-
-.home-page .home-manage-link:hover {
-  text-decoration: underline;
-}
-
-/* Announcements */
-.home-page .home-announcements-section {
-  border-top: 1px solid var(--border-color);
-  padding-top: 50px;
-}
-
-.home-page .home-announcement-list {
-  list-style: none;
-  display: grid;
-  gap: 14px;
-}
-
-.home-page .home-announcement-item {
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 16px 18px;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.home-page .home-announcement-title {
-  font-weight: 600;
-  color: #18181b;
-  margin-bottom: 4px;
-}
-
-/* Emergency contacts */
-.home-page .home-contacts-section {
-  border-top: 1px solid var(--border-color);
-  padding-top: 50px;
-}
-
-.home-page .home-contacts-section h2 {
-  color: #b91c1c;
-}
-
-.home-page .home-contact-list {
-  list-style: none;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
-.home-page .home-contact-item {
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  border-radius: 10px;
-  padding: 16px 18px;
-}
-
-.home-page .home-contact-name {
-  font-weight: 600;
-  color: #991b1b;
-}
-
-.home-page .home-contact-number {
-  color: #b91c1c;
-  font-size: 0.95rem;
-  margin-top: 2px;
-}
-
-.home-page .home-contact-desc {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.home-page .home-contact-note {
-  margin-top: 1rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
+/* Booking modal — fit small screens; calendar scrolls inside the card */
+@media (max-width: 640px) {
+  .modal-overlay .booking-modal-card {
+    padding: 1.25rem;
+    margin: 0;
+  }
 }
