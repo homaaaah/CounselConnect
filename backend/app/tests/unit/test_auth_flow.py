@@ -274,7 +274,14 @@ def test_role_gates_counselor_endpoints(client, student, counselor):
         ("/api/v1/enrollment-verifications/1/approve", "POST", csrf),
         ("/api/v1/enrollment-verifications/1/reject", "POST", csrf),
     ):
-        r = client.request(method, path, headers=extra_headers)
+        r = client.request(
+            method,
+            path,
+            headers=extra_headers,
+            json={"comment": "Synthetic review note"}
+            if path.endswith("/reject")
+            else None,
+        )
         assert r.status_code == 403, f"{path} should be COUNSELOR-only"
         assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"
     # Counselor session: allowed.

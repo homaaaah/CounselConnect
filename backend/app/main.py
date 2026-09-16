@@ -25,19 +25,28 @@ def create_app(*, run_cleanup: bool = True) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         from app.modules.enrollment_verification.cleanup import cleanup_loop
+        from app.modules.messaging.cleanup import maintenance_loop
 
         stop = Event()
         worker = Thread(
             target=cleanup_loop, args=(stop,), name="cor-cleanup", daemon=True
         )
+        messaging_worker = Thread(
+            target=maintenance_loop,
+            args=(stop,),
+            name="messaging-maintenance",
+            daemon=True,
+        )
         if run_cleanup:
             worker.start()
+            messaging_worker.start()
         try:
             yield
         finally:
             stop.set()
             if run_cleanup:
                 await asyncio.to_thread(worker.join, 5)
+                await asyncio.to_thread(messaging_worker.join, 5)
 
     app = FastAPI(
         title="CounselConnect API",

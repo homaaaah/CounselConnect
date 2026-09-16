@@ -138,10 +138,10 @@ def approve(
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
     months = data.valid_months if data is not None else 12
-    verification, email_queued = service.approve(
+    verification, email_status = service.approve(
         actor, verification_id, valid_months=months
     )
-    verification.email_queued = email_queued
+    verification.email_status = email_status
     return verification
 
 
@@ -156,10 +156,10 @@ def reject(
     actor: CurrentUser,
     service: EnrollmentVerificationService = Depends(get_enrollment_verification_service),
 ):
-    verification, email_queued = service.reject(
+    verification, email_status = service.reject(
         actor, verification_id, reason=data.comment
     )
-    verification.email_queued = email_queued
+    verification.email_status = email_status
     return verification
 
 

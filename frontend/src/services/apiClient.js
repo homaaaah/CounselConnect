@@ -46,6 +46,8 @@ export class ApiError extends Error {
 
 /** In-memory CSRF token (survives navigation, cleared on reload/logout). */
 let csrfToken = null;
+let unauthorizedHandler = null;
+let sessionActivityHandler = null;
 
 export function setCsrfToken(token) {
   csrfToken = token;
@@ -53,6 +55,14 @@ export function setCsrfToken(token) {
 
 export function getCsrfToken() {
   return csrfToken;
+}
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = typeof handler === "function" ? handler : null;
+}
+
+export function setSessionActivityHandler(handler) {
+  sessionActivityHandler = typeof handler === "function" ? handler : null;
 }
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -76,10 +86,14 @@ export async function request(path, init = {}) {
     headers,
     credentials: "include",
   });
+  if (response.status !== 401 && sentCsrfToken && headers["X-Background-Refresh"] !== "1") {
+    sessionActivityHandler?.();
+  }
   if (!response.ok) {
     const envelope = await response.json().catch(() => null);
     if (response.status === 401 && csrfToken === sentCsrfToken) {
       setCsrfToken(null); // session gone/invalid — force re-login
+      unauthorizedHandler?.();
     }
     throw new ApiError(response.status, envelope ?? {
       error: { code: "NETWORK_ERROR", message: "Request failed." },

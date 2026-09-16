@@ -1,35 +1,35 @@
 # CounselConnect - Current Task
 
-**Status:** ACTIVE
-**Task:** Review latest frontend updates; verify all backend-frontend API connections, data fetching, CRUD, loading/error handling; fix confirmed defects, with priority on the Appointment section.
+**Status:** COMPLETE
+**Task:** Implement the approved appointment-linked Scheduled Live Chat plan across MySQL schema, appointment/messaging services, REST/WebSocket transport, maintenance jobs, and frontend session UI.
 
 ## Objective
 
-Every frontend data-fetching surface connects to the documented FastAPI backend contract and displays correct data; confirmed connection/data-fetch defects are fixed without altering unrelated behavior.
+Confirmed online appointments provide a safe time-gated lobby and durable text chat without creating a conversation at confirmation or inferring an appointment outcome from timeout.
 
 ## Route
 
-`whole-system-review` with targeted `appointments` and `messaging` routes as needed.
+`appointments` and `messaging`, with auth-session and frontend-shell integration.
 
 ## In scope
 
-- Frontend services/features/pages calling the backend: appointments, messaging, SOS, wellness, dashboard, registration, auth.
-- API client configuration (base URL, envelopes, error handling).
-- Appointment section fetching/display (priority).
-- Backend route definitions where mismatch is suspected.
+- Migration and bidirectional appointment/conversation integrity.
+- Appointment timing, cutoff, mode-change, outcome, reminder, and timeout rules.
+- Durable REST messages/cursor history plus authenticated delivery-only WebSockets.
+- Appointment-derived launcher, lobby/chat UI, reconnect catch-up, and session-expiry warning.
 
 ## Out of scope
 
-- Redesigns, new features, backend business-rule changes, schema migrations.
-- Live Chat transport implementation, dashboard user-count endpoint (known placeholders).
+- General/SOS chat UI, attachments, read receipts, Redis/multi-process fan-out, audio/video, transcripts, and summaries.
 
 ## Acceptance criteria
 
-1. All frontend API calls match existing backend routes (method, path, payload, envelope).
-2. Appointment calendar/list/detail fetching and display render real data or a correct error/empty state.
-3. CRUD flows that exist on both ends still function (where testable).
-4. Loading and error states handled; no silent console errors on broken calls.
-5. Existing frontend tests plus focused new tests for any fix pass.
+1. Confirmation creates no conversation; first authorized join at start creates exactly one.
+2. REST remains durable and WebSockets publish only committed events with session/origin reauthorization.
+3. Timeout closes chat without changing `CONFIRMED`; only Counselor outcomes complete/no-show.
+4. Student 24-hour cutoff and Counselor pre-start mode conversion are enforced server-side.
+5. Closed history/retention and background activity session rules are enforced.
+6. Frontend tests/build and backend tests pass; MySQL tests must run before readiness is declared.
 
 ## Planned verification
 
@@ -114,3 +114,30 @@ Eighth implementation: assigned Guidance Staff COR review workflow.
 - Reused the existing `assigned_guidance_staff_user_id` field and its index, so no migration was required. Updated the contract, registration documentation, and generated OpenAPI snapshot.
 - Verification: 47 frontend tests passed; 21 focused backend auth/security tests passed and 19 database-dependent cases skipped because the test MySQL database is not configured. Production build, OpenAPI snapshot check, and `git diff --check` passed.
 - Next separate task: configure a MySQL test database and run the skipped appointment and verification integration cases; then continue cross-feature API/data-display review.
+
+Ninth implementation: recurring-availability calendar synchronization.
+
+- Calendar and slot-list queries now exclude available slots attached to an inactive, replaced weekly schedule. One-off slots remain unaffected.
+- Materialization continues to add the replacement's future slots, so a Wednesday 08:00–15:00 schedule with 60-minute `BOTH` availability appears as seven Manila-local starts on the next calendar refresh.
+- Existing reservations and appointments retain their original slot records and remain unchanged.
+- Verification: 18 focused appointment unit tests passed; frontend production build passed; 61 MySQL integration tests skipped because `COUNSELCONNECT_TEST_DATABASE_URL` is unset.
+
+Tenth implementation: verification-decision email outcome reporting.
+
+- Registration approval and rejection now wait for the SMTP server to accept the notification, returning `SENT`, `NOT_CONFIGURED`, or `FAILED` to the reviewer.
+- A mail failure never reverses the already committed enrollment decision. The reviewer receives a warning with the sender-setting follow-up instead of an inaccurate queued-email message.
+- Verification: 3 focused notification tests and 12 reviewer frontend tests passed; OpenAPI snapshot and frontend production build passed. Database-backed tests remain skipped without the dedicated MySQL test database.
+
+Eleventh implementation: appointment cancellation and rejection history visibility.
+
+## Contracts to preserve
+
+| Invariant / user capability | Owning contract and code | Regression test |
+|---|---|---|
+| Appointment lists remain scoped to the signed-in Student or assigned Counselor and filtered server-side by the selected status. | `docs/APPOINTMENT_SCHEDULING.md`, `backend/app/modules/appointments/repository.py`, `frontend/src/features/appointments/useAppointments.js` | `frontend/tests/appointments.test.cjs` |
+| Rejection notes returned by the appointment API remain visible to the owning Student. | `backend/app/modules/appointments/schemas.py`, `frontend/src/pages/student/StudentAppointmentsPage.jsx` | `frontend/tests/appointments.test.cjs` |
+
+- Compatible API methods, paths, payload fields, and response shapes: `GET /appointments?status=<APPOINTMENT_STATUS>` and the existing `AppointmentResponse` fields.
+- Navigation and actions that must remain available: the existing Confirmed, Pending, and Completed filters, pagination, Counselor review controls, and student cancellation/reschedule constraints.
+- Intentional behavior change explicitly authorized by the user: both appointment screens expose `NO_SHOW`, `CANCELLED`, and `REJECTED` status filters. Cancelled records remain in the Counselor's history and rejected records expose the existing Counselor note to the Student.
+- Verification: 23 focused frontend appointment tests and the production build passed. Database integration remains unverified because `COUNSELCONNECT_TEST_DATABASE_URL` is unset.

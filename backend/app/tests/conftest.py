@@ -41,6 +41,9 @@ BLOCKED_DATES_MIGRATION_FILE = (
 RECURRING_SCHEDULES_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20260910_recurring_schedules_and_blocks.py"
 )
+SCHEDULED_CHAT_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20260916_scheduled_appointment_chat.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -84,6 +87,16 @@ def load_blocked_dates_migration_module():
 def load_recurring_schedules_migration_module():
     spec = importlib.util.spec_from_file_location(
         "recurring_schedules_migration", RECURRING_SCHEDULES_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_scheduled_chat_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "scheduled_chat_migration", SCHEDULED_CHAT_MIGRATION_FILE
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -158,6 +171,7 @@ def mysql_test_engine():
                 load_migration_module().upgrade()
                 load_blocked_dates_migration_module().upgrade()
                 load_recurring_schedules_migration_module().upgrade()
+                load_scheduled_chat_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

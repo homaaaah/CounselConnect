@@ -23,9 +23,9 @@ class VerificationResponse(BaseModel):
     reason_code: str | None
     reviewer_note: str | None
     valid_until: date | None
-    # Set by the decision endpoints: True when the applicant email was
-    # queued (SMTP configured); False when email is not configured.
-    email_queued: bool | None = None
+    # Set after Gmail accepts the message, SMTP is absent, or delivery could
+    # not be submitted. SMTP acceptance does not guarantee inbox placement.
+    email_status: Literal["SENT", "NOT_CONFIGURED", "FAILED"] | None = None
 
 
 class StudentSummaryResponse(BaseModel):

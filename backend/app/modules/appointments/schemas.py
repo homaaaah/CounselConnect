@@ -51,6 +51,11 @@ class AppointmentRescheduleRequest(AppointmentCreateRequest):
     pass
 
 
+class AppointmentModeChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    appointment_mode: AppointmentMode
+
+
 class AppointmentRejectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     rejection_note: (
@@ -114,6 +119,37 @@ class AppointmentResponse(UTCResponse):
     rejection_note: str | None
     created_at: datetime
     updated_at: datetime
+    can_cancel: bool
+    can_reschedule: bool
+    can_change_mode: bool
+
+
+class AppointmentSessionCapabilities(BaseModel):
+    can_open_lobby: bool
+    can_join: bool
+    can_send: bool
+    can_read_history: bool
+    can_cancel: bool
+    can_reschedule: bool
+    can_change_mode: bool
+
+
+class AppointmentSessionResponse(UTCResponse):
+    appointment_id: int
+    conversation_id: int | None
+    appointment_mode: AppointmentMode
+    status: AppointmentStatus
+    starts_at: datetime
+    ends_at: datetime
+    lobby_opens_at: datetime
+    messaging_opens_at: datetime
+    safety_deadline_at: datetime
+    server_time: datetime
+    student_joined_at: datetime | None = None
+    counselor_joined_at: datetime | None = None
+    conversation_status: Literal["OPEN", "CLOSED"] | None = None
+    closure_reason: str | None = None
+    capabilities: AppointmentSessionCapabilities
 
 
 class CalendarBlockRequest(BaseModel):

@@ -1,5 +1,7 @@
 /**
  * Feature module: messaging (live chat UI).
- * Real-time transport is native WebSocket per ADR-022 (implementation pending).
+ * Appointment-derived scheduled chat; no general messaging inbox.
  */
-export {};
+export { default as ScheduledSessionLauncher } from "./ScheduledSessionLauncher";
+export { useAppointmentChat } from "./useAppointmentChat";
+export { useScheduledSessions, socketUrl } from "./useScheduledSessions";

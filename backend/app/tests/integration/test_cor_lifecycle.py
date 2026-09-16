@@ -57,7 +57,7 @@ def test_failed_decision_cleanup_is_tracked_and_retried(
     file_id = row.file_id
     with monkeypatch.context() as patch:
         patch.setattr(service, "_delete_cor_bytes", lambda _: False)
-        result, _ = service.approve(verification.verification_id, counselor.user_id)
+        result, _ = service.approve(counselor, verification.verification_id)
     assert result.status == "APPROVED" and student.account_status == "ACTIVE"
     assert path.exists()
     assert db_session.get(EnrollmentVerificationFile, file_id).cleanup_state == "FAILED"
@@ -71,7 +71,7 @@ def test_rejection_deletes_file_and_keeps_account_restricted(pending, db_session
     path = service._storage_path(row.storage_key)
     file_id = row.file_id
     service.reject(
-        verification.verification_id, counselor.user_id, "Please contact the office."
+        counselor, verification.verification_id, "Please contact the office."
     )
     assert student.account_status == "PENDING_VERIFICATION"
     assert verification.status == "REJECTED"
@@ -93,9 +93,9 @@ def test_expiry_blocks_reads_decisions_and_runs_without_requests(
     else:
         with pytest.raises(AppError) as caught:
             if action == "preview":
-                service.read_cor_pdf(verification.verification_id)
+                service.read_cor_pdf(counselor, verification.verification_id)
             else:
-                service.approve(verification.verification_id, counselor.user_id)
+                service.approve(counselor, verification.verification_id)
         assert caught.value.code == "VERIFICATION_EXPIRED"
         db_session.rollback()  # same behavior as the failed request dependency
     db_session.refresh(verification)
@@ -107,7 +107,7 @@ def test_expiry_blocks_reads_decisions_and_runs_without_requests(
 def test_replacement_failure_preserves_old_retry_record_and_new_file(
     pending, monkeypatch, db_session
 ):
-    service, verification, old, student, _ = pending
+    service, verification, old, student, counselor = pending
     old_id, old_key, deadline = old.file_id, old.storage_key, old.expires_at
     with monkeypatch.context() as patch:
         patch.setattr(service, "_delete_cor_bytes", lambda _: False)
@@ -120,7 +120,7 @@ def test_replacement_failure_preserves_old_retry_record_and_new_file(
     assert db_session.get(EnrollmentVerificationFile, old_id).cleanup_state == "FAILED"
     service.cleanup_due_files()
     assert not service._storage_path(old_key).exists()
-    assert service.read_cor_pdf(verification.verification_id) == b"%PDF-1.4 replacement"
+    assert service.read_cor_pdf(counselor, verification.verification_id) == b"%PDF-1.4 replacement"
 
 
 def test_decision_commit_failure_does_not_delete_evidence(
@@ -135,7 +135,7 @@ def test_decision_commit_failure_does_not_delete_evidence(
 
         patch.setattr(db_session, "commit", fail)
         with pytest.raises(RuntimeError, match="simulated commit failure"):
-            service.approve(verification.verification_id, counselor.user_id)
+            service.approve(counselor, verification.verification_id)
     db_session.rollback()
     db_session.refresh(verification)
     assert verification.status == "PENDING"
@@ -201,6 +201,7 @@ def test_concurrent_decisions_have_only_one_winner(mysql_test_engine, first_acti
     def decide(first):
         with Session(mysql_test_engine, expire_on_commit=False) as session:
             service = EnrollmentVerificationService(session)
+            reviewer = session.get(User, counselor_id)
             if first:
                 require_cor = service._require_current_cor
 
@@ -217,9 +218,9 @@ def test_concurrent_decisions_have_only_one_winner(mysql_test_engine, first_acti
             )
             try:
                 if action == "approve":
-                    service.approve(verification_id, counselor_id)
+                    service.approve(reviewer, verification_id)
                 else:
-                    service.reject(verification_id, counselor_id, "Reviewed")
+                    service.reject(reviewer, verification_id, "Reviewed")
                 return action
             except AppError as error:
                 session.rollback()

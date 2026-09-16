@@ -1,5 +1,7 @@
 """Scheduling persistence. Locking reads see current committed MySQL state."""
 
+from datetime import timedelta
+
 from sqlalchemy import func, select
 
 from app.modules.bases import BaseRepository
@@ -234,6 +236,13 @@ class AppointmentsRepository(BaseRepository[Appointment]):
 
     def calendar_slots(self, counselor_ids, now, starts_after, ends_before):
         """All unreserved calendar starts, without the slot list's pagination."""
+        # A replaced weekly schedule is retained for audit/history, but its
+        # leftover AVAILABLE slots must no longer appear. Concrete one-off
+        # slots have no weekly_schedule_id and remain available as created.
+        active_weekly_schedule = select(CounselorWeeklySchedule.weekly_schedule_id).where(
+            CounselorWeeklySchedule.weekly_schedule_id == AvailabilitySlot.weekly_schedule_id,
+            CounselorWeeklySchedule.is_active.is_(True),
+        ).exists()
         blocked_by_time = select(CounselorAvailabilityBlock.availability_block_id).where(
             CounselorAvailabilityBlock.counselor_user_id == AvailabilitySlot.counselor_user_id,
             CounselorAvailabilityBlock.starts_at < AvailabilitySlot.ends_at,
@@ -246,6 +255,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
                 AvailabilitySlot.starts_at > now,
                 AvailabilitySlot.starts_at >= starts_after,
                 AvailabilitySlot.starts_at < ends_before,
+                (AvailabilitySlot.weekly_schedule_id.is_(None) | active_weekly_schedule),
                 ~blocked_by_time,
             ).order_by(AvailabilitySlot.starts_at)
         ))
@@ -264,6 +274,10 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         # Filter before count/offset/limit so every page and its total describe
         # the same visible slots. Fixed offsets avoid requiring MySQL timezone
         # tables; persisted timestamps are UTC and Manila is UTC+08:00.
+        active_weekly_schedule = select(CounselorWeeklySchedule.weekly_schedule_id).where(
+            CounselorWeeklySchedule.weekly_schedule_id == AvailabilitySlot.weekly_schedule_id,
+            CounselorWeeklySchedule.is_active.is_(True),
+        ).exists()
         blocked_by_date = select(CounselorBlockedDate.blocked_date_id).where(
             CounselorBlockedDate.counselor_user_id == AvailabilitySlot.counselor_user_id,
             CounselorBlockedDate.blocked_date == func.date(
@@ -277,6 +291,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         ).exists()
         stmt = select(AvailabilitySlot).where(
             AvailabilitySlot.starts_at > now,
+            (AvailabilitySlot.weekly_schedule_id.is_(None) | active_weekly_schedule),
             ~blocked_by_date,
             ~blocked_by_time,
         )
@@ -316,3 +331,53 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             page,
             page_size,
         )
+
+    def scheduled_sessions(self, actor):
+        scope = (
+            Appointment.student_user_id
+            if actor.role_code == "STUDENT"
+            else Appointment.counselor_user_id
+        )
+        return list(self.session.scalars(
+            select(Appointment)
+            .join(AvailabilitySlot, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            .where(
+                scope == actor.user_id,
+                Appointment.appointment_mode == "ONLINE",
+                Appointment.status == "CONFIRMED",
+            )
+            .order_by(AvailabilitySlot.starts_at, Appointment.appointment_id)
+        ))
+
+    def reminder_candidates(self, now):
+        window_end = now + timedelta(minutes=30)
+        return list(self.session.execute(
+            select(Appointment, AvailabilitySlot)
+            .join(AvailabilitySlot, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            .where(
+                Appointment.status == "CONFIRMED",
+                Appointment.appointment_mode == "ONLINE",
+                AvailabilitySlot.starts_at > now,
+                AvailabilitySlot.starts_at <= window_end,
+                (
+                    Appointment.student_reminder_dispatched_at.is_(None)
+                    | Appointment.counselor_reminder_dispatched_at.is_(None)
+                ),
+            )
+            .order_by(AvailabilitySlot.starts_at, Appointment.appointment_id)
+            .limit(100)
+        ))
+
+    def timeout_candidates(self, cutoff):
+        return list(self.session.execute(
+            select(Appointment, AvailabilitySlot)
+            .join(AvailabilitySlot, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            .where(
+                Appointment.status == "CONFIRMED",
+                Appointment.appointment_mode == "ONLINE",
+                Appointment.conversation_id.is_not(None),
+                AvailabilitySlot.ends_at <= cutoff,
+            )
+            .order_by(AvailabilitySlot.ends_at, Appointment.appointment_id)
+            .limit(100)
+        ))

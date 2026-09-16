@@ -16,11 +16,14 @@ from app.modules.appointments.models import Appointment, AvailabilitySlot
 from app.modules.appointments.schemas import (
     AvailabilitySlotCreateRequest,
     AppointmentCreateRequest,
+    AppointmentRescheduleRequest,
     WeeklyScheduleCreateRequest,
 )
 from app.modules.appointments.service import AppointmentsService
 from app.modules.audit.models import AuditEvent
 from app.modules.messaging.models import Conversation
+from app.modules.messaging.schemas import MessageCreateRequest
+from app.modules.messaging.service import MessagingService
 
 
 @pytest.fixture()
@@ -92,6 +95,139 @@ def check_error_message(code, message, fn):
         fn()
     assert exc.value.code == code
     assert exc.value.message == message
+
+
+def test_scheduled_chat_is_lazy_joined_ordered_and_counselor_only_after_close(
+    db_session, actors
+):
+    users, campus = actors
+    now = datetime.now(timezone.utc).replace(tzinfo=None, second=0, microsecond=0)
+    slot = AvailabilitySlot(
+        counselor_user_id=users[0].user_id,
+        campus_id=campus.campus_id,
+        delivery_mode="BOTH",
+        starts_at=now - timedelta(minutes=5),
+        ends_at=now + timedelta(minutes=55),
+        status="RESERVED",
+    )
+    db_session.add(slot)
+    db_session.flush()
+    appointment = Appointment(
+        student_user_id=users[2].user_id,
+        counselor_user_id=users[0].user_id,
+        availability_slot_id=slot.slot_id,
+        appointment_mode="ONLINE",
+        status="CONFIRMED",
+    )
+    db_session.add(appointment)
+    db_session.flush()
+
+    messaging = MessagingService(db_session)
+    conversation = messaging.join_appointment(users[2], appointment.appointment_id)
+    assert appointment.conversation_id == conversation.conversation_id
+    assert conversation.student_joined_at is not None
+    assert conversation.counselor_joined_at is None
+    check_error(
+        "CONVERSATION_NOT_FOUND",
+        lambda: messaging.history(users[0], conversation.conversation_id),
+    )
+
+    assert (
+        messaging.join_appointment(users[0], appointment.appointment_id).conversation_id
+        == conversation.conversation_id
+    )
+    first = messaging.send_message(
+        users[2],
+        conversation.conversation_id,
+        MessageCreateRequest(body="Hello", client_message_id="student-1"),
+    )
+    retry = messaging.send_message(
+        users[2],
+        conversation.conversation_id,
+        MessageCreateRequest(body="Hello", client_message_id="student-1"),
+    )
+    second = messaging.send_message(
+        users[0],
+        conversation.conversation_id,
+        MessageCreateRequest(body="Welcome", client_message_id="counselor-1"),
+    )
+    assert retry.message_id == first.message_id
+    assert [first.sequence_number, second.sequence_number] == [1, 2]
+
+    AppointmentsService(db_session).transition(
+        users[0], appointment.appointment_id, "complete"
+    )
+    assert conversation.status == "CLOSED"
+    assert conversation.closure_reason == "COUNSELOR_OUTCOME"
+    check_error(
+        "CONVERSATION_NOT_FOUND",
+        lambda: messaging.history(users[2], conversation.conversation_id),
+    )
+    assert [item.sequence_number for item in messaging.history(
+        users[0], conversation.conversation_id
+    )["items"]] == [1, 2]
+
+
+def test_confirmation_does_not_create_chat_and_prestart_mode_change_keeps_confirmation(
+    db_session, actors
+):
+    users, campus = actors
+    appointments = AppointmentsService(db_session)
+    slot = create_slot(appointments, users[0], campus, "BOTH")
+    booked = book(appointments, users[2], slot, "ONLINE")
+    confirmed = appointments.transition(users[0], booked.appointment_id, "confirm")
+    assert confirmed.conversation_id is None
+    assert db_session.query(Conversation).filter_by(appointment_id=booked.appointment_id).count() == 0
+
+    changed = appointments.change_mode(
+        users[0],
+        booked.appointment_id,
+        type("ModeChange", (), {"appointment_mode": "FACE_TO_FACE"})(),
+    )
+    assert changed.status == "CONFIRMED"
+    assert changed.appointment_mode == "FACE_TO_FACE"
+    assert changed.meeting_location == campus.guidance_office_location
+
+
+def test_student_cannot_cancel_or_reschedule_inside_24_hour_cutoff(db_session, actors):
+    users, campus = actors
+    now = datetime.now(timezone.utc).replace(tzinfo=None, second=0, microsecond=0)
+    slot = AvailabilitySlot(
+        counselor_user_id=users[0].user_id,
+        campus_id=campus.campus_id,
+        delivery_mode="ONLINE",
+        starts_at=now + timedelta(hours=23),
+        ends_at=now + timedelta(hours=24),
+        status="RESERVED",
+    )
+    db_session.add(slot)
+    db_session.flush()
+    appointment = Appointment(
+        student_user_id=users[2].user_id,
+        counselor_user_id=users[0].user_id,
+        availability_slot_id=slot.slot_id,
+        appointment_mode="ONLINE",
+        status="CONFIRMED",
+    )
+    db_session.add(appointment)
+    db_session.flush()
+    appointments = AppointmentsService(db_session)
+    check_error(
+        "APPOINTMENT_CHANGE_CUTOFF",
+        lambda: appointments.transition(users[2], appointment.appointment_id, "cancel"),
+    )
+    replacement = create_slot(appointments, users[0], campus, "ONLINE", offset=3)
+    check_error(
+        "APPOINTMENT_CHANGE_CUTOFF",
+        lambda: appointments.reschedule(
+            users[2],
+            appointment.appointment_id,
+            AppointmentRescheduleRequest(
+                availability_slot_id=replacement.slot_id,
+                appointment_mode="ONLINE",
+            ),
+        ),
+    )
 
 
 @pytest.mark.parametrize(
@@ -467,6 +603,7 @@ def test_linked_conversation_closes_and_mismatch_denied(db_session, actors):
         lambda: svc.transition(users[0], appt.appointment_id, "cancel"),
     )
     conv.student_user_id = users[2].user_id
+    conv.appointment_id = row.appointment_id
     db_session.flush()
     svc.transition(users[0], appt.appointment_id, "cancel")
     assert conv.status == "CLOSED" and conv.closed_at is not None
@@ -569,6 +706,12 @@ def test_concurrent_reservations(mysql_test_engine, same_student):
     assert sorted(results) == sorted(
         ["PENDING", "SCHEDULE_CONFLICT" if same_student else "SLOT_UNAVAILABLE"]
     )
+    # Separate-connection race fixtures commit into the session-scoped schema.
+    # Retire every synthetic slot so later live UI tests cannot book one.
+    with Session(mysql_test_engine) as db:
+        for slot_id in set(slot_ids):
+            db.get(AvailabilitySlot, slot_id).status = "RESERVED"
+        db.commit()
 
 
 @pytest.mark.parametrize(
@@ -677,6 +820,9 @@ def test_simultaneous_confirm_reject(mysql_test_engine):
         assert db.get(AvailabilitySlot, ids[2]).status == (
             "RESERVED" if appt.status == "CONFIRMED" else "AVAILABLE"
         )
+        # Retire the committed race fixture after asserting its real outcome.
+        db.get(AvailabilitySlot, ids[2]).status = "RESERVED"
+        db.commit()
 
 
 @pytest.mark.parametrize("role_index", [0, 2])

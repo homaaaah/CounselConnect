@@ -10,6 +10,31 @@ import CounselorAppointmentsPage from "./pages/counselor/CounselorAppointmentsPa
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
 import { AppNavBar } from "./components/layout";
+import ScheduledSessionPage from "./pages/ScheduledSessionPage";
+import { ScheduledSessionLauncher } from "./features/messaging";
+
+function SessionExpiryWarning({ session }) {
+  const [now, setNow] = useState(Date.now());
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!session.user) return null;
+  const deadline = Math.min(
+    new Date(session.idleExpiresAt).getTime(),
+    new Date(session.absoluteExpiresAt).getTime(),
+  );
+  const remaining = deadline - now;
+  if (!Number.isFinite(deadline) || remaining > 5 * 60_000 || remaining <= 0) return null;
+  return <div role="alert" className="fixed inset-x-4 top-4 z-50 mx-auto max-w-xl rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-lg">
+    <p className="font-semibold text-amber-900">Your session expires in {Math.max(1, Math.ceil(remaining / 60000))} minute(s).</p>
+    <button type="button" disabled={busy} className="mt-2 rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+      onClick={async () => { setBusy(true); try { await session.continueSession(); } catch { /* global 401 handling clears an expired session */ } finally { setBusy(false); } }}>
+      Continue session
+    </button>
+  </div>;
+}
 
 /**
  * Hash-based page switcher (DFD Master System Flow).
@@ -36,6 +61,7 @@ export default function App() {
   // Counselor shell: fixed left sidebar on desktop — page content shifts
   // right by the sidebar width (16rem) so nothing hides underneath it.
   const counselorShell = session.user?.role_code === "COUNSELOR";
+  const sessionAppointmentId = page.startsWith("session/") ? Number(page.slice("session/".length)) : null;
 
   return (
     <>
@@ -70,10 +96,15 @@ export default function App() {
           : session.user
             ? <p role="alert" className="p-6">This page requires a Counselor or Guidance Staff account.</p>
             : <LoginPage audience="staff" onSignedIn={session.accept} />)}
-        {!["login", "staff-login", "register", "home", "review", "appointments"].includes(page) && (
+        {sessionAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
+          <ScheduledSessionPage key={`${session.user.user_id}-${sessionAppointmentId}`} user={session.user} appointmentId={sessionAppointmentId} />}
+        {!["login", "staff-login", "register", "home", "review", "appointments"].includes(page) && !sessionAppointmentId && (
           <LandingPage onSignedIn={session.accept} />
         )}
       </div>
+      {session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
+        <ScheduledSessionLauncher key={session.user.user_id} user={session.user} />}
+      <SessionExpiryWarning session={session} />
       <p className="fixed bottom-2 right-3 text-[10px] text-slate-300">
         {error ? `API unreachable: ${error}` : `API status: ${status}`}
       </p>

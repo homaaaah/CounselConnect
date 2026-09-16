@@ -181,5 +181,7 @@ class Appointment(Base):
         ),
     )
     rejection_note: Mapped[str | None] = mapped_column(String(500))
+    student_reminder_dispatched_at: Mapped[object | None] = mapped_column(DATETIME6)
+    counselor_reminder_dispatched_at: Mapped[object | None] = mapped_column(DATETIME6)
     created_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow)
     updated_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow, onupdate=utcnow)

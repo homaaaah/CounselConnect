@@ -4,8 +4,8 @@
  * Restore user and CSRF together before mounting protected pages.
  * Credentials remain in HttpOnly cookies; CSRF stays in memory.
  */
-import { useCallback, useRef, useState } from "react";
-import { ApiError, request, setCsrfToken } from "../../services/apiClient";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError, request, setCsrfToken, setSessionActivityHandler, setUnauthorizedHandler } from "../../services/apiClient";
 
 export function useSession() {
   const [state, setState] = useState({
@@ -16,6 +16,27 @@ export function useSession() {
     error: null,
   });
   const generation = useRef(0);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      generation.current++;
+      setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true, error: null });
+    });
+    setSessionActivityHandler(() => {
+      setState(previous => {
+        if (!previous.user || !previous.absoluteExpiresAt) return previous;
+        const idle = Math.min(
+          Date.now() + 60 * 60_000,
+          new Date(previous.absoluteExpiresAt).getTime(),
+        );
+        return { ...previous, idleExpiresAt: new Date(idle).toISOString() };
+      });
+    });
+    return () => {
+      setUnauthorizedHandler(null);
+      setSessionActivityHandler(null);
+    };
+  }, []);
 
   const accept = useCallback((auth) => {
     generation.current++;
@@ -54,5 +75,11 @@ export function useSession() {
     return true;
   }, []);
 
-  return { ...state, accept, restore, logout };
+  const continueSession = useCallback(async () => {
+    const auth = await request("/auth/refresh", { method: "POST", body: "{}" });
+    accept(auth);
+    return true;
+  }, [accept]);
+
+  return { ...state, accept, restore, logout, continueSession };
 }

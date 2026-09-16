@@ -37,7 +37,9 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
     }
     if (path.endsWith("/accounts/campuses")) return json(envelope([{ campus_id: 1, campus_name: "Main", guidance_office_location: "Room 201" }]));
     if (path.endsWith("/availability-slots")) return json(slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]));
-    if (path.endsWith("/appointments")) return json(envelope(appointments));
+    if (path.endsWith("/appointments")) return json(envelope(
+      typeof appointments === "function" ? appointments(parsed.searchParams) : appointments
+    ));
     if (path.endsWith("/weekly-schedules")) return json([{ weekly_schedule_id: 3, campus_id: 1, day_of_week: 1, start_time: "08:00:00", end_time: "10:00:00", slot_duration_minutes: 30, delivery_mode: "BOTH", is_active: true }]);
     if (path.endsWith("/availability-blocks")) return typeof availabilityBlocks === "function"
       ? availabilityBlocks() : json(availabilityBlocks);
@@ -189,17 +191,49 @@ test("confirmed student record opens the reschedule modal and sends reschedule",
   assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled. Awaiting counselor review."));
 });
 
-test("records view defaults to the confirmed tab and can switch statuses", async t => {
+test("records view keeps every appointment outcome accessible by status", async t => {
   setup(t, { appointments: [appointment] });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("My appointments"), "records heading for students");
-  const tabs = root.root.findAllByType("button").filter(b => ["Confirmed", "Pending", "Completed"].includes(buttonText(b)));
-  assert.equal(tabs.length, 3, "three record status tabs");
+  const labels = ["Confirmed", "Pending", "Completed", "No-show", "Cancelled", "Rejected"];
+  const tabs = root.root.findAllByType("button").filter(b => labels.includes(buttonText(b)));
+  assert.equal(tabs.length, labels.length, "every appointment status has a record tab");
   const confirmed = tabs.find(b => buttonText(b) === "Confirmed");
   assert.equal(confirmed.props["aria-selected"], true, "confirmed is the default tab");
   for (const tab of tabs.filter(b => b !== confirmed)) assert.equal(tab.props["aria-selected"], false);
   assert.ok(!rendered.includes("Find an available slot"), "slot list is gone from the records page");
+});
+
+test("student can open rejected history and read the Counselor note", async t => {
+  const rejected = { ...appointment, status: "REJECTED", rejection_note: "Please choose another available time." };
+  const calls = setup(t, {
+    appointments: query => query.get("status") === "REJECTED" ? [rejected] : [appointment],
+  });
+  const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
+  await act(async () => {
+    button(root, "Rejected").props.onClick();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  assert.ok(calls.some(call => call.path.endsWith("/appointments") && call.query.status === "REJECTED"));
+  assert.ok(JSON.stringify(root.toJSON()).includes("Please choose another available time."));
+});
+
+test("Counselor can open cancelled appointment history", async t => {
+  const cancelled = { ...appointment, status: "CANCELLED" };
+  const calls = setup(t, {
+    user: counselor,
+    appointments: query => query.get("status") === "CANCELLED" ? [cancelled] : [appointment],
+  });
+  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
+  await act(async () => {
+    button(root, "Cancelled").props.onClick();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  assert.ok(calls.some(call => call.path.endsWith("/appointments") && call.query.status === "CANCELLED"));
+  const rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("CANCELLED"));
+  assert.ok(rendered.includes("Ana Test"));
 });
 
 test("calendar failure does not prevent appointment records from loading", async t => {

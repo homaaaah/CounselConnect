@@ -7,6 +7,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
+from app.config import get_settings
 from app.database import get_session
 from app.modules.accounts.service import AccountsService
 from app.modules.audit.service import AuditService
@@ -20,6 +21,7 @@ from app.modules.appointments.models import (
 from app.modules.appointments.repository import AppointmentsRepository
 from app.modules.appointments.schemas import (
     AppointmentResponse,
+    AppointmentSessionResponse,
     AvailabilitySlotResponse,
 )
 
@@ -47,7 +49,7 @@ class AppointmentsService(BaseService[Appointment]):
     def ensure_schedule_slots(self, start_date, end_date, counselor_id=None):
         """Materialize only the searched dates from active weekly schedules."""
         schedules = self.repository.active_weekly_schedules(counselor_id)
-        created = 0
+        changed = 0
         for offset in range((end_date - start_date).days + 1):
             day = start_date + timedelta(days=offset)
             for schedule in schedules:
@@ -59,11 +61,41 @@ class AppointmentsService(BaseService[Appointment]):
                 while local_start < local_end:
                     start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
                     end = (local_start + duration).astimezone(timezone.utc).replace(tzinfo=None)
-                    if not self.repository.overlapping_availability_blocks(schedule.counselor_user_id, start, end) and not self.repository.find_slot_exact(schedule.counselor_user_id, schedule.campus_id, start, end):
-                        self.repository.session.add(AvailabilitySlot(counselor_user_id=schedule.counselor_user_id, campus_id=schedule.campus_id, delivery_mode=schedule.delivery_mode, starts_at=start, ends_at=end, status="AVAILABLE", weekly_schedule_id=schedule.weekly_schedule_id))
-                        created += 1
+                    if not self.repository.overlapping_availability_blocks(
+                        schedule.counselor_user_id, start, end
+                    ):
+                        existing = self.repository.find_slot_exact(
+                            schedule.counselor_user_id,
+                            schedule.campus_id,
+                            start,
+                            end,
+                        )
+                        if existing is None:
+                            self.repository.session.add(AvailabilitySlot(
+                                counselor_user_id=schedule.counselor_user_id,
+                                campus_id=schedule.campus_id,
+                                delivery_mode=schedule.delivery_mode,
+                                starts_at=start,
+                                ends_at=end,
+                                status="AVAILABLE",
+                                weekly_schedule_id=schedule.weekly_schedule_id,
+                            ))
+                            changed += 1
+                        elif existing.status == "AVAILABLE" and (
+                            existing.delivery_mode != schedule.delivery_mode
+                            or existing.weekly_schedule_id != schedule.weekly_schedule_id
+                        ):
+                            # A slot can already exist because this recurring
+                            # definition replaced an older mode, or because a
+                            # matching manual slot was materialized earlier.
+                            # Only unreserved future availability follows the
+                            # active definition; reservations and appointments
+                            # keep their original slot unchanged.
+                            existing.delivery_mode = schedule.delivery_mode
+                            existing.weekly_schedule_id = schedule.weekly_schedule_id
+                            changed += 1
                     local_start += duration
-        if created:
+        if changed:
             self.repository.session.flush()
 
     def calendar(self, actor, start_date: date, end_date: date):
@@ -290,10 +322,13 @@ class AppointmentsService(BaseService[Appointment]):
             status=slot.status,
         )
 
-    def appointment_response(self, appointment):
+    def appointment_response(self, appointment, actor):
         slot = self.repository.find_slot(appointment.availability_slot_id)
         details = self.slot_response(slot)
         student = self.accounts.scheduling_user(appointment.student_user_id)
+        moment = utcnow()
+        student_window = self._student_change_window_open(actor, slot.starts_at, moment)
+        has_activity = self._has_chat_activity(appointment)
         return AppointmentResponse(
             **{
                 name: getattr(appointment, name)
@@ -317,6 +352,9 @@ class AppointmentsService(BaseService[Appointment]):
             campus_name=details.campus_name,
             starts_at=slot.starts_at,
             ends_at=slot.ends_at,
+            can_cancel=appointment.status in ("PENDING", "CONFIRMED") and student_window,
+            can_reschedule=appointment.status == "CONFIRMED" and student_window and not has_activity,
+            can_change_mode=actor.role_code == "COUNSELOR" and appointment.status == "CONFIRMED" and moment < slot.starts_at and not has_activity and slot.delivery_mode == "BOTH" and (appointment.appointment_mode == "FACE_TO_FACE" or bool((details.guidance_office_location or "").strip())),
         )
 
     def create_slots(self, actor, data):
@@ -394,11 +432,116 @@ class AppointmentsService(BaseService[Appointment]):
         self.authorize(actor)
         items, total = self.repository.appointments(actor, status, page, page_size)
         return dict(
-            items=[self.appointment_response(a) for a in items],
+            items=[self.appointment_response(a, actor) for a in items],
             total=total,
             page=page,
             page_size=page_size,
         )
+
+    def _conversation_for(self, appointment):
+        if appointment.conversation_id is None:
+            return None
+        from app.modules.messaging.service import MessagingService
+
+        return MessagingService(self.repository.session).for_appointment(appointment)
+
+    def _has_chat_activity(self, appointment):
+        if appointment.conversation_id is None:
+            return False
+        from app.modules.messaging.service import MessagingService
+
+        return MessagingService(self.repository.session).has_activity(appointment)
+
+    @staticmethod
+    def _student_change_window_open(actor, starts_at, now):
+        return actor.role_code != "STUDENT" or now <= starts_at - timedelta(hours=24)
+
+    def session_response(self, actor, appointment, *, now=None):
+        self.authorize(actor)
+        appointment = self._owned(actor, appointment)
+        slot = self.repository.find_slot(appointment.availability_slot_id)
+        moment = now or utcnow()
+        settings = get_settings()
+        lobby_opens = slot.starts_at - timedelta(minutes=30)
+        safety_deadline = slot.ends_at + timedelta(minutes=settings.chat_grace_minutes)
+        conversation = self._conversation_for(appointment)
+        has_activity = bool(
+            conversation
+            and (
+                conversation.student_joined_at is not None
+                or conversation.counselor_joined_at is not None
+                or conversation.last_sequence_number > 0
+            )
+        )
+        confirmed_online = (
+            appointment.status == "CONFIRMED"
+            and appointment.appointment_mode == "ONLINE"
+        )
+        live_window = confirmed_online and slot.starts_at <= moment < safety_deadline
+        participant_joined = bool(
+            conversation
+            and (
+                (actor.role_code == "STUDENT" and conversation.student_joined_at)
+                or (actor.role_code == "COUNSELOR" and conversation.counselor_joined_at)
+            )
+        )
+        open_conversation = bool(conversation and conversation.status == "OPEN")
+        student_window = self._student_change_window_open(actor, slot.starts_at, moment)
+        retention_open = bool(
+            conversation
+            and conversation.closed_at
+            and moment < conversation.closed_at + timedelta(days=settings.chat_retention_days)
+        )
+        can_read_history = bool(
+            conversation
+            and conversation.messages_purged_at is None
+            and (
+                (open_conversation and live_window and participant_joined)
+                or (conversation.status == "CLOSED" and actor.role_code == "COUNSELOR" and retention_open)
+            )
+        )
+        return AppointmentSessionResponse(
+            appointment_id=appointment.appointment_id,
+            conversation_id=appointment.conversation_id,
+            appointment_mode=appointment.appointment_mode,
+            status=appointment.status,
+            starts_at=slot.starts_at,
+            ends_at=slot.ends_at,
+            lobby_opens_at=lobby_opens,
+            messaging_opens_at=slot.starts_at,
+            safety_deadline_at=safety_deadline,
+            server_time=moment,
+            student_joined_at=conversation.student_joined_at if conversation else None,
+            counselor_joined_at=conversation.counselor_joined_at if conversation else None,
+            conversation_status=conversation.status if conversation else None,
+            closure_reason=conversation.closure_reason if conversation else None,
+            capabilities={
+                "can_open_lobby": confirmed_online and lobby_opens <= moment < safety_deadline,
+                "can_join": live_window and (conversation is None or open_conversation),
+                "can_send": live_window and open_conversation and participant_joined,
+                "can_read_history": can_read_history,
+                "can_cancel": appointment.status in ("PENDING", "CONFIRMED") and student_window,
+                "can_reschedule": appointment.status == "CONFIRMED" and student_window and not has_activity,
+                "can_change_mode": actor.role_code == "COUNSELOR" and appointment.status == "CONFIRMED" and moment < slot.starts_at and not has_activity and slot.delivery_mode == "BOTH" and (appointment.appointment_mode == "FACE_TO_FACE" or bool((self._campus(slot.campus_id).guidance_office_location or "").strip())),
+            },
+        )
+
+    def scheduled_sessions(self, actor):
+        self.authorize(actor)
+        return [self.session_response(actor, item) for item in self.repository.scheduled_sessions(actor)]
+
+    def session_detail(self, actor, appointment_id):
+        return self.session_response(actor, self.repository.get(appointment_id))
+
+    def lock_session_appointment(self, actor, appointment_id):
+        """Messaging service contract: lock and return an owned appointment."""
+        self.authorize(actor)
+        return self._locked_owned(actor, appointment_id)
+
+    def session_appointment(self, actor, appointment_id):
+        """Messaging service contract: return an owned appointment without locking it."""
+        self.authorize(actor)
+        return self._owned(actor, self.repository.get(appointment_id))
 
     def _owned(self, actor, appointment):
         if (
@@ -420,7 +563,7 @@ class AppointmentsService(BaseService[Appointment]):
     def detail(self, actor, appointment_id):
         self.authorize(actor)
         return self.appointment_response(
-            self._owned(actor, self.repository.get(appointment_id))
+            self._owned(actor, self.repository.get(appointment_id)), actor
         )
 
     def _validate_slot(self, slot, mode, student_id, exclude_id=None):
@@ -505,7 +648,7 @@ class AppointmentsService(BaseService[Appointment]):
             "appointment",
             appointment.appointment_id,
         )
-        return self.appointment_response(appointment)
+        return self.appointment_response(appointment, actor)
 
     def _locked_owned(self, actor, appointment_id, replacement=None):
         initial = self._owned(actor, self.repository.get(appointment_id))
@@ -542,6 +685,13 @@ class AppointmentsService(BaseService[Appointment]):
                 "This action is not available for the current appointment status.",
             )
         slot = self.repository.find_slot(appointment.availability_slot_id, lock=True)
+        if action == "cancel" and not self._student_change_window_open(
+            actor, slot.starts_at, utcnow()
+        ):
+            raise AppError(
+                "APPOINTMENT_CHANGE_CUTOFF",
+                "Students may cancel or reschedule until 24 hours before the appointment.",
+            )
         if action == "confirm" and slot.starts_at <= utcnow():
             raise AppError(
                 "SLOT_IN_PAST",
@@ -556,9 +706,8 @@ class AppointmentsService(BaseService[Appointment]):
             if appointment.conversation_id is not None:
                 from app.modules.messaging.service import MessagingService
 
-                MessagingService(self.repository.session).close_for_appointment(
-                    appointment
-                )
+                reason = "APPOINTMENT_CANCELLED" if action == "cancel" else "COUNSELOR_OUTCOME"
+                MessagingService(self.repository.session).close_for_appointment(appointment, reason)
             slot.status = "AVAILABLE"
         appointment.status = target
         if action == "reject":
@@ -570,7 +719,7 @@ class AppointmentsService(BaseService[Appointment]):
             "appointment",
             appointment.appointment_id,
         )
-        return self.appointment_response(appointment)
+        return self.appointment_response(appointment, actor)
 
     def reschedule(self, actor, appointment_id, data):
         self.authorize(actor)
@@ -592,10 +741,16 @@ class AppointmentsService(BaseService[Appointment]):
                 "INVALID_APPOINTMENT_TRANSITION",
                 "Only a confirmed appointment can be rescheduled.",
             )
-        if appointment.conversation_id is not None:
+        old_slot = self.repository.find_slot(appointment.availability_slot_id, lock=True)
+        if not self._student_change_window_open(actor, old_slot.starts_at, utcnow()):
             raise AppError(
-                "SESSION_ALREADY_LINKED",
-                "An appointment with a linked session cannot be rescheduled.",
+                "APPOINTMENT_CHANGE_CUTOFF",
+                "Students may cancel or reschedule until 24 hours before the appointment.",
+            )
+        if self._has_chat_activity(appointment):
+            raise AppError(
+                "SESSION_ALREADY_ACTIVE",
+                "An appointment cannot be rescheduled after a participant enters the session.",
             )
         if (
             actor.role_code == "COUNSELOR"
@@ -613,6 +768,10 @@ class AppointmentsService(BaseService[Appointment]):
             i: self.repository.find_slot(i, lock=True)
             for i in sorted([old_id, replacement.slot_id])
         }
+        if appointment.conversation_id is not None:
+            from app.modules.messaging.service import MessagingService
+
+            MessagingService(self.repository.session).delete_unused_for_appointment(appointment)
         slot = slots[replacement.slot_id]
         location = self._validate_slot(
             slot,
@@ -628,6 +787,8 @@ class AppointmentsService(BaseService[Appointment]):
         appointment.meeting_location = location
         appointment.status = "PENDING"
         appointment.rejection_note = None
+        appointment.student_reminder_dispatched_at = None
+        appointment.counselor_reminder_dispatched_at = None
         self.repository.session.flush()
         self.audit.record(
             actor.user_id,
@@ -635,7 +796,56 @@ class AppointmentsService(BaseService[Appointment]):
             "appointment",
             appointment.appointment_id,
         )
-        return self.appointment_response(appointment)
+        return self.appointment_response(appointment, actor)
+
+    def change_mode(self, actor, appointment_id, data):
+        self.authorize(actor, ("COUNSELOR",))
+        appointment = self._locked_owned(actor, appointment_id)
+        if appointment.status != "CONFIRMED":
+            raise AppError(
+                "INVALID_APPOINTMENT_TRANSITION",
+                "Only a confirmed appointment can change mode.",
+            )
+        slot = self.repository.find_slot(appointment.availability_slot_id, lock=True)
+        if utcnow() >= slot.starts_at:
+            raise AppError(
+                "SESSION_ALREADY_STARTED",
+                "The appointment mode cannot change after its scheduled start.",
+            )
+        if data.appointment_mode == appointment.appointment_mode:
+            raise AppError("MODE_UNCHANGED", "Choose a different appointment mode.")
+        if self._has_chat_activity(appointment):
+            raise AppError(
+                "SESSION_ALREADY_ACTIVE",
+                "The appointment mode cannot change after a participant enters the session.",
+            )
+        if slot.delivery_mode not in (data.appointment_mode, "BOTH"):
+            raise AppError("MODE_INCOMPATIBLE", "Select a mode supported by this slot.")
+        location = None
+        if data.appointment_mode == "FACE_TO_FACE":
+            campus = self._campus(slot.campus_id)
+            location = (campus.guidance_office_location or "").strip()
+            if not location:
+                raise AppError(
+                    "GUIDANCE_OFFICE_REQUIRED",
+                    "The campus Guidance Office location is not configured.",
+                )
+        if appointment.conversation_id is not None:
+            from app.modules.messaging.service import MessagingService
+
+            MessagingService(self.repository.session).delete_unused_for_appointment(appointment)
+        appointment.appointment_mode = data.appointment_mode
+        appointment.meeting_location = location
+        appointment.student_reminder_dispatched_at = None
+        appointment.counselor_reminder_dispatched_at = None
+        self.repository.session.flush()
+        self.audit.record(
+            actor.user_id,
+            "appointment_mode_changed",
+            "appointment",
+            appointment.appointment_id,
+        )
+        return self.appointment_response(appointment, actor)
 
 
 def get_appointments_service(session: Session = Depends(get_session)):
