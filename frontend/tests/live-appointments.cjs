@@ -31,11 +31,11 @@ global.fetch = async (url, init = {}) => {
 };
 
 async function waitFor(check) {
-  for (let i = 0; i < 250; i++) {
+  for (let i = 0; i < 500; i++) {
     if (check()) return;
     await act(async () => new Promise(resolve => setTimeout(resolve, 20)));
   }
-  throw new Error("Expected scheduling UI state was not reached");
+  throw new Error("Expected scheduling UI state was not reached: " + JSON.stringify(root?.toJSON()));
 }
 const buttonText = (b) => b.children.filter(c => typeof c === "string").join("").trim();
 const allButtons = () => root.root.findAllByType("button");

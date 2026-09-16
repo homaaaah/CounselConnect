@@ -27,7 +27,10 @@
 - `appointments.appointment_mode`: Student-selected `ONLINE` or `FACE_TO_FACE` compatible with the slot.
 - `appointments.meeting_location`: required booking-time campus-location snapshot for face-to-face appointments; null for online appointments.
 - `appointments.conversation_id`: nullable unique FK to the dedicated scheduled online conversation.
+- `appointments.student_reminder_dispatched_at` / `counselor_reminder_dispatched_at`: nullable markers for successfully queued appointment reminders.
 - `conversations.conversation_type`: `GENERAL`, `APPOINTMENT`, or `SOS`.
+- `conversations.appointment_id`: nullable unique reverse link used to enforce one conversation per scheduled appointment; join timestamps, closure reason, and the last sequence number record the chat lifecycle.
+- `messages.sequence_number`: required conversation-local durable order, unique with `conversation_id`; `client_message_id` remains the retry/idempotency key.
 
 Application services must enforce cross-table rules that a row-local SQL `CHECK` cannot:
 
@@ -41,7 +44,7 @@ Application services must enforce cross-table rules that a row-local SQL `CHECK`
 - A Counselor's active weekly periods must not overlap. MySQL checks cannot compare other rows, so overlap detection is a locked service/repository operation.
 - A schedule duration must divide its configured time range without a partial final slot. `FACE_TO_FACE` and `BOTH` schedules require a configured campus Guidance Office location.
 - Bookable slots exclude inactive schedules, temporary blocks, active appointments, and past times. A block cannot be saved if it overlaps a `PENDING` or `CONFIRMED` appointment; it never cancels, rejects, reschedules, or moves an appointment.
-- Changing recurring availability deactivates the old schedule and inserts a replacement. Existing concrete slots and appointments remain unchanged.
+- Changing recurring availability deactivates the old schedule and inserts a replacement. On materialization, matching future `AVAILABLE` slots adopt the active definition's delivery mode and schedule link; leftover available slots linked to an inactive definition are excluded from calendars and booking. `RESERVED` slots and existing appointments remain unchanged.
 - Only the assigned Counselor may record `COMPLETED` or `NO_SHOW` for a confirmed face-to-face appointment, and that transition must create an `audit_events` entry. The status endpoint is not part of the persistence migration.
 
 ## Integrity/lifecycle
@@ -52,6 +55,7 @@ Application services must enforce cross-table rules that a row-local SQL `CHECK`
 - Index actual query paths: status/queue timestamps, `valid_until`, campus/mode/open-slot searches, Counselor/Student appointment ranges, online-session links, open conversations/SOS cases, resource status/categories/canonical URL.
 - Alembic owns deployed schema changes; no ad-hoc production patches. The first Alembic revision (`8f0f8c585641`) is a no-op baseline stamped onto the approved v4.1 initialization SQL; schema changes after the baseline are Alembic migrations (the first is `297c92da239d`, adding `user_sessions`).
 - Implemented migration `20260910_recurring_schedules` adds weekly schedules, temporary blocks, and the optional slot provenance FK. It preserves existing appointment and slot rows. Booking-horizon policy and automatic slot-generation jobs remain pending.
+- Implemented migration `20260916_scheduled_chat` validates/backfills legacy appointment links and message sequence numbers, then adds scheduled-chat lifecycle columns and integrity constraints.
 - Retention jobs handle seven-day COR expiry and 30-day post-closure message-body purge.
 - The implemented COR worker runs in the FastAPI lifespan and retains failed file deletions as `cleanup_state=FAILED`; no schema migration is required. UUID markers in private temporary storage cover interrupted writes before a DB commit. Operational details are in `REGISTRATION_VERIFICATION.md`.
 - `user_sessions` stores only SHA-256 digests (BINARY(32)) of the opaque session credential and its CSRF token — never raw credentials. `user_id` cascades on user deletion (sessions are ephemeral credentials, not history; `audit_events` remains the durable record). `last_activity_at` moves only on genuine user action and is clamped so it can never exceed `absolute_expires_at`; cleanup removes expired/revoked sessions.

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -33,6 +34,12 @@ class Settings(BaseSettings):
     # True behind HTTPS (deployment); False only for localhost dev where
     # browsers refuse Secure cookies on plain http://127.0.0.1 in some cases.
     cookie_secure: bool = False
+
+    # --- Scheduled appointment chat (ADR-028) ---
+    chat_grace_minutes: int = Field(default=15, ge=0, le=120)
+    chat_retention_days: int = Field(default=30, ge=1, le=365)
+    chat_max_message_characters: int = Field(default=4000, ge=1, le=20_000)
+    chat_maintenance_interval_seconds: int = Field(default=30, ge=1, le=3600)
 
     # --- Non-MySQL storage roots (never inside version control) ---
     cor_storage_root: str = "./var/cor"

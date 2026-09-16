@@ -50,7 +50,7 @@ function fakeApi(t, recover = () => json(auth)) {
     if (url.endsWith("/pending")) return json([application]);
     if (url.endsWith("/history")) return json([]);
     if (url.endsWith("/guidance-staff")) return json([{ user_id: 3, first_name: "Gia", last_name: "Staff", role_code: "GUIDANCE_STAFF", account_status: "ACTIVE" }]);
-    if (url.endsWith("/approve")) return json({ email_queued: false });
+    if (url.endsWith("/approve")) return json({ email_status: "SENT" });
     if (url.endsWith("/assign")) return json({ ...application.verification, assigned_guidance_staff_user_id: 3 });
     if (url.endsWith("/health")) return json({ status: "ok" });
     if (url.endsWith("/cor")) return new Response("%PDF-test");

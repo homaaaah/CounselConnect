@@ -2728,6 +2728,107 @@
         }
       }
     },
+    "/api/v1/appointments/scheduled-sessions": {
+      "get": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Scheduled Sessions",
+        "operationId": "scheduled_sessions_api_v1_appointments_scheduled_sessions_get",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AppointmentSessionResponse"
+                  },
+                  "title": "Response Scheduled Sessions Api V1 Appointments Scheduled Sessions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Scheduled Sessions Api V1 Appointments Scheduled Sessions Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/appointments/{appointment_id}": {
       "get": {
         "tags": [
@@ -2787,6 +2888,334 @@
                     }
                   ],
                   "title": "Response 422 Detail Api V1 Appointments  Appointment Id  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/session": {
+      "get": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Session Detail",
+        "operationId": "session_detail_api_v1_appointments__appointment_id__session_get",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Session Detail Api V1 Appointments  Appointment Id  Session Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/session/join": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Join Session",
+        "operationId": "join_session_api_v1_appointments__appointment_id__session_join_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Join Session Api V1 Appointments  Appointment Id  Session Join Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/{appointment_id}/change-mode": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Change Mode",
+        "operationId": "change_mode_api_v1_appointments__appointment_id__change_mode_post",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppointmentModeChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Change Mode Api V1 Appointments  Appointment Id  Change Mode Post"
                 }
               }
             }
@@ -3490,6 +3919,258 @@
         }
       }
     },
+    "/api/v1/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "messaging"
+        ],
+        "summary": "Conversation Detail",
+        "operationId": "conversation_detail_api_v1_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Conversation Detail Api V1 Conversations  Conversation Id  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "messaging"
+        ],
+        "summary": "Message History",
+        "operationId": "message_history_api_v1_conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "before_sequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Sequence"
+            }
+          },
+          {
+            "name": "after_sequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Sequence"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Message History Api V1 Conversations  Conversation Id  Messages Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "messaging"
+        ],
+        "summary": "Send Message",
+        "operationId": "send_message_api_v1_conversations__conversation_id__messages_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Send Message Api V1 Conversations  Conversation Id  Messages Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/content/cms-blocks": {
       "get": {
         "tags": [
@@ -3717,6 +4398,24 @@
         ],
         "title": "AppointmentCreateRequest"
       },
+      "AppointmentModeChangeRequest": {
+        "properties": {
+          "appointment_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE"
+            ],
+            "title": "Appointment Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "appointment_mode"
+        ],
+        "title": "AppointmentModeChangeRequest"
+      },
       "AppointmentRejectRequest": {
         "properties": {
           "rejection_note": {
@@ -3867,6 +4566,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "can_cancel": {
+            "type": "boolean",
+            "title": "Can Cancel"
+          },
+          "can_reschedule": {
+            "type": "boolean",
+            "title": "Can Reschedule"
+          },
+          "can_change_mode": {
+            "type": "boolean",
+            "title": "Can Change Mode"
           }
         },
         "type": "object",
@@ -3887,9 +4598,192 @@
           "status",
           "rejection_note",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "can_cancel",
+          "can_reschedule",
+          "can_change_mode"
         ],
         "title": "AppointmentResponse"
+      },
+      "AppointmentSessionCapabilities": {
+        "properties": {
+          "can_open_lobby": {
+            "type": "boolean",
+            "title": "Can Open Lobby"
+          },
+          "can_join": {
+            "type": "boolean",
+            "title": "Can Join"
+          },
+          "can_send": {
+            "type": "boolean",
+            "title": "Can Send"
+          },
+          "can_read_history": {
+            "type": "boolean",
+            "title": "Can Read History"
+          },
+          "can_cancel": {
+            "type": "boolean",
+            "title": "Can Cancel"
+          },
+          "can_reschedule": {
+            "type": "boolean",
+            "title": "Can Reschedule"
+          },
+          "can_change_mode": {
+            "type": "boolean",
+            "title": "Can Change Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "can_open_lobby",
+          "can_join",
+          "can_send",
+          "can_read_history",
+          "can_cancel",
+          "can_reschedule",
+          "can_change_mode"
+        ],
+        "title": "AppointmentSessionCapabilities"
+      },
+      "AppointmentSessionResponse": {
+        "properties": {
+          "appointment_id": {
+            "type": "integer",
+            "title": "Appointment Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "appointment_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE"
+            ],
+            "title": "Appointment Mode"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CONFIRMED",
+              "COMPLETED",
+              "CANCELLED",
+              "REJECTED",
+              "NO_SHOW"
+            ],
+            "title": "Status"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "lobby_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Lobby Opens At"
+          },
+          "messaging_opens_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Messaging Opens At"
+          },
+          "safety_deadline_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Safety Deadline At"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Server Time"
+          },
+          "student_joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Joined At"
+          },
+          "counselor_joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counselor Joined At"
+          },
+          "conversation_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "OPEN",
+                  "CLOSED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Status"
+          },
+          "closure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Reason"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/AppointmentSessionCapabilities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "appointment_id",
+          "conversation_id",
+          "appointment_mode",
+          "status",
+          "starts_at",
+          "ends_at",
+          "lobby_opens_at",
+          "messaging_opens_at",
+          "safety_deadline_at",
+          "server_time",
+          "capabilities"
+        ],
+        "title": "AppointmentSessionResponse"
       },
       "ApproveRequest": {
         "properties": {
@@ -4458,6 +5352,142 @@
         ],
         "title": "ContentItemResponse"
       },
+      "ConversationResponse": {
+        "properties": {
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "counselor_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counselor User Id"
+          },
+          "appointment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appointment Id"
+          },
+          "conversation_type": {
+            "type": "string",
+            "enum": [
+              "GENERAL",
+              "APPOINTMENT",
+              "SOS"
+            ],
+            "title": "Conversation Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "CLOSED"
+            ],
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "messages_purged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messages Purged At"
+          },
+          "student_joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Joined At"
+          },
+          "counselor_joined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counselor Joined At"
+          },
+          "closure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Reason"
+          },
+          "last_sequence_number": {
+            "type": "integer",
+            "title": "Last Sequence Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "student_user_id",
+          "counselor_user_id",
+          "appointment_id",
+          "conversation_type",
+          "status",
+          "started_at",
+          "closed_at",
+          "messages_purged_at",
+          "student_joined_at",
+          "counselor_joined_at",
+          "closure_reason",
+          "last_sequence_number"
+        ],
+        "title": "ConversationResponse"
+      },
       "EmergencyContactResponse": {
         "properties": {
           "contact_id": {
@@ -4762,6 +5792,130 @@
           "password"
         ],
         "title": "LoginRequest"
+      },
+      "MessageCreateRequest": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "client_message_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Client Message Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body",
+          "client_message_id"
+        ],
+        "title": "MessageCreateRequest"
+      },
+      "MessageHistoryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_before_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Sequence"
+          },
+          "next_after_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next After Sequence"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          },
+          "sequence_watermark": {
+            "type": "integer",
+            "title": "Sequence Watermark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_before_sequence",
+          "next_after_sequence",
+          "has_more",
+          "sequence_watermark"
+        ],
+        "title": "MessageHistoryResponse"
+      },
+      "MessageResponse": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id"
+          },
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id"
+          },
+          "sender_user_id": {
+            "type": "integer",
+            "title": "Sender User Id"
+          },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
+          "sequence_number": {
+            "type": "integer",
+            "title": "Sequence Number"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "conversation_id",
+          "sender_user_id",
+          "client_message_id",
+          "sequence_number",
+          "body",
+          "sent_at"
+        ],
+        "title": "MessageResponse"
       },
       "PendingItemResponse": {
         "properties": {
@@ -5420,16 +6574,21 @@
             ],
             "title": "Valid Until"
           },
-          "email_queued": {
+          "email_status": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "string",
+                "enum": [
+                  "SENT",
+                  "NOT_CONFIGURED",
+                  "FAILED"
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Email Queued"
+            "title": "Email Status"
           }
         },
         "type": "object",

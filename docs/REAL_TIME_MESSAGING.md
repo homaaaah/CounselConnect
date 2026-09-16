@@ -14,6 +14,14 @@ A conversation must not be linked to both an appointment and SOS case. All parti
 
 ## Appointment-linked conversations
 
+The implemented scheduled-session contract is:
+
+- Confirmation never creates a conversation. The appointment lobby opens 30 minutes before start, while explicit joining and messaging open at the scheduled start.
+- The first authorized participant join locks and revalidates the confirmed online appointment, then lazily creates the single conversation.
+- REST writes and cursor history are durable. WebSockets deliver committed message, appointment, reminder, and closure events; reconnect uses REST catch-up.
+- The safety deadline is appointment end plus `COUNSELCONNECT_CHAT_GRACE_MINUTES` (15 by default). Timeout closes chat with `TIMEOUT` but leaves the appointment `CONFIRMED`; only the assigned Counselor records the outcome.
+- Before start and before any join/message activity, the assigned Counselor may change a compatible appointment mode in place without changing confirmation or the reserved slot.
+
 - The appointments service supplies an authorized confirmed-online-appointment reference when the scheduled start is reached.
 - Messaging revalidates the Student, Counselor, appointment mode/status, and participant match before creating or reopening the conversation.
 - One appointment may link at most one `APPOINTMENT` conversation, and one conversation may belong to at most one appointment.
@@ -44,6 +52,6 @@ Optional expression flow: local scan → session-only `observed_expression_cue` 
 - Cleanup deadline and failure handling.
 - One-hour idle and 12-hour absolute session expiry, five-minute continuation warning, revocation, reauthentication, and proof that heartbeat/reconnect traffic does not renew idle activity.
 
-## Pending
+## Transport limits
 
-Real-time transport, delivery/read semantics, maximum message size, attachment support (not assumed), exact retained metadata, and any approved pre-start join window.
+The v1 registry is process-local and requires one backend process. Messages are text-only with a configurable 4,000-character default. Attachments, delivery/read receipts, and multi-process fan-out are not implemented.

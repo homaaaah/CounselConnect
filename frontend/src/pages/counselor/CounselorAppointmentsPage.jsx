@@ -19,6 +19,9 @@ function AppointmentCard({ appointment: a, state, counselor, onReschedule }) {
   const action = (name, body) => state.mutate("/appointments/" + a.appointment_id + "/" + name, body);
   const active = a.status === "PENDING" || a.status === "CONFIRMED";
   const started = new Date(a.starts_at).getTime() <= Date.now();
+  const canCancel = a.can_cancel ?? active;
+  const canReschedule = a.can_reschedule ?? (a.status === "CONFIRMED" && a.conversation_id === null);
+  const canChangeMode = a.can_change_mode ?? false;
   return <li className="rounded-lg border border-slate-200 p-5">
     <div className="flex flex-wrap justify-between gap-2">
       <h3 className="font-semibold">{formatSchedule(a.starts_at)}</h3>
@@ -30,20 +33,21 @@ function AppointmentCard({ appointment: a, state, counselor, onReschedule }) {
     {a.meeting_location && <p className="mt-1 text-sm">Guidance Office: {a.meeting_location}</p>}
     {a.rejection_note && <p className="mt-2 text-sm text-slate-600">Counselor note: {a.rejection_note}</p>}
     {a.status === "PENDING" && <p className="mt-2 text-sm text-amber-700">Awaiting counselor review.</p>}
-    {a.status === "CONFIRMED" && a.appointment_mode === "ONLINE" && <p className="mt-2 text-sm text-slate-600">Online appointment confirmed. In-app Live Chat is not available yet.</p>}
+    {a.status === "CONFIRMED" && a.appointment_mode === "ONLINE" && <p className="mt-2 text-sm text-slate-600">Online appointment confirmed. The session lobby opens 30 minutes before the scheduled start.</p>}
     <div className="mt-4 flex flex-wrap gap-2">
       {counselor && a.status === "PENDING" && <>
         <button className={buttonClass} disabled={state.busy || started} onClick={() => void action("confirm")}>Confirm</button>
         <button className={secondaryClass} disabled={state.busy} onClick={() => setRejecting(!rejecting)}>Reject</button>
       </>}
-      {active && <button className={secondaryClass} disabled={state.busy} onClick={() => setCancelling(!cancelling)}>Cancel appointment</button>}
-      {a.status === "CONFIRMED" && a.conversation_id === null && <button className={secondaryClass} disabled={state.busy} onClick={() => onReschedule(a.appointment_id)}>Reschedule</button>}
+      {canCancel && <button className={secondaryClass} disabled={state.busy} onClick={() => setCancelling(!cancelling)}>Cancel appointment</button>}
+      {canReschedule && <button className={secondaryClass} disabled={state.busy} onClick={() => onReschedule(a.appointment_id)}>Reschedule</button>}
+      {canChangeMode && <button className={secondaryClass} disabled={state.busy} onClick={() => void action("change-mode", { appointment_mode: a.appointment_mode === "ONLINE" ? "FACE_TO_FACE" : "ONLINE" })}>Change to {a.appointment_mode === "ONLINE" ? "face-to-face" : "online"}</button>}
       {counselor && a.status === "CONFIRMED" && <>
         <button className={buttonClass} disabled={state.busy || !started} onClick={() => void action("complete")}>Mark completed</button>
         <button className={secondaryClass} disabled={state.busy || !started} onClick={() => void action("no-show")}>Mark no-show</button>
       </>}
     </div>
-    {cancelling && active && <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm">
+    {cancelling && canCancel && <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm">
       <p>Cancel this appointment and release the slot?</p>
       <button className={secondaryClass + " mt-2"} disabled={state.busy} onClick={async () => { if (await action("cancel")) setCancelling(false); }}>Confirm cancellation</button>
     </div>}
@@ -57,14 +61,20 @@ function AppointmentCard({ appointment: a, state, counselor, onReschedule }) {
 }
 
 function RecordsTabs({ state }) {
-  const recordsTabs = ["CONFIRMED", "PENDING", "COMPLETED"];
-  const tabLabel = (s) => s.charAt(0) + s.slice(1).toLowerCase();
+  const recordsTabs = [
+    ["CONFIRMED", "Confirmed"],
+    ["PENDING", "Pending"],
+    ["COMPLETED", "Completed"],
+    ["NO_SHOW", "No-show"],
+    ["CANCELLED", "Cancelled"],
+    ["REJECTED", "Rejected"],
+  ];
   return <div role="tablist" aria-label="Filter records by status" className="flex flex-wrap gap-2">
-    {recordsTabs.map(s => <button key={s} type="button" role="tab" aria-selected={state.status === s}
-      className={state.status === s
+    {recordsTabs.map(([status, label]) => <button key={status} type="button" role="tab" aria-selected={state.status === status}
+      className={state.status === status
         ? "rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white"
         : "rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"}
-      onClick={() => { state.setStatus(s); state.setAppointmentPage(1); }}>{tabLabel(s)}</button>)}
+      onClick={() => { state.setStatus(status); state.setAppointmentPage(1); }}>{label}</button>)}
   </div>;
 }
 

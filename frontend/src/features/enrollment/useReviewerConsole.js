@@ -98,6 +98,14 @@ export function useReviewerConsole(role = "") {
         `/enrollment-verifications/${verificationId}/approve`,
         { method: "POST", body: JSON.stringify({ valid_months: 12 }) }
       );
+      const emailSent = result.email_status === "SENT";
+      if (result.email_status === "FAILED") {
+        setToast({ kind: "warn", text: `Application #${verificationId} APPROVED — Gmail could not accept the notification. Check the sender settings.` });
+        discardPdf(verificationId);
+        await refresh();
+        return;
+      }
+      result.email_queued = emailSent;
       discardPdf(verificationId);
       setToast({
         kind: "ok",
@@ -127,6 +135,14 @@ export function useReviewerConsole(role = "") {
         `/enrollment-verifications/${verificationId}/reject`,
         { method: "POST", body: JSON.stringify({ comment }) }
       );
+      const emailSent = result.email_status === "SENT";
+      if (result.email_status === "FAILED") {
+        setToast({ kind: "warn", text: `Application #${verificationId} REJECTED — Gmail could not accept the notification. Check the sender settings.` });
+        discardPdf(verificationId);
+        await refresh();
+        return;
+      }
+      result.email_queued = emailSent;
       discardPdf(verificationId);
       setToast({
         kind: "ok",

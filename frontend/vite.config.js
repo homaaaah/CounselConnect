@@ -9,6 +9,7 @@ export default defineConfig({
     // across browsers/proxies that prefer 127.0.0.1 over [::1].
     host: true,
     port: 5173,
+    strictPort: true,
     // Backend CORS allowlist expects this origin (backend/.env.example).
     proxy: {
       // Same-origin API access for both localhost and dev tunnels:
@@ -18,6 +19,7 @@ export default defineConfig({
       "/api": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
+        ws: true,
       },
     },
   },

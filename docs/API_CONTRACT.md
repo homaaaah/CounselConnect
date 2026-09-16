@@ -149,8 +149,8 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 | `GET /enrollment-verifications/history` | Counselor: all case history. Guidance Staff: only assigned case history; optional `status`. |
 | `GET /enrollment-verifications/{verification_id}/cor` | Counselor or the assigned Guidance Staff member; private, no-store PDF preview. |
 | `POST /enrollment-verifications/{verification_id}/assign` | Counselor; assigns a pending case to an active Guidance Staff member. |
-| `POST /enrollment-verifications/{verification_id}/approve` | Counselor or assigned Guidance Staff member; approves the assigned pending case. |
-| `POST /enrollment-verifications/{verification_id}/reject` | Counselor or assigned Guidance Staff member; rejects the assigned pending case with a required comment. |
+| `POST /enrollment-verifications/{verification_id}/approve` | Counselor or assigned Guidance Staff member; approves the assigned pending case and returns `email_status`: `SENT`, `NOT_CONFIGURED`, or `FAILED`. |
+| `POST /enrollment-verifications/{verification_id}/reject` | Counselor or assigned Guidance Staff member; rejects the assigned case with a required comment and returns `email_status`. |
 
 ### Appointments
 
@@ -182,6 +182,10 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `GET /appointments` | Own appointments; optional `status`; `page=1`, `page_size=20` (max 100). |
 | `POST /appointments` | Student; `availability_slot_id`, `appointment_mode`; 201 `PENDING` appointment. |
 | `GET /appointments/{appointment_id}` | Owner Student/assigned Counselor; 200 appointment. |
+| `GET /appointments/scheduled-sessions` | Owner Student/assigned Counselor; confirmed online sessions and server-derived capabilities/timing. |
+| `GET /appointments/{appointment_id}/session` | Owner Student/assigned Counselor; one scheduled-session lobby/chat state. |
+| `POST /appointments/{appointment_id}/session/join` | Owner Student/assigned Counselor; at or after start and before the safety deadline, lazily creates/reuses the appointment conversation and records that participant's join. |
+| `POST /appointments/{appointment_id}/change-mode` | Assigned Counselor; changes a confirmed appointment in place before start and before chat activity when the slot supports the target mode. |
 | `POST /appointments/{appointment_id}/confirm` | Assigned Counselor; pending to confirmed. |
 | `POST /appointments/{appointment_id}/reject` | Assigned Counselor; JSON object with optional nullable `rejection_note` (max 500). |
 | `POST /appointments/{appointment_id}/cancel` | Owner Student/assigned Counselor; pending or confirmed to cancelled. |
@@ -189,7 +193,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `POST /appointments/{appointment_id}/complete` | Assigned Counselor; confirmed to completed once scheduled start is reached. |
 | `POST /appointments/{appointment_id}/no-show` | Assigned Counselor; confirmed to no-show once scheduled start is reached. |
 
-Transitions return 200 appointment responses. Responses include the schedule, campus/counselor names, and (only in authorized appointment responses) student name and booking-time `meeting_location`. `conversation_id` remains nullable; there is no chat-join endpoint in this scheduling delivery. All scheduling responses are `no-store`; schema validation excludes unknown request fields and returns sanitized errors. Exact shapes are generated in `contracts/openapi.json`.
+Transitions return 200 appointment responses. Responses include the schedule, campus/counselor names, authorized action capabilities, student name, booking-time `meeting_location`, and nullable `conversation_id`. Student cancellation/rescheduling closes 24 hours before start. All scheduling responses are `no-store`; schema validation excludes unknown request fields and returns sanitized errors. Exact shapes are generated in `contracts/openapi.json`.
 
 Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMENT_NOT_FOUND`/`CAMPUS_NOT_FOUND`; and 409 `SLOT_UNAVAILABLE`, `SCHEDULE_CONFLICT`, `MODE_INCOMPATIBLE`, `GUIDANCE_OFFICE_REQUIRED`, `SLOT_IN_PAST`, `APPOINTMENT_DATE_PASSED`, `APPOINTMENT_TIME_PASSED`, `INVALID_APPOINTMENT_TRANSITION`, `SESSION_NOT_STARTED`, `SESSION_ALREADY_LINKED`, `PARTICIPANT_UNAVAILABLE`, `APPOINTMENT_CHANGED`, or `CONVERSATION_MISMATCH`. Unauthenticated and missing/invalid CSRF requests use the existing auth errors. Naive datetime inputs and invalid pagination/ranges/enums receive sanitized 422 errors.
 
@@ -197,8 +201,11 @@ Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMEN
 
 - `conversation_type` is `GENERAL`, `APPOINTMENT`, or `SOS`.
 - Every operation revalidates the authorized Student, Counselor, purpose, and source linkage.
+- `GET /conversations/{conversation_id}` and `GET /conversations/{conversation_id}/messages` expose authorized metadata/cursor history.
+- `POST /conversations/{conversation_id}/messages` persists text with a required `client_message_id`; retries return the original message and sequence numbers are conversation-local.
+- `/conversations/{conversation_id}/ws` delivers committed events. `/appointments/session-events` delivers appointment/reminder events. Both authenticate the session cookie, require an allowed `Origin`, reauthorize periodically without extending idle expiry, and carry no durable writes.
 - Raw camera media and embeddings never enter message or API payloads.
-- Real-time transport, delivery/read semantics, attachment support, message-size limits, and any pre-start appointment window remain pending.
+- Attachments and delivery/read receipts remain absent in v1. Message bodies default to a 4,000-character maximum and purge 30 days after closure.
 
 ### SOS and assistant
 

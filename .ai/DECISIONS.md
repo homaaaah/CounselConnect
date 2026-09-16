@@ -34,6 +34,8 @@ Status values: `APPROVED`, `PENDING`, `SUPERSEDED`.
 | ADR-026 | Manual-resource publication rules (approved 2026-09-10, resolves ADR-P07): one Counselor approval publishes (no multi-step review; ADR-003 makes Counselor the authority). Attachments cap: 5 files per resource, 10 MB each, 25 MB total. External links must be canonical URLs and pass the existing allowed-domain check; manual resources never invoke the automated discovery scraper (ADR-011). |
 | ADR-027 | Assistant implementation (approved 2026-09-10, resolves ADR-P08): deterministic retrieval only in v1 — keyword/category search over `PUBLISHED` resources plus approved navigation/FAQ content. No LLM provider, no generated prose, no persistent history (ADR-013). If the team later finds deterministic answers insufficient, revisit a bounded, history-free RAG provider as a new ADR. |
 
+| ADR-028 | Scheduled online counseling (approved 2026-09-16): confirmation does not create a conversation. The appointment-derived launcher opens a lobby 30 minutes before start; a participant's explicit first join at or after start lazily creates the single `APPOINTMENT` conversation. REST is the durable source for messages/history and native WebSockets deliver committed events. The safety deadline is slot end plus 15 minutes; timeout closes chat with reason `TIMEOUT` but leaves the appointment `CONFIRMED` for the Counselor to record `COMPLETED` or `NO_SHOW`. Students may cancel/reschedule only until 24 hours before start; the assigned Counselor may change mode in place only before start and before chat activity. Closed history is Counselor-only until the 30-day body purge. Reminders use in-app/browser delivery only and contain no counseling content. |
+
 ## Pending
 
 | ID | Decision needed |

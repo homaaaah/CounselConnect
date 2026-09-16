@@ -259,6 +259,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
 
     def read_cor_pdf(self, reviewer: User, verification_id: int) -> bytes:
         """COR bytes for the reviewer's in-app PDF preview."""
+        self._reviewer_assignment_scope(reviewer)
         verification = self._lock_verification(verification_id)
         self._authorize_case_reviewer(reviewer, verification)
         self._require_current_cor(verification)
@@ -275,6 +276,7 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         self, reviewer: User, verification_id: int, valid_months: int = 12
     ) -> tuple[EnrollmentVerification, bool]:
         """Approve: activate the student account with a validity window."""
+        self._reviewer_assignment_scope(reviewer)
         verification = self._lock_verification(verification_id)
         self._authorize_case_reviewer(reviewer, verification)
         if verification.status != "PENDING":
@@ -309,13 +311,14 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         self.repository.session.commit()
         self._purge_cor_files(verification_id)
 
-        email_queued = self._notify(verification, student, approved=True)
-        return verification, email_queued
+        email_status = self._notify(verification, student, approved=True)
+        return verification, email_status
 
     def reject(
         self, reviewer: User, verification_id: int, reason: str
     ) -> tuple[EnrollmentVerification, bool]:
         """Reject with a REQUIRED comment; account stays non-active."""
+        self._reviewer_assignment_scope(reviewer)
         comment = (reason or "").strip()
         if not comment:
             raise AppError(
@@ -354,10 +357,10 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
         self.repository.session.commit()
         self._purge_cor_files(verification_id)
 
-        email_queued = self._notify(
+        email_status = self._notify(
             verification, student, approved=False, comment=comment
         )
-        return verification, email_queued
+        return verification, email_status
 
     def assign_guidance_staff(self, counselor: User, verification_id: int, guidance_staff_user_id: int) -> EnrollmentVerification:
         if counselor.role_code != "COUNSELOR":
@@ -499,7 +502,48 @@ class EnrollmentVerificationService(BaseService[EnrollmentVerification]):
 
     def _notify(
         self, verification, student, *, approved: bool, comment: str = ""
-    ) -> bool:
+    ) -> str:
+        """Submit a decision email and report Gmail's SMTP acceptance.
+
+        The decision is committed before this call. A notification failure
+        therefore cannot undo an approval/rejection, but is visible to the
+        reviewer instead of being silently ignored.
+        """
+        if student is None:
+            return "FAILED"
+        subject = "CounselConnect — Registration {}".format(
+            "Approved" if approved else "Rejected"
+        )
+        if approved:
+            body = (
+                "Good news! Your CounselConnect registration was approved.\n\n"
+                "You can now sign in and use the guidance services.\n"
+                f"Enrollment validity expires: {verification.valid_until}.\n\n"
+                "— University of Caloocan City Guidance and Counseling Office"
+            )
+        else:
+            body = (
+                "Your CounselConnect registration was reviewed and could not be approved.\n\n"
+                f"Reviewer's comment: {comment}\n\n"
+                "If you believe this is a mistake, please visit the Guidance and "
+                "Counseling Office.\n\n"
+                "— University of Caloocan City Guidance and Counseling Office"
+            )
+        if not smtp_configured():
+            return "NOT_CONFIGURED"
+        try:
+            return "SENT" if send_email(to=student.email, subject=subject, body=body) else "NOT_CONFIGURED"
+        except Exception as error:  # SMTP/network failure after the decision commit.
+            logger.warning(
+                "verification_decision_email_failed verification_id=%s error_type=%s",
+                verification.verification_id,
+                type(error).__name__,
+            )
+            return "FAILED"
+
+    def _notify_background(
+        self, verification, student, *, approved: bool, comment: str = ""
+    ) -> str:
         """Queue the decision email in a background thread.
 
         Returns True when the email was queued for sending (SMTP

@@ -60,6 +60,7 @@ class require_roles:  # noqa: N801 — used as a dependency factory
             session_cookie,
             request.headers.get("X-CSRF-Token"),
             is_safe_method=request.method.upper() in _SAFE_METHODS,
+            record_activity=request.headers.get("X-Background-Refresh") != "1",
         )
         if user.role_code not in self.roles:
             raise AppError(
@@ -80,6 +81,7 @@ def require_counselor(
         session_cookie,
         request.headers.get("X-CSRF-Token"),
         is_safe_method=request.method.upper() in _SAFE_METHODS,
+        record_activity=request.headers.get("X-Background-Refresh") != "1",
     )
     if user.role_code != "COUNSELOR":
         raise AppError(
