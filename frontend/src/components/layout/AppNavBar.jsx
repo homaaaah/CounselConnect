@@ -125,11 +125,20 @@ function CounselorShell({ user, page, onSignOut, open, setOpen }) {
 /* ---------------- Top bar (Student / Guidance Staff) ---------------- */
 
 function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
+  const [profileOpen, setProfileOpen] = useState(false);
   const links = [{ label: "Home", href: "#home" }];
   if (user.role_code === "GUIDANCE_STAFF") links.push({ label: "Verify students", href: "#review" });
   const activeStudent = user.role_code === "STUDENT" && user.account_status === "ACTIVE";
   if (activeStudent) links.push({ label: "Appointments", href: "#appointments" });
   const showComingSoon = user.role_code === "STUDENT";
+  const isStudent = user.role_code === "STUDENT";
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setProfileOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [profileOpen]);
 
   const linkClass = (href) => {
     const current = href === "#" + page;
@@ -165,24 +174,67 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
               </span>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden items-center gap-2 sm:inline-flex">
-              <span className="text-sm text-slate-700">
-                {user.first_name} {user.last_name}
-              </span>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                {roleLabel(user.role_code)}
-              </span>
-              {user.role_code === "STUDENT" && user.account_status !== "ACTIVE" && (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                  {user.account_status === "PENDING_VERIFICATION" ? "Verification pending" : "Verification expired"}
+          <div className={isStudent ? "ml-auto relative flex items-center gap-3" : "ml-auto flex items-center gap-3"}>
+            {isStudent ? (
+              <>
+                <button type="button" aria-expanded={profileOpen} aria-label="Open profile menu"
+                  onClick={() => setProfileOpen(!profileOpen)}
+                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1.5 text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-counseling-active-focus">
+                  <i className="fa-solid fa-user-circle text-2xl text-slate-600" aria-hidden="true"></i>
+                  <span className="hidden text-sm font-medium sm:inline pr-1">{user.first_name}</span>
+                </button>
+
+                <div hidden={!profileOpen} className="absolute right-0 top-12 z-50 w-64 rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
+                  <div className="border-b border-slate-100 pb-3">
+                    <p className="text-sm font-semibold text-slate-900">{user.first_name} {user.last_name}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        {roleLabel(user.role_code)}
+                      </span>
+                      {user.account_status !== "ACTIVE" && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          {user.account_status === "PENDING_VERIFICATION" ? "Verification pending" : "Verification expired"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="py-2 border-b border-slate-100 my-1">
+                    <span aria-disabled="true" title="Coming soon"
+                      className="flex cursor-default items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-400">
+                      <span className="flex items-center gap-2">
+                        <i className="fa-solid fa-gear w-4 text-center" aria-hidden="true"></i>
+                        Settings
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>
+                    </span>
+                  </div>
+
+                  <div className="pt-1">
+                    <button type="button" onClick={() => { setProfileOpen(false); onSignOut(); }}
+                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 text-left flex items-center gap-2">
+                      <i className="fa-solid fa-right-from-bracket w-4 text-center" aria-hidden="true"></i>
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="hidden items-center gap-2 sm:inline-flex">
+                  <span className="text-sm text-slate-700">
+                    {user.first_name} {user.last_name}
+                  </span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    {roleLabel(user.role_code)}
+                  </span>
                 </span>
-              )}
-            </span>
-            <button type="button" onClick={onSignOut}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
-              Sign out
-            </button>
+                <button type="button" onClick={onSignOut}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+                  Sign out
+                </button>
+              </>
+            )}
             <button type="button" className="md:hidden" aria-expanded={menuOpen} aria-controls="app-nav-links"
               aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen(!menuOpen)}>
               <i className={menuOpen ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>

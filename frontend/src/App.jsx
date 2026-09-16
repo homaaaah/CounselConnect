@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import HomePage from "./pages/HomePage";
+import StudentHomePage from "./pages/student/student_homepage";
+import CounselorDashboard from "./pages/counselor/counselor_dashboard";
 import ReviewerPage from "./pages/ReviewerPage";
-import AppointmentsPage from "./pages/AppointmentsPage";
+import StudentAppointmentsPage from "./pages/student/StudentAppointmentsPage";
+import CounselorAppointmentsPage from "./pages/counselor/CounselorAppointmentsPage";
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
 import { AppNavBar } from "./components/layout";
@@ -51,10 +53,16 @@ export default function App() {
         {page === "login" && <LoginPage onSignedIn={session.accept} />}
         {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
         {page === "register" && <RegisterPage />}
-        {page === "home" && <HomePage user={session.user} />}
+        {page === "home" && (session.user
+          ? session.user.role_code === "COUNSELOR"
+            ? <CounselorDashboard user={session.user} />
+            : <StudentHomePage user={session.user} />
+          : <StudentHomePage user={null} />)}
         {page === "appointments" && (session.user
           ? session.user.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code)
-            ? <AppointmentsPage key={session.user.user_id} user={session.user} />
+            ? session.user.role_code === "COUNSELOR"
+              ? <CounselorAppointmentsPage key={session.user.user_id} user={session.user} />
+              : <StudentAppointmentsPage key={session.user.user_id} user={session.user} />
             : <p role="alert" className="p-6">Appointments require an active Student or Counselor account.</p>
           : <LoginPage onSignedIn={session.accept} />)}
         {page === "review" && (["COUNSELOR", "GUIDANCE_STAFF"].includes(session.user?.role_code)

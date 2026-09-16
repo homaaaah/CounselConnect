@@ -7,6 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        tint: '#EFF6FF',
         counseling: {
           'bg-tint': '#EFF6FF',
           'subtle-fill': '#DBEAFE',

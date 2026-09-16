@@ -1113,32 +1113,46 @@ html {
    #appointments.
    ============================================ */
 
+/* Base shell — shared by Student home AND the Counselor dashboard, so it must
+   stay neutral (white) to preserve the Counselor visuals. The student hero
+   opts into the tint + centering via the `bg-tint` utility on its own <main>. */
 .home-page {
   background: #ffffff;
   color: #18181b;
   line-height: 1.5;
 }
 
+/* Student homepage only — covers the full viewport with the calm tint and
+   centers the sparse hero so there is no dead space top/bottom. */
+.home-page.bg-tint {
+  min-height: calc(100vh - 73px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .home-page .homescreen-hero {
   max-width: 780px;
   margin: 0 auto;
-  padding: 70px 2rem 60px;
+  padding: 40px 2rem;
   text-align: center;
+  width: 100%;
 }
 
 .home-page .homescreen-hero h1 {
   font-family: Georgia, serif;
-  font-size: clamp(2.25rem, 4vw, 3.25rem);
+  font-size: 25px;
   font-weight: 400;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
   color: var(--counseling-high-contrast);
 }
 
-.home-page .homescreen-hero p {
-  color: var(--text-muted);
-  font-size: 1rem;
-  max-width: 620px;
-  margin: 0 auto 2.25rem;
+.home-page .homescreen-hero .homescreen-subtitle {
+  color: #52525b;
+  font-size: 1.05rem;
+  max-width: 580px;
+  margin: 0 auto 2rem;
 }
 
 .home-page .action-buttons {
@@ -1178,8 +1192,8 @@ html {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--counseling-subtle-fill);
-  color: #18181b;
+  background: #dc2626;
+  color: #ffffff;
   border: none;
   padding: 0.75rem 1.75rem;
   border-radius: 30px;
@@ -1191,7 +1205,7 @@ html {
 }
 
 .home-page .btn-action-emergency:hover {
-  background: var(--counseling-light-accent);
+  background: #b91c1c;
 }
 
 /* ---- Homepage responsive (tablet/mobile, Capacitor) ---- */
