@@ -10,6 +10,7 @@ Authoritative for new APIs, schemas, database objects, events, and source files.
 | Guidance Staff | `GUIDANCE_STAFF`, `guidance_staff` |
 | Guidance Counselor / Counselor | `COUNSELOR`, `counselor` |
 | Certificate of Registration | `COR`, `cor` |
+| COR screening | `cor_screening` |
 | Guidance Office location | `guidance_office_location` |
 | Availability delivery mode | `delivery_mode` |
 | Appointment mode | `appointment_mode` |
@@ -18,20 +19,20 @@ Authoritative for new APIs, schemas, database objects, events, and source files.
 | Observed Expression Cue | `observed_expression_cue` |
 | SOS | `SOS`, `sos` |
 
-Never introduce `ADMIN`, `administrator`, `student_id` evidence, `emotional_baseline` persistence, or identity/face-recognition terms. “Observed Expression Cue” is session context, not a stored student trait.
+Never introduce `ADMIN`, `administrator`, `student_id` evidence, `emotional_baseline` persistence, or identity/face-recognition terms. The narrow `SUPERADMIN` recovery role (ADR-030) is the only staff-elevation exception. “Observed Expression Cue” is session context, not a stored student trait.
 
 ## Case by layer
 
 | Layer | Convention | Example |
 |---|---|---|
-| Python files/functions/variables | `snake_case` | `enrollment_verification.py`, `approve_verification` |
-| Python/JavaScript classes, React components | `PascalCase` | `EnrollmentVerificationResponse`, `SOSCaseCard` |
+| Python files/functions/variables | `snake_case` | `cor_screening.py`, `confirm_screening` |
+| Python/JavaScript classes, React components | `PascalCase` | `CorScreeningResponse`, `SOSCaseCard` |
 | React hooks | `useCamelCase` | `useAppointmentSlots` |
 | TS/JS variables/functions/props | `camelCase` | `verificationStatus` |
 | Constants/enum values/error codes | `SCREAMING_SNAKE_CASE` | `NEEDS_RESUBMISSION`, `SLOT_UNAVAILABLE` |
 | Database/API JSON/query fields | `snake_case` | `student_user_id`, `valid_until` |
-| Database tables | plural `snake_case` | `enrollment_verifications` |
-| URL resource segments | plural `kebab-case` | `/enrollment-verifications` |
+| Database tables | plural `snake_case` | `cor_screenings` |
+| URL resource segments | plural `kebab-case` | `/cor-screenings` |
 | Environment variables | `COUNSELCONNECT_` + uppercase | `COUNSELCONNECT_DATABASE_URL` |
 | Tests | mirror target + `_test`/`.test` | `test_appointments.py`, `AppointmentCard.test.jsx` |
 
@@ -61,8 +62,8 @@ The v1 table names in `docs/DATABASE.md` are canonical.
 - Nest only for ownership/context: `/conversations/{conversation_id}/messages`.
 - Query parameters are `snake_case`: `?status=PENDING&page=1&page_size=20`.
 - State transitions may use explicit action endpoints when a plain CRUD update would hide business rules:
-  - `POST /enrollment-verifications/{verification_id}/approve`
-  - `POST /enrollment-verifications/{verification_id}/request-resubmission`
+  - `POST /cor-screenings/confirm`
+  - `POST /cor-screenings/reject`
   - `POST /appointments/{appointment_id}/confirm`
   - `POST /sos-cases/{sos_case_id}/close`
   - `POST /wellness-resources/{resource_id}/publish`
@@ -82,7 +83,10 @@ The v1 table names in `docs/DATABASE.md` are canonical.
 | Domain | Values |
 |---|---|
 | Account | `PENDING_VERIFICATION`, `ACTIVE`, `VERIFICATION_EXPIRED` |
-| Verification | `PENDING`, `APPROVED`, `NEEDS_RESUBMISSION`, `REJECTED`, `EXPIRED` |
+| Role | `STUDENT`, `GUIDANCE_STAFF`, `COUNSELOR`, `SUPERADMIN` |
+| Verification (legacy `enrollment_verifications`) | `PENDING`, `APPROVED`, `NEEDS_RESUBMISSION`, `REJECTED`, `EXPIRED` |
+| COR screening | `PROCESSING`, `AWAITING_CONFIRMATION`, `PASSED`, `NEEDS_RESUBMISSION`, `FAILED` |
+| COR barcode | `NOT_PROCESSED`, `NOT_FOUND`, `UNREADABLE`, `INVALID_FORMAT`, `DECODED`, `MISMATCH` |
 | Availability status | `AVAILABLE`, `RESERVED` |
 | Availability delivery mode | `ONLINE`, `FACE_TO_FACE`, `BOTH` |
 | Appointment mode | `ONLINE`, `FACE_TO_FACE` |
@@ -96,7 +100,7 @@ Do not invent additional values in code; record and document the business transi
 
 ## Events and acronyms
 
-- Audit `event_type` uses past-tense `snake_case`: `verification_approved`, `appointment_cancelled`.
-- `target_type` uses singular `snake_case`: `enrollment_verification`.
+- Audit `event_type` uses past-tense `snake_case`: `cor_screening_submitted`, `account_activated`, `appointment_cancelled`.
+- `target_type` uses singular `snake_case`: `cor_screening`.
 - Keep established acronyms uppercase in prose/types (`CORFile`, `SOSCase`, `APIError`) and lowercase inside compound `snake_case` (`cor_file`, `sos_case`).
 - DFD labels such as `P1`, `P21`, and `D7` are diagram references only, never production identifiers.

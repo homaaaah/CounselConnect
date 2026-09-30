@@ -263,52 +263,27 @@ def test_logout_revokes_session_and_clears_cookie(client, student):
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
-def test_role_gates_counselor_endpoints(client, student, counselor):
-    # Student session: every reviewer endpoint is 403.
-    login = _login(client, "2026-AUTHTST", "student-pass-1").json()
-    csrf = {"X-CSRF-Token": login["csrf_token"]}
-    for path, method, extra_headers in (
-        ("/api/v1/enrollment-verifications/pending", "GET", {}),
-        ("/api/v1/enrollment-verifications/history", "GET", {}),
-        ("/api/v1/enrollment-verifications/1/cor", "GET", {}),
-        ("/api/v1/enrollment-verifications/1/approve", "POST", csrf),
-        ("/api/v1/enrollment-verifications/1/reject", "POST", csrf),
-    ):
-        r = client.request(
-            method,
-            path,
-            headers=extra_headers,
-            json={"comment": "Synthetic review note"}
-            if path.endswith("/reject")
-            else None,
-        )
-        assert r.status_code == 403, f"{path} should be COUNSELOR-only"
+def test_role_gates_screening_endpoints(client, student, counselor):
+    # Student session: the Counselor-only directory/screening lists are denied.
+    _login(client, "2026-AUTHTST", "student-pass-1")
+    for path in ("/api/v1/cor-screenings", "/api/v1/accounts/students"):
+        r = client.get(path)
+        assert r.status_code == 403, path
         assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"
     # Counselor session: allowed.
     _login(client, "auth-counselor@example.edu", "counselor-pass-1")
-    r = client.get("/api/v1/enrollment-verifications/pending")
-    assert r.status_code == 200
+    for path in ("/api/v1/cor-screenings", "/api/v1/accounts/students"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert "items" in r.json()
 
 
-def test_csrf_required_on_unsafe_protected_actions(client, student, counselor):
-    _login(client, "auth-counselor@example.edu", "counselor-pass-1")
-    # No X-CSRF-Token header on POST approve → 403, never the action.
-    r = client.post("/api/v1/enrollment-verifications/1/approve")
+def test_csrf_required_on_unsafe_protected_actions(client, student):
+    _login(client, "2026-AUTHTST", "student-pass-1")
+    # No X-CSRF-Token header on POST confirm → 403, never the action.
+    r = client.post("/api/v1/cor-screenings/confirm", json={})
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "CSRF_TOKEN_INVALID"
-
-
-def test_student_cor_upload_uses_session_identity(client, student, tmp_path):
-    login = _login(client, "2026-AUTHTST", "student-pass-1").json()
-    pdf = tmp_path / "cor.pdf"
-    pdf.write_bytes(b"%PDF-1.4\n%session-upload-test\n%%EOF")
-    r = client.post(
-        "/api/v1/enrollment-verifications/cor",
-        files={"file": ("cor.pdf", pdf.read_bytes(), "application/pdf")},
-        headers={"X-CSRF-Token": login["csrf_token"]},
-    )
-    assert r.status_code == 201
-    assert r.json()["student_user_id"] == student.user_id
 
 
 # ------------------------------------------------------------ expiry rules

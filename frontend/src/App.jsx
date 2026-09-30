@@ -4,12 +4,15 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import StudentHomePage from "./pages/student/student_homepage";
 import CounselorDashboard from "./pages/counselor/counselor_dashboard";
-import ReviewerPage from "./pages/ReviewerPage";
+import CounselorUsersPage from "./pages/counselor/CounselorUsersPage";
+import RegistrationStatusPage from "./pages/student/RegistrationStatusPage";
 import StudentAppointmentsPage from "./pages/student/StudentAppointmentsPage";
 import CounselorAppointmentsPage from "./pages/counselor/CounselorAppointmentsPage";
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
 import { AppNavBar } from "./components/layout";
+import { ToastProvider, useToast } from "./components/feedback";
+import { setErrorHandler } from "./services/apiClient";
 import ScheduledSessionPage from "./pages/ScheduledSessionPage";
 import { ScheduledSessionLauncher } from "./features/messaging";
 
@@ -38,15 +41,44 @@ function SessionExpiryWarning({ session }) {
 
 /**
  * Hash-based page switcher (DFD Master System Flow).
- * The reviewer UI mounts only after cookie/CSRF restoration and a role
+ * Protected pages mount only after cookie/CSRF restoration and a role
  * check. The backend independently authorizes every protected request.
  */
 export default function App() {
+  return (
+    <ToastProvider>
+      <AppShell />
+    </ToastProvider>
+  );
+}
+
+function AppShell() {
   const [page, setPage] = useState(window.location.hash.replace("#", "") || "landing");
   const { status, error } = useHealth();
   const session = useSession();
+  const toast = useToast();
 
   useEffect(() => { void session.restore(); }, [session.restore]);
+
+  // Surface every failed API request as a visual notification.
+  useEffect(() => {
+    setErrorHandler((apiError) => toast.error(apiError.message, { title: "Request failed" }));
+    return () => setErrorHandler(null);
+  }, [toast.error]);
+
+  useEffect(() => {
+    if (session.error) toast.error(session.error, { title: "Session" });
+  }, [session.error, toast.error]);
+
+  useEffect(() => {
+    if (error) toast.error(`API unreachable: ${error}`, { title: "Connection" });
+  }, [error, toast.error]);
+
+  // Rejecting the extracted details signs the Student out so they can start over.
+  const handleRejected = async () => {
+    try { await session.logout(); } catch { /* ignore; redirect anyway */ }
+    window.location.hash = "login";
+  };
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash.replace("#", "") || "landing");
@@ -60,7 +92,7 @@ export default function App() {
 
   // Counselor shell: fixed left sidebar on desktop — page content shifts
   // right by the sidebar width (16rem) so nothing hides underneath it.
-  const counselorShell = session.user?.role_code === "COUNSELOR";
+  const counselorShell = ["COUNSELOR", "SUPERADMIN"].includes(session.user?.role_code);
   const sessionAppointmentId = page.startsWith("session/") ? Number(page.slice("session/".length)) : null;
 
   return (
@@ -78,11 +110,19 @@ export default function App() {
       <div className={counselorShell ? "lg:ml-64" : undefined}>
         {page === "login" && <LoginPage onSignedIn={session.accept} />}
         {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
-        {page === "register" && <RegisterPage />}
+        {page === "register" && (
+          <RegisterPage
+            onSignedIn={session.accept}
+            onActivated={async () => { try { await session.continueSession(); } catch { /* 401 handling clears the session */ } }}
+            onRejected={handleRejected}
+          />
+        )}
         {page === "home" && (session.user
-          ? session.user.role_code === "COUNSELOR"
-            ? <CounselorDashboard user={session.user} />
-            : <StudentHomePage user={session.user} />
+          ? session.user.role_code === "SUPERADMIN"
+            ? <CounselorUsersPage canRecover />
+            : session.user.role_code === "COUNSELOR"
+              ? <CounselorDashboard user={session.user} />
+              : <StudentHomePage user={session.user} />
           : <StudentHomePage user={null} />)}
         {page === "appointments" && (session.user
           ? session.user.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code)
@@ -91,21 +131,26 @@ export default function App() {
               : <StudentAppointmentsPage key={session.user.user_id} user={session.user} />
             : <p role="alert" className="p-6">Appointments require an active Student or Counselor account.</p>
           : <LoginPage onSignedIn={session.accept} />)}
-        {page === "review" && (["COUNSELOR", "GUIDANCE_STAFF"].includes(session.user?.role_code)
-          ? <ReviewerPage user={session.user} />
-          : session.user
-            ? <p role="alert" className="p-6">This page requires a Counselor or Guidance Staff account.</p>
-            : <LoginPage audience="staff" onSignedIn={session.accept} />)}
+        {page === "registration" && (session.user?.role_code === "STUDENT"
+          ? <RegistrationStatusPage key={session.user.user_id} user={session.user} onRejected={handleRejected} />
+          : <LoginPage onSignedIn={session.accept} />)}
+        {page === "users" && (["COUNSELOR", "SUPERADMIN"].includes(session.user?.role_code)
+          ? <CounselorUsersPage canRecover={session.user.role_code === "SUPERADMIN"} />
+          : <LoginPage onSignedIn={session.accept} />)}
         {sessionAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <ScheduledSessionPage key={`${session.user.user_id}-${sessionAppointmentId}`} user={session.user} appointmentId={sessionAppointmentId} />}
-        {!["login", "staff-login", "register", "home", "review", "appointments"].includes(page) && !sessionAppointmentId && (
-          <LandingPage onSignedIn={session.accept} />
+        {!["login", "staff-login", "register", "registration", "users", "home", "appointments"].includes(page) && !sessionAppointmentId && (
+          <LandingPage
+            onSignedIn={session.accept}
+            onActivated={async () => { try { await session.continueSession(); } catch { /* 401 handling clears the session */ } }}
+            onRejected={handleRejected}
+          />
         )}
       </div>
       {session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
         <ScheduledSessionLauncher key={session.user.user_id} user={session.user} />}
       <SessionExpiryWarning session={session} />
-      <p className="fixed bottom-2 right-3 text-[10px] text-slate-300">
+      <p className="fixed bottom-2 right-3 text-[10px] text-slate-600">
         {error ? `API unreachable: ${error}` : `API status: ${status}`}
       </p>
     </>

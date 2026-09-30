@@ -26,24 +26,21 @@ class AccountsService(BaseService[User]):
 
     # --- public self-registration (DFD 1.1 + 1.2 combined) -----------
 
-    def register_student_with_cor(self, data, cor_content: bytes, cor_filename: str):
-        """One atomic registration: account + profile + COR verification.
+    def register_student_with_cor(
+        self, email: str, password: str, cor_content: bytes, cor_filename: str
+    ):
+        """One atomic registration: account + automated COR screening.
 
-        Returns (user, profile, verification). Raises before any DB write
-        if the COR is not a valid PDF, so a failed upload never creates a
-        half-registered account.
+        Delegates screening to the cor_screening module (ADR-029). The account
+        starts PENDING_VERIFICATION and is activated only after the Student
+        confirms the extracted fields. Raises before any DB write if the COR
+        is not a valid PDF or the screening tooling is unavailable.
         """
-        from app.modules.enrollment_verification.service import (
-            EnrollmentVerificationService,
+        from app.modules.cor_screening.service import CorScreeningService
+
+        return CorScreeningService(self.repository.session).register_with_cor(
+            email, password, cor_content, cor_filename
         )
-
-        # Fail fast on the COR before creating anything.
-        cor_service = EnrollmentVerificationService(self.repository.session)
-        cor_service.validate_cor(cor_content, cor_filename)
-
-        user, profile = self.register_student(data)
-        verification = cor_service.submit_cor(user.user_id, cor_content, cor_filename)
-        return user, profile, verification
 
     def register_student(self, data) -> tuple[User, StudentProfile]:  # noqa: ANN001
         """Register a student account in PENDING_VERIFICATION state.
@@ -57,7 +54,7 @@ class AccountsService(BaseService[User]):
         repo = self.repository
 
         identifier_owner = repo.find_user_by_email(data.student_number)
-        if identifier_owner is not None and identifier_owner.role_code in ("COUNSELOR", "GUIDANCE_STAFF"):
+        if identifier_owner is not None and identifier_owner.role_code in ("COUNSELOR", "GUIDANCE_STAFF", "SUPERADMIN"):
             raise AppError(
                 code="INVALID_STUDENT_NUMBER",
                 message="Use your university-issued student number.",

@@ -48,6 +48,7 @@ export class ApiError extends Error {
 let csrfToken = null;
 let unauthorizedHandler = null;
 let sessionActivityHandler = null;
+let errorHandler = null;
 
 export function setCsrfToken(token) {
   csrfToken = token;
@@ -63,6 +64,15 @@ export function setUnauthorizedHandler(handler) {
 
 export function setSessionActivityHandler(handler) {
   sessionActivityHandler = typeof handler === "function" ? handler : null;
+}
+
+/**
+ * Optional global error observer. Receives every failed request's ApiError so
+ * the UI can surface a visual notification. Never replaces thrown errors and
+ * never receives the session/CSRF credential.
+ */
+export function setErrorHandler(handler) {
+  errorHandler = typeof handler === "function" ? handler : null;
 }
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -81,11 +91,29 @@ export async function request(path, init = {}) {
   if (UNSAFE_METHODS.has(method) && csrfToken) {
     headers["X-CSRF-Token"] = csrfToken;
   }
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch {
+    // Transport failure (offline, DNS, CORS): surface a visual notification
+    // and a typed error so callers do not treat it as a generic crash.
+    const networkError = new ApiError(0, {
+      error: {
+        code: "NETWORK_ERROR",
+        message: "Cannot reach the server. Check your connection and try again.",
+      },
+    });
+    try {
+      errorHandler?.(networkError);
+    } catch {
+      /* a failing observer must never mask the real error */
+    }
+    throw networkError;
+  }
   if (response.status !== 401 && sentCsrfToken && headers["X-Background-Refresh"] !== "1") {
     sessionActivityHandler?.();
   }
@@ -95,9 +123,18 @@ export async function request(path, init = {}) {
       setCsrfToken(null); // session gone/invalid — force re-login
       unauthorizedHandler?.();
     }
-    throw new ApiError(response.status, envelope ?? {
+    const apiError = new ApiError(response.status, envelope ?? {
       error: { code: "NETWORK_ERROR", message: "Request failed." },
     });
+    // Session expiry is handled by the auth flow; notify for everything else.
+    if (apiError.status !== 401) {
+      try {
+        errorHandler?.(apiError);
+      } catch {
+        /* a failing observer must never mask the real error */
+      }
+    }
+    throw apiError;
   }
   if (response.status === 204) {
     return undefined;

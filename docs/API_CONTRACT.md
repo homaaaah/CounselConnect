@@ -32,7 +32,7 @@ Do not treat a `PLANNED` route or unresolved project decision as approved behavi
 | Concern | Contract |
 |---|---|
 | Base path | `/api/v1` |
-| Resource paths | Plural `kebab-case`, such as `/appointments` and `/enrollment-verifications` |
+| Resource paths | Plural `kebab-case`, such as `/appointments` and `/cor-screenings` |
 | Path variables | Descriptive `snake_case`, such as `{appointment_id}` |
 | JSON and query fields | `snake_case`; frontend transport types preserve these names |
 | Enums and error codes | `SCREAMING_SNAKE_CASE` |
@@ -140,17 +140,18 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 
 - COR uploads use `multipart/form-data` and private temporary storage outside MySQL.
 - API responses must not expose public or durable COR URLs.
-- Assigned Guidance Staff may access only their assigned verification cases; Counselor retains the approved broader authority.
+- Registration is email + password + COR; screening (ADR-029) extracts the academic fields and the Student confirms them. There is no counselor approval endpoint.
 
 | Method/path | Allowed caller and behavior |
 |---|---|
-| `GET /accounts/guidance-staff` | Active Counselor; active Guidance Staff account summaries for assignment. |
-| `GET /enrollment-verifications/pending` | Counselor: all pending cases. Guidance Staff: only assigned pending cases. |
-| `GET /enrollment-verifications/history` | Counselor: all case history. Guidance Staff: only assigned case history; optional `status`. |
-| `GET /enrollment-verifications/{verification_id}/cor` | Counselor or the assigned Guidance Staff member; private, no-store PDF preview. |
-| `POST /enrollment-verifications/{verification_id}/assign` | Counselor; assigns a pending case to an active Guidance Staff member. |
-| `POST /enrollment-verifications/{verification_id}/approve` | Counselor or assigned Guidance Staff member; approves the assigned pending case and returns `email_status`: `SENT`, `NOT_CONFIGURED`, or `FAILED`. |
-| `POST /enrollment-verifications/{verification_id}/reject` | Counselor or assigned Guidance Staff member; rejects the assigned case with a required comment and returns `email_status`. |
+| `POST /accounts/register/student` | Public; creates a `PENDING_VERIFICATION` account without a COR (account-only step). |
+| `POST /accounts/register/student-with-cor` | Public; `multipart/form-data` (`email`, `password`, `file`). Creates the account and its first screening atomically; returns the screening result plus any unmatched campus/program names. The client then signs in with the same credentials (email bootstrap) and confirms inline. |
+| `GET /cor-screenings/me` | Student; latest screening result (or `null`). |
+| `POST /cor-screenings/confirm` | Student; confirms the extracted academic fields, activates the account, and deletes the COR. |
+| `POST /cor-screenings/resubmit` | Student; `multipart/form-data` (`file`); replaces a failed screening. |
+| `GET /cor-screenings` | Active Counselor; read-only screening/audit list (`status` filter). |
+| `GET /accounts/students` | Active Counselor or Superadmin; read-only student directory with profile + latest screening (`q`, `account_status`, `screening_status`, `page`, `page_size`). |
+| `POST /accounts/students/{user_id}/recover` | Active Superadmin; resets a non-active Student to `PENDING_VERIFICATION` so they can submit a fresh COR (ADR-030). |
 
 ### Appointments
 

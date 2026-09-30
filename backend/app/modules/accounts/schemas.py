@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-RoleCode = Literal["STUDENT", "GUIDANCE_STAFF", "COUNSELOR"]
+RoleCode = Literal["STUDENT", "GUIDANCE_STAFF", "COUNSELOR", "SUPERADMIN"]
 AccountStatus = Literal["PENDING_VERIFICATION", "ACTIVE", "VERIFICATION_EXPIRED"]
 
 

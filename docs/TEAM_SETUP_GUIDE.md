@@ -89,10 +89,12 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 
 ## 6. Demo flow to verify your setup (5 minutes)
 
-1. **Register** — http://localhost:5173 → *Register* → fill the form, pick a program, attach any PDF (fake is fine, e.g. rename a blank `test.pdf`) → submit. Success = confirmation message.
-2. **Review** — http://localhost:5173/#login → sign in as the seeded counselor: email `counselor@ucc.edu.ph`, password `counselor-dev-2026` → go to `#review` → your application appears under *Pending* → click the applicant to see details and the PDF preview → **Approve**.
-   - The counselor account comes from `dev_seed.sql` (developer-created per ADR-005). Rotate this password before any real deployment.
-3. **Check result** — *All applications* tab shows `APPROVED` with validity date; your inbox (if SMTP configured) has the decision email.
+1. **Register** — http://localhost:5173 → *Register* → enter email + password and attach your current COR PDF → submit.
+2. **Confirm** — the confirmation step appears inline on the same form; review the extracted fields (read-only) and click **Confirm details**. Success = "Your account is now active."
+   - A COR whose barcode is missing/unreadable, or whose details cannot be read, asks for a re-upload instead (Poppler/Tesseract required).
+3. **Counselor view** — `#staff-login` with the seeded counselor `counselor@ucc.edu.ph` / `counselor-dev-2026` → **Users** lists students and their screening status (read-only; click **View** for the full profile).
+4. **Superadmin view** — `#staff-login` with the seeded superadmin `superadmin@ucc.edu.ph` / `superadmin-dev-2026` → **Users** with a **Recover** action for non-active students.
+   - Seeded staff come from `dev_seed.sql` (developer-created per ADR-005). Rotate these dev passwords before any real deployment.
 
 ## Common problems
 
@@ -101,11 +103,10 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 | `Access denied for user` on backend start or any DB call | Wrong MySQL user/password in `.env` → fix and **restart uvicorn** (`.env` is read only at startup) |
 | Landing page empty (no hero/FAQs) | Seed not loaded → re-run step 3 (`dev_seed.sql`) |
 | Registration form has no program options | Same seed issue as above |
-| Login says "Incorrect identifier or password" | Wrong credentials, or the counselor seed row is missing → re-run `dev_seed.sql` (it adds `counselor@ucc.edu.ph` / `counselor-dev-2026`) |
-| Reviewer page says "Only a Guidance Counselor may perform this action" (403) | You signed in as a student account → sign in with the counselor account |
-| Unsafe action says "missing or invalid CSRF token" | Reload to recover the session-bound token; if the session expired, sign in again. Normal reloads now restore CSRF automatically before showing the reviewer. |
-| Toast says "email NOT sent (SMTP not configured)" | Expected when SMTP vars are blank — fill them or ignore |
-| Approved but nothing arrives in email | Gmail rejected the app password → confirm it's a fresh App Password (not your login password), 2FA is on, and restart uvicorn |
+| Login says "Incorrect identifier or password" | Wrong credentials, or the staff seed row is missing → re-run `dev_seed.sql` (adds `counselor@ucc.edu.ph` / `counselor-dev-2026` and `superadmin@ucc.edu.ph` / `superadmin-dev-2026`) |
+| `SCREENING_UNAVAILABLE` / registration returns 503 | COR screening tooling missing → install Poppler (`pdftotext`, `pdftoppm`) and Tesseract OCR, or set `COUNSELCONNECT_PDFTOTEXT_PATH` / `COUNSELCONNECT_PDFTOPPM_PATH` / `COUNSELCONNECT_TESSERACT_PATH` in `.env`, then restart uvicorn |
+| Unsafe action says "missing or invalid CSRF token" | Reload to recover the session-bound token; if the session expired, sign in again. Normal reloads now restore CSRF automatically before showing protected pages. |
+| COR always requests resubmission | Install Tesseract/Poppler (above); a scanned/photo COR needs OCR. Open barcode must decode to the student number. |
 | Frontend shows "Request failed" on everything | Backend not running → start it first (step 4), frontend depends on it |
 | `alembic upgrade head` says access denied | MySQL user lacks privileges on the `counselconnect` DB → grant ALL on `counselconnect.*` to your user |
 | Weird route 404s after editing backend files | Rare reload hiccup → restart uvicorn |
@@ -116,7 +117,7 @@ From `backend/`, `python -m pytest app/tests -q` runs database-free tests and sk
 
 Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema. The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
 
-From `frontend/`, run `npm test` for session/reviewer component regressions and `npm run build` for the Vite production compilation. With Node and frontend dependencies installed, the backend suite also exercises the actual React app against a temporary loopback FastAPI server and the isolated test schema (login, reload, approval, logout). This is an HTTP/component integration check, not a full browser test. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
+From `frontend/`, run `npm test` for session/registration component regressions and `npm run build` for the Vite production compilation. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
 
 The backend automatically runs COR expiry/deletion retries while serving requests. See `REGISTRATION_VERIFICATION.md` for cleanup monitoring and one-shot scheduling when the application is offline.
 
@@ -132,5 +133,5 @@ The backend automatically runs COR expiry/deletion retries while serving request
 ## Quick reference
 
 - Backend: http://localhost:8000 · API docs: http://localhost:8000/docs · Health: `/api/v1/health`
-- Frontend: http://localhost:5173 · Sign in: `#login` (counselor: `counselor@ucc.edu.ph` / `counselor-dev-2026`) · Reviewer console: `#review`
+- Frontend: http://localhost:5173 · Sign in: `#login` (student number or email) / `#staff-login` (staff email) · Seeded staff: `counselor@ucc.edu.ph` / `counselor-dev-2026`, `superadmin@ucc.edu.ph` / `superadmin-dev-2026` · Users directory: `#users`
 - Repo: https://github.com/jekjek29/CounselConnect

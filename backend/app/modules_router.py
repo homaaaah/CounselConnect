@@ -15,7 +15,7 @@ from app.modules.assistant.router import router as assistant_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.content.router import router as content_router
-from app.modules.enrollment_verification.router import router as enrollment_verification_router
+from app.modules.cor_screening.router import router as cor_screening_router
 from app.modules.messaging.router import router as messaging_router
 from app.modules.operations.router import router as operations_router
 from app.modules.sos.router import router as sos_router
@@ -25,7 +25,7 @@ api_router = APIRouter(prefix="/api/v1")
 
 api_router.include_router(auth_router)
 api_router.include_router(accounts_router)
-api_router.include_router(enrollment_verification_router)
+api_router.include_router(cor_screening_router)
 api_router.include_router(appointments_router)
 api_router.include_router(messaging_router)
 api_router.include_router(sos_router)

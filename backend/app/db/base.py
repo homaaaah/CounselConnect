@@ -34,6 +34,7 @@ _MODEL_MODULES = (
     "app.modules.audit.models",
     "app.modules.auth.models",
     "app.modules.content.models",
+    "app.modules.cor_screening.models",
     "app.modules.enrollment_verification.models",
     "app.modules.messaging.models",
     "app.modules.sos.models",

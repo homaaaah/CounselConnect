@@ -4,11 +4,12 @@ Dashboard visibility never replaces backend authorization.
 
 ## Guidance Staff dashboard
 
-Only assigned enrollment-verification queue, Student/academic details needed for that decision, temporary current COR access, and `APPROVED` / `NEEDS_RESUBMISSION` / `REJECTED` actions.
+No COR screening access under ADR-029; Guidance Staff holds no verification queue or COR preview.
 
 ## Counselor dashboard
 
-- all authorized COR verification,
+- read-only COR screening/audit records (ADR-029),
+- read-only student directory (Users) with academic profile and latest COR screening status,
 - Counselor-only campus Guidance Office location configuration,
 - concrete availability with `ONLINE`, `FACE_TO_FACE`, or `BOTH` support,
 - appointment requests, selected modes, schedules, location snapshots, and outcomes,

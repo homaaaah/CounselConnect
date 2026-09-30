@@ -34,11 +34,11 @@ design/     AI-readable design exports (DFD, ERD, Flowchart)
 
 ## Roles
 
-Only three roles exist: **STUDENT**, **GUIDANCE_STAFF** (assigned COR verification only), **COUNSELOR** (highest authority). There is no Administrator role.
+Four roles exist: **STUDENT**, **GUIDANCE_STAFF** (no COR duty — verification is automated, ADR-029), **COUNSELOR** (highest authority for counseling operations), and **SUPERADMIN** (narrow account-recovery/operational-exceptions role; never approves a COR, ADR-030).
 
 ## Pending decisions (do not implement ahead of approval)
 
-ADR-P01 auth mechanism · P02 real-time transport · P03 SOS instrument/thresholds/retention · P04 appointment timing/cutoffs/reminders · P05 COR upload limits · P06 expression model · P07 manual publication rule · P08 assistant provider.
+The original pending decisions (ADR-P01–P08) are all resolved — see `.ai/DECISIONS.md` (ADR-019–ADR-027). Known limits still open: COR **image** support, authoritative registrar/barcode verification, production private-storage provider, and finalized COR thresholds/retention (see ADR-029).
 
 ## Setup (skeleton stage)
 

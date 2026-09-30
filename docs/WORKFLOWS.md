@@ -5,7 +5,7 @@ Detail lives in feature docs; this file only joins modules.
 ## Authentication session
 
 ```text
-verify Student Number or staff email + password
+verify Student email/student number or staff email + password
 → create revocable hashed opaque session in MySQL
 → secure HttpOnly web cookie + CSRF protection
 → one-hour idle / 12-hour absolute limit
@@ -17,9 +17,11 @@ A five-minute warning permits explicit continuation. Genuine CounselConnect acti
 ## Account lifecycle
 
 ```text
-register + current COR → pending review → approve → ACTIVE until valid_until
-                                      ↘ resubmit/reject/7-day expiry → restricted access
-expired validity → latest COR → review → new valid_until → ACTIVE
+register + current COR → automated screening (format + OCR + barcode)
+→ AWAITING_CONFIRMATION → Student confirms (or rejects) → ACTIVE until valid_until
+                        ↘ NEEDS_RESUBMISSION / FAILED / reject / 7-day expiry → re-upload or restricted access
+expired validity → new current COR → screening → confirm → new valid_until → ACTIVE
+Superadmin recovery resets a stuck non-active Student to PENDING_VERIFICATION.
 ```
 
 ## Appointment to counseling

@@ -1,10 +1,10 @@
 # CounselConnect — System Overview
 
-CounselConnect centralizes University of Caloocan City guidance workflows for Students, limited Guidance Staff, and Guidance Counselors.
+CounselConnect centralizes University of Caloocan City guidance workflows for Students, Guidance Counselors, limited Guidance Staff, and a narrow Superadmin account-recovery role (ADR-030).
 
 | Area | Core contract |
 |---|---|
-| Registration | Current COR → Staff/Counselor review → time-bounded active account |
+| Registration | Current COR → automated screening → Student confirmation → time-bounded active account |
 | Appointments | Counselor slots → Student request → Counselor decision/outcome |
 | Messaging | One Student ↔ one Counselor; 30-day post-closure body retention |
 | SOS | Five-question rule flow, Counselor alert, approved contact fallback |

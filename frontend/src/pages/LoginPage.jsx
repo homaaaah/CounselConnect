@@ -16,8 +16,8 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
 
   useEffect(() => {
     if (result?.ok && result.role) {
-      // Route by role: counselors land on the review console.
-      const target = ["COUNSELOR", "GUIDANCE_STAFF"].includes(result.role) ? "#review" : result.role === "STUDENT" ? "#home" : "#landing";
+      // Every role lands on the shared home page after signing in.
+      const target = "#home";
       const t = setTimeout(() => {
         window.location.hash = target;
       }, 700);
@@ -47,7 +47,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="identifier">{isStudent ? "Student number" : "Email"}</label>
+          <label htmlFor="identifier">{isStudent ? "Student number or email" : "Email"}</label>
           <input
             id="identifier"
             type={isStudent ? "text" : "email"}

@@ -7,7 +7,6 @@ require("./register-app.cjs");
 
 const App = require("../src/App.jsx").default;
 const { setCsrfToken, getCsrfToken, request, ApiError } = require("../src/services/apiClient.js");
-const { useReviewerConsole } = require("../src/features/enrollment/useReviewerConsole.js");
 
 const auth = {
   user: { user_id: 1, email: "counselor@example.edu", role_code: "COUNSELOR",
@@ -15,17 +14,30 @@ const auth = {
   csrf_token: "synthetic-csrf-token", idle_expires_at: "2099-01-01T01:00:00Z",
   absolute_expires_at: "2099-01-01T12:00:00Z",
 };
-const application = {
-  verification: { verification_id: 7, status: "PENDING", submitted_at: "2026-09-06T00:00:00Z" },
-  student: { user_id: 2, first_name: "Ana", last_name: "Santos", email: "student@example.edu" },
-  file: null,
+const studentAuth = {
+  user: { user_id: 2, email: "student@example.edu", role_code: "STUDENT",
+    account_status: "PENDING_VERIFICATION", first_name: "Ana", last_name: "Santos" },
+  csrf_token: "synthetic-csrf-token", idle_expires_at: "2099-01-01T01:00:00Z",
+  absolute_expires_at: "2099-01-01T12:00:00Z",
+};
+const screening = {
+  cor_screening_id: 7, student_user_id: 2, status: "AWAITING_CONFIRMATION",
+  format_template_version: "ucc-registration-v1", format_match_score: 0.9,
+  extraction_confidence: 0.9, barcode_status: "DECODED", barcode_symbology: "QR_CODE",
+  failure_reason_code: null, extracted_student_number: "20231234-A",
+  extracted_first_name: "Ana", extracted_middle_name: null, extracted_last_name: "Santos",
+  extracted_campus_id: 1, extracted_program_id: 2, extracted_year_level: 1,
+  extracted_section: "A", extracted_academic_period: "1st Semester 2025-2026",
+  valid_until: null, submitted_at: "2026-09-30T00:00:00Z",
+  processed_at: "2026-09-30T00:00:00Z", confirmed_at: null,
 };
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "Content-Type": "application/json" },
 });
+const envelope = (items) => ({ items, total: items.length, page: 1, page_size: items.length || 1 });
 const failure = (status) => json({ error: { code: "TEST_ERROR", message: "Test error" } }, status);
 
-function environment(t, initialHash = "#review") {
+function environment(t, initialHash = "#home") {
   const events = new EventTarget();
   let hash = initialHash;
   const location = { reload: t.mock.fn() };
@@ -40,20 +52,17 @@ function environment(t, initialHash = "#review") {
   t.after(() => { setCsrfToken(null); });
 }
 
-function fakeApi(t, recover = () => json(auth)) {
+function fakeApi(t, recover = () => json(auth), login = auth) {
   const calls = [];
   t.mock.method(global, "fetch", async (url, init = {}) => {
     calls.push({ path: new URL(url, "http://localhost:5173").pathname, ...init });
     if (url.endsWith("/auth/csrf")) return recover();
-    if (url.endsWith("/auth/login")) return json(auth);
+    if (url.endsWith("/auth/login")) return json(login);
     if (url.endsWith("/auth/logout")) return new Response(null, { status: 204 });
-    if (url.endsWith("/pending")) return json([application]);
-    if (url.endsWith("/history")) return json([]);
-    if (url.endsWith("/guidance-staff")) return json([{ user_id: 3, first_name: "Gia", last_name: "Staff", role_code: "GUIDANCE_STAFF", account_status: "ACTIVE" }]);
-    if (url.endsWith("/approve")) return json({ email_status: "SENT" });
-    if (url.endsWith("/assign")) return json({ ...application.verification, assigned_guidance_staff_user_id: 3 });
     if (url.endsWith("/health")) return json({ status: "ok" });
-    if (url.endsWith("/cor")) return new Response("%PDF-test");
+    if (url.endsWith("/cor-screenings/me")) return json(screening);
+    if (url.endsWith("/accounts/campuses")) return json(envelope([{ campus_id: 1, campus_name: "Main" }]));
+    if (url.endsWith("/accounts/programs")) return json(envelope([{ program_id: 2, program_name: "BS Psychology" }]));
     return json({ items: [] });
   });
   return calls;
@@ -66,79 +75,88 @@ async function mount(t, component = React.createElement(App)) {
   return root;
 }
 
+async function waitFor(predicate) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (predicate()) return;
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  }
+  throw new Error("UI did not reach the expected state");
+}
+
 test("student login link opens the staff email form and switches back", async (t) => {
   environment(t, "#login");
   fakeApi(t, () => failure(401));
   const root = await mount(t);
-  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number");
+  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number or email");
   const staffLink = root.root.findByProps({ href: "#staff-login" });
   await act(async () => { window.location.hash = staffLink.props.href; });
   assert.equal(root.root.findByType("h1").children.join(""), "Counselor / Staff sign in");
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Email");
   assert.equal(root.root.findByProps({ id: "identifier" }).props.type, "email");
   await act(async () => { window.location.hash = "#login"; });
-  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number");
+  assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number or email");
 });
 
-test("reload waits for CSRF recovery before loading the reviewer and approving", async (t) => {
-  environment(t);
+test("the reviewer console and its hook no longer exist", async (t) => {
+  assert.throws(() => require("../src/pages/ReviewerPage.jsx"), /Cannot find module/);
+  assert.throws(() => require("../src/features/enrollment/useReviewerConsole.js"), /Cannot find module/);
+  environment(t, "#review");
+  const calls = fakeApi(t);
+  const root = await mount(t);
+  const rendered = JSON.stringify(root.toJSON());
+  assert.doesNotMatch(rendered, /Registration review/);
+  assert.equal(calls.some((call) => call.path.includes("enrollment-verifications")), false);
+  assert.equal(root.root.findAllByProps({ href: "#review" }).length, 0);
+});
+
+test("login reaches the home page without a page reload or loss of CSRF", async (t) => {
+  environment(t, "#login");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  fakeApi(t, () => failure(401), studentAuth);
+  const root = await mount(t);
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "20231234-A" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => { await root.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  await act(async () => { t.mock.timers.tick(700); });
+  assert.equal(window.location.hash, "#home");
+  assert.equal(window.location.reload.mock.callCount(), 0);
+  assert.equal(getCsrfToken(), studentAuth.csrf_token);
+});
+
+test("reload waits for CSRF recovery before loading the registration status", async (t) => {
+  environment(t, "#registration");
   let resolve;
   const recovery = new Promise((done) => { resolve = done; });
   const calls = fakeApi(t, () => recovery);
   const root = await mount(t);
   assert.match(JSON.stringify(root.toJSON()), /Restoring your session/);
-  assert.equal(calls.some((call) => call.path.includes("enrollment-verifications")), false);
-  await act(async () => { resolve(json(auth)); });
-  const approve = root.root.findAllByType("button").find((button) => button.children.includes("Approve"));
-  assert.ok(approve);
-  await act(async () => { await approve.props.onClick(); });
-  const sent = calls.find((call) => call.path.endsWith("/approve"));
-  assert.equal(sent.headers["X-CSRF-Token"], auth.csrf_token);
-  assert.equal(sent.credentials, "include");
+  assert.equal(calls.some((call) => call.path.includes("cor-screenings")), false);
+  await act(async () => { resolve(json(studentAuth)); });
+  await waitFor(() => calls.some((call) => call.path.endsWith("/cor-screenings/me")));
+  assert.match(JSON.stringify(root.toJSON()), /Confirm your enrollment/);
 });
 
-test("login reaches the reviewer without a page reload or loss of CSRF", async (t) => {
-  environment(t, "#login");
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  fakeApi(t, () => failure(401));
-  const root = await mount(t);
-  await act(async () => {
-    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "counselor@example.edu" } });
-    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
-  });
-  await act(async () => { await root.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
-  await act(async () => { t.mock.timers.tick(700); });
-  assert.match(JSON.stringify(root.toJSON()), /Registration review/);
-  assert.equal(window.location.reload.mock.callCount(), 0);
-  assert.equal(getCsrfToken(), auth.csrf_token);
-});
-
-test("failed session recovery never loads confidential review data", async (t) => {
-  environment(t);
+test("failed session recovery never loads confidential screening data", async (t) => {
+  environment(t, "#registration");
   const calls = fakeApi(t, () => failure(500));
   const root = await mount(t);
   assert.match(JSON.stringify(root.toJSON()), /Could not restore your session/);
-  assert.equal(calls.some((call) => call.path.includes("enrollment-verifications")), false);
+  assert.equal(calls.some((call) => call.path.includes("cor-screenings")), false);
   assert.equal(getCsrfToken(), null);
 });
 
-test("a Student cannot mount the reviewer console", async (t) => {
-  environment(t);
-  const calls = fakeApi(t, () => json({ ...auth, user: { ...auth.user, role_code: "STUDENT" } }));
+test("sign out uses recovered CSRF and clears the protected screening page", async (t) => {
+  environment(t, "#registration");
+  const calls = fakeApi(t, () => json(studentAuth));
   const root = await mount(t);
-  assert.match(JSON.stringify(root.toJSON()), /requires a Counselor or Guidance Staff account/);
-  assert.equal(calls.some((call) => call.path.includes("enrollment-verifications")), false);
-});
-
-test("sign out uses recovered CSRF and clears the protected page", async (t) => {
-  environment(t);
-  const calls = fakeApi(t);
-  const root = await mount(t);
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Confirm your enrollment"));
   const logout = root.root.findAllByType("button").find((button) => button.children.includes("Sign out"));
   await act(async () => { await logout.props.onClick(); });
   assert.equal(calls.find((call) => call.path.endsWith("/logout")).headers["X-CSRF-Token"], auth.csrf_token);
   assert.equal(getCsrfToken(), null);
-  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Registration review/);
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Confirm your enrollment/);
 });
 
 test("a late unauthenticated response cannot erase a newer login token", async (t) => {
@@ -188,72 +206,4 @@ test("non-envelope error bodies still throw a safe ApiError", async (t) => {
   }
   assert.equal(caught.code, "NETWORK_ERROR");
   assert.equal(caught.message, "Request failed.");
-});
-
-test("COR preview blobs are released when the reviewer unmounts", async (t) => {
-  environment(t);
-  fakeApi(t);
-  const createUrl = t.mock.method(URL, "createObjectURL", () => "blob:synthetic-cor");
-  const revokeUrl = t.mock.method(URL, "revokeObjectURL", () => {});
-  let reviewer;
-  function Harness() { reviewer = useReviewerConsole(); return null; }
-  const root = await mount(t, React.createElement(Harness));
-  await act(async () => { await reviewer.openCorPdf(7); });
-  assert.equal(createUrl.mock.callCount(), 1);
-  await act(async () => root.unmount());
-  assert.equal(revokeUrl.mock.calls[0].arguments[0], "blob:synthetic-cor");
-});
-
-test("a preview still downloading at decision time is discarded", async (t) => {
-  environment(t);
-  fakeApi(t);
-  const previousFetch = global.fetch;
-  let resolvePdf;
-  t.mock.method(global, "fetch", (url, init) => url.endsWith("/cor")
-    ? new Promise((resolve) => { resolvePdf = resolve; }) : previousFetch(url, init));
-  const createUrl = t.mock.method(URL, "createObjectURL", () => "blob:should-not-be-created");
-  let reviewer;
-  function Harness() { reviewer = useReviewerConsole(); return null; }
-  await mount(t, React.createElement(Harness));
-  const pendingPreview = reviewer.openCorPdf(7);
-  await act(async () => { await reviewer.approve(7); });
-  await act(async () => { resolvePdf(new Response("%PDF-test")); await pendingPreview; });
-  assert.equal(createUrl.mock.callCount(), 0);
-});
-
-test("counselor assigns a pending verification case to Guidance Staff", async (t) => {
-  environment(t);
-  const calls = fakeApi(t);
-  const root = await mount(t);
-  const assignment = root.root.findAllByType("select").find((select) => select.props.value === "");
-  assert.ok(assignment, "counselor sees a Guidance Staff assignment control");
-  await act(async () => { await assignment.props.onChange({ target: { value: "3" } }); });
-  const sent = calls.find((call) => call.path.endsWith("/enrollment-verifications/7/assign"));
-  assert.equal(sent.method, "POST");
-  assert.deepEqual(JSON.parse(sent.body), { guidance_staff_user_id: 3 });
-});
-
-test("reviewer keeps pending applications when history loading fails and recovers", async (t) => {
-  environment(t);
-  let historyAttempts = 0;
-  t.mock.method(global, "fetch", async (url) => {
-    if (url.endsWith("/pending")) return json([application]);
-    if (url.includes("/history")) {
-      return historyAttempts++ === 0
-        ? json({ error: { code: "HISTORY_UNAVAILABLE", message: "Application history is unavailable." } }, 503)
-        : json([application]);
-    }
-    return json({ items: [] });
-  });
-  let reviewer;
-  function Harness() { reviewer = useReviewerConsole(); return null; }
-  await mount(t, React.createElement(Harness));
-  assert.equal(reviewer.queue.length, 1, "pending data remains available");
-  assert.equal(reviewer.history.length, 0);
-  assert.equal(reviewer.queueError, null);
-  assert.equal(reviewer.historyError, "Application history is unavailable.");
-  await act(async () => { await reviewer.refresh(); });
-  assert.equal(reviewer.queue.length, 1);
-  assert.equal(reviewer.history.length, 1, "history is restored after retry");
-  assert.equal(reviewer.historyError, null);
 });

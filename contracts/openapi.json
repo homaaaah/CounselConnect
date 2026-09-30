@@ -330,7 +330,7 @@
         "tags": [
           "accounts"
         ],
-        "summary": "Atomic registration: account + COR PDF in ONE submission (DFD 1.1 + 1.2)",
+        "summary": "Atomic registration: account + automated COR screening (ADR-029)",
         "operationId": "register_student_with_cor_api_v1_accounts_register_student_with_cor_post",
         "requestBody": {
           "content": {
@@ -348,7 +348,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RegistrationResultResponse"
+                  "$ref": "#/components/schemas/RegistrationWithCorResponse"
                 }
               }
             }
@@ -513,14 +513,85 @@
         }
       }
     },
-    "/api/v1/enrollment-verifications/cor": {
-      "post": {
+    "/api/v1/accounts/students": {
+      "get": {
         "tags": [
-          "enrollment_verification"
+          "accounts"
         ],
-        "summary": "Student: upload current COR (registration form) PDF",
-        "operationId": "upload_cor_api_v1_enrollment_verifications_cor_post",
+        "summary": "Counselor: read-only student directory with COR screening status",
+        "operationId": "list_students_api_v1_accounts_students_get",
         "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "account_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Status"
+            }
+          },
+          {
+            "name": "screening_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screening Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
           {
             "name": "counselconnect_session",
             "in": "cookie",
@@ -538,23 +609,13 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_upload_cor_api_v1_enrollment_verifications_cor_post"
-              }
-            }
-          }
-        },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VerificationResponse"
+                  "$ref": "#/components/schemas/ListEnvelope_StudentDirectoryItem_"
                 }
               }
             }
@@ -572,7 +633,7 @@
                       "$ref": "#/components/schemas/ErrorResponse"
                     }
                   ],
-                  "title": "Response 422 Upload Cor Api V1 Enrollment Verifications Cor Post"
+                  "title": "Response 422 List Students Api V1 Accounts Students Get"
                 }
               }
             }
@@ -580,13 +641,79 @@
         }
       }
     },
-    "/api/v1/enrollment-verifications/pending": {
+    "/api/v1/accounts/students/{user_id}/recover": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Superadmin: recover a stuck Student account (ADR-030)",
+        "operationId": "recover_student_api_v1_accounts_students__user_id__recover_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentDirectoryItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Recover Student Api V1 Accounts Students  User Id  Recover Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cor-screenings/me": {
       "get": {
         "tags": [
-          "enrollment_verification"
+          "cor_screening"
         ],
-        "summary": "Counselor queue or assigned Guidance Staff pending cases",
-        "operationId": "list_pending_api_v1_enrollment_verifications_pending_get",
+        "summary": "Student: latest COR screening result",
+        "operationId": "get_my_screening_api_v1_cor_screenings_me_get",
         "parameters": [
           {
             "name": "counselconnect_session",
@@ -611,11 +738,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PendingItemResponse"
-                  },
-                  "title": "Response List Pending Api V1 Enrollment Verifications Pending Get"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CorScreeningResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get My Screening Api V1 Cor Screenings Me Get"
                 }
               }
             }
@@ -633,7 +764,7 @@
                       "$ref": "#/components/schemas/ErrorResponse"
                     }
                   ],
-                  "title": "Response 422 List Pending Api V1 Enrollment Verifications Pending Get"
+                  "title": "Response 422 Get My Screening Api V1 Cor Screenings Me Get"
                 }
               }
             }
@@ -641,14 +772,204 @@
         }
       }
     },
-    "/api/v1/enrollment-verifications/history": {
+    "/api/v1/cor-screenings/confirm": {
+      "post": {
+        "tags": [
+          "cor_screening"
+        ],
+        "summary": "Student: confirm extracted COR fields and activate the account",
+        "operationId": "confirm_screening_api_v1_cor_screenings_confirm_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmScreeningRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmScreeningResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Confirm Screening Api V1 Cor Screenings Confirm Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cor-screenings/reject": {
+      "post": {
+        "tags": [
+          "cor_screening"
+        ],
+        "summary": "Student: reject the extracted details and re-upload the COR",
+        "operationId": "reject_screening_api_v1_cor_screenings_reject_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reject Screening Api V1 Cor Screenings Reject Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cor-screenings/resubmit": {
+      "post": {
+        "tags": [
+          "cor_screening"
+        ],
+        "summary": "Student: re-upload a COR after a failed screening",
+        "operationId": "resubmit_cor_api_v1_cor_screenings_resubmit_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_resubmit_cor_api_v1_cor_screenings_resubmit_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Resubmit Cor Api V1 Cor Screenings Resubmit Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cor-screenings": {
       "get": {
         "tags": [
-          "enrollment_verification"
+          "cor_screening"
         ],
-        "summary": "Counselor history or assigned Guidance Staff case history",
-        "description": "Permanent record of every registration application and its decision.\n\nDecided rows keep decision_at, reviewer, comment, and valid_until.\n`file` is omitted (null) because COR bytes are purged after decisions\nper the privacy boundary.",
-        "operationId": "list_history_api_v1_enrollment_verifications_history_get",
+        "summary": "Counselor: read-only screening records",
+        "operationId": "list_screenings_api_v1_cor_screenings_get",
         "parameters": [
           {
             "name": "status",
@@ -689,11 +1010,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PendingItemResponse"
-                  },
-                  "title": "Response List History Api V1 Enrollment Verifications History Get"
+                  "$ref": "#/components/schemas/ListEnvelope_CounselorScreeningItem_"
                 }
               }
             }
@@ -711,307 +1028,7 @@
                       "$ref": "#/components/schemas/ErrorResponse"
                     }
                   ],
-                  "title": "Response 422 List History Api V1 Enrollment Verifications History Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/enrollment-verifications/{verification_id}/cor": {
-      "get": {
-        "tags": [
-          "enrollment_verification"
-        ],
-        "summary": "Counselor: view the uploaded COR PDF",
-        "description": "Serves the PDF for the counselor's in-app preview (session cookie).",
-        "operationId": "get_cor_pdf_api_v1_enrollment_verifications__verification_id__cor_get",
-        "parameters": [
-          {
-            "name": "verification_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Verification Id"
-            }
-          },
-          {
-            "name": "counselconnect_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Counselconnect Session"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Sanitized validation or business-rule errors",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationErrorResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response 422 Get Cor Pdf Api V1 Enrollment Verifications  Verification Id  Cor Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/enrollment-verifications/{verification_id}/approve": {
-      "post": {
-        "tags": [
-          "enrollment_verification"
-        ],
-        "summary": "Counselor: approve the registration application",
-        "operationId": "approve_api_v1_enrollment_verifications__verification_id__approve_post",
-        "parameters": [
-          {
-            "name": "verification_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Verification Id"
-            }
-          },
-          {
-            "name": "counselconnect_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Counselconnect Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ApproveRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Data"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerificationResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Sanitized validation or business-rule errors",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationErrorResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response 422 Approve Api V1 Enrollment Verifications  Verification Id  Approve Post"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/enrollment-verifications/{verification_id}/reject": {
-      "post": {
-        "tags": [
-          "enrollment_verification"
-        ],
-        "summary": "Counselor: reject the registration application (comment required)",
-        "operationId": "reject_api_v1_enrollment_verifications__verification_id__reject_post",
-        "parameters": [
-          {
-            "name": "verification_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Verification Id"
-            }
-          },
-          {
-            "name": "counselconnect_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Counselconnect Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerificationResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Sanitized validation or business-rule errors",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationErrorResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response 422 Reject Api V1 Enrollment Verifications  Verification Id  Reject Post"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/enrollment-verifications/{verification_id}/assign": {
-      "post": {
-        "tags": [
-          "enrollment_verification"
-        ],
-        "summary": "Counselor: assign a pending case to active Guidance Staff",
-        "operationId": "assign_guidance_staff_api_v1_enrollment_verifications__verification_id__assign_post",
-        "parameters": [
-          {
-            "name": "verification_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Verification Id"
-            }
-          },
-          {
-            "name": "counselconnect_session",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Counselconnect Session"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VerificationAssignmentRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerificationResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Sanitized validation or business-rule errors",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ValidationErrorResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response 422 Assign Guidance Staff Api V1 Enrollment Verifications  Verification Id  Assign Post"
+                  "title": "Response 422 List Screenings Api V1 Cor Screenings Get"
                 }
               }
             }
@@ -4785,19 +4802,6 @@
         ],
         "title": "AppointmentSessionResponse"
       },
-      "ApproveRequest": {
-        "properties": {
-          "valid_months": {
-            "type": "integer",
-            "maximum": 24.0,
-            "minimum": 1.0,
-            "title": "Valid Months",
-            "default": 12
-          }
-        },
-        "type": "object",
-        "title": "ApproveRequest"
-      },
       "AuthResponse": {
         "properties": {
           "user": {
@@ -5044,25 +5048,6 @@
       },
       "Body_register_student_with_cor_api_v1_accounts_register_student_with_cor_post": {
         "properties": {
-          "first_name": {
-            "type": "string",
-            "title": "First Name"
-          },
-          "middle_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Middle Name"
-          },
-          "last_name": {
-            "type": "string",
-            "title": "Last Name"
-          },
           "email": {
             "type": "string",
             "format": "email",
@@ -5074,30 +5059,6 @@
             "minLength": 8,
             "title": "Password"
           },
-          "student_number": {
-            "type": "string",
-            "title": "Student Number"
-          },
-          "campus_id": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Campus Id"
-          },
-          "program_id": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Program Id"
-          },
-          "year_level": {
-            "type": "integer",
-            "maximum": 10.0,
-            "minimum": 1.0,
-            "title": "Year Level"
-          },
-          "section": {
-            "type": "string",
-            "title": "Section"
-          },
           "file": {
             "type": "string",
             "contentMediaType": "application/octet-stream",
@@ -5107,32 +5068,26 @@
         },
         "type": "object",
         "required": [
-          "first_name",
-          "last_name",
           "email",
           "password",
-          "student_number",
-          "campus_id",
-          "program_id",
-          "year_level",
-          "section",
           "file"
         ],
         "title": "Body_register_student_with_cor_api_v1_accounts_register_student_with_cor_post"
       },
-      "Body_upload_cor_api_v1_enrollment_verifications_cor_post": {
+      "Body_resubmit_cor_api_v1_cor_screenings_resubmit_post": {
         "properties": {
           "file": {
             "type": "string",
             "contentMediaType": "application/octet-stream",
-            "title": "File"
+            "title": "File",
+            "description": "Current COR PDF (registration form)"
           }
         },
         "type": "object",
         "required": [
           "file"
         ],
-        "title": "Body_upload_cor_api_v1_enrollment_verifications_cor_post"
+        "title": "Body_resubmit_cor_api_v1_cor_screenings_resubmit_post"
       },
       "CalendarBlockRequest": {
         "properties": {
@@ -5258,6 +5213,106 @@
           "is_active"
         ],
         "title": "CampusResponse"
+      },
+      "ConfirmScreeningRequest": {
+        "properties": {
+          "student_number": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Student Number"
+          },
+          "first_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name"
+          },
+          "campus_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Program Id"
+          },
+          "year_level": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Year Level"
+          },
+          "section": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Section"
+          },
+          "academic_period": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Academic Period"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_number",
+          "first_name",
+          "last_name",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section"
+        ],
+        "title": "ConfirmScreeningRequest",
+        "description": "Student-confirmed academic fields (COR is the source of truth)."
+      },
+      "ConfirmScreeningResponse": {
+        "properties": {
+          "screening": {
+            "$ref": "#/components/schemas/CorScreeningResponse"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/StudentProfileResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "screening",
+          "user",
+          "profile"
+        ],
+        "title": "ConfirmScreeningResponse"
       },
       "ContentItemResponse": {
         "properties": {
@@ -5488,6 +5543,286 @@
         ],
         "title": "ConversationResponse"
       },
+      "CorScreeningResponse": {
+        "properties": {
+          "cor_screening_id": {
+            "type": "integer",
+            "title": "Cor Screening Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PROCESSING",
+              "AWAITING_CONFIRMATION",
+              "PASSED",
+              "NEEDS_RESUBMISSION",
+              "FAILED"
+            ],
+            "title": "Status"
+          },
+          "format_template_version": {
+            "type": "string",
+            "title": "Format Template Version"
+          },
+          "format_match_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format Match Score"
+          },
+          "extraction_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Confidence"
+          },
+          "barcode_status": {
+            "type": "string",
+            "enum": [
+              "NOT_PROCESSED",
+              "NOT_FOUND",
+              "UNREADABLE",
+              "INVALID_FORMAT",
+              "DECODED",
+              "MISMATCH"
+            ],
+            "title": "Barcode Status"
+          },
+          "barcode_symbology": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode Symbology"
+          },
+          "failure_reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason Code"
+          },
+          "extracted_student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Student Number"
+          },
+          "extracted_first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted First Name"
+          },
+          "extracted_middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Middle Name"
+          },
+          "extracted_last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Last Name"
+          },
+          "extracted_campus_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Campus Id"
+          },
+          "extracted_program_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Program Id"
+          },
+          "extracted_year_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Year Level"
+          },
+          "extracted_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Section"
+          },
+          "extracted_academic_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Academic Period"
+          },
+          "extracted_valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Valid Until"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cor_screening_id",
+          "student_user_id",
+          "status",
+          "format_template_version",
+          "format_match_score",
+          "extraction_confidence",
+          "barcode_status",
+          "barcode_symbology",
+          "failure_reason_code",
+          "extracted_student_number",
+          "extracted_first_name",
+          "extracted_middle_name",
+          "extracted_last_name",
+          "extracted_campus_id",
+          "extracted_program_id",
+          "extracted_year_level",
+          "extracted_section",
+          "extracted_academic_period",
+          "extracted_valid_until",
+          "valid_until",
+          "submitted_at",
+          "processed_at",
+          "confirmed_at"
+        ],
+        "title": "CorScreeningResponse",
+        "description": "Screening result plus the extracted (unconfirmed) academic fields."
+      },
+      "CounselorScreeningItem": {
+        "properties": {
+          "screening": {
+            "$ref": "#/components/schemas/CorScreeningResponse"
+          },
+          "student": {
+            "$ref": "#/components/schemas/ScreeningStudentSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "screening",
+          "student"
+        ],
+        "title": "CounselorScreeningItem",
+        "description": "Read-only screening record for Counselor recovery/audit views."
+      },
       "EmergencyContactResponse": {
         "properties": {
           "contact_id": {
@@ -5709,6 +6044,37 @@
         ],
         "title": "ListEnvelope[ContentItemResponse]"
       },
+      "ListEnvelope_CounselorScreeningItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CounselorScreeningItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[CounselorScreeningItem]"
+      },
       "ListEnvelope_EmergencyContactResponse_": {
         "properties": {
           "items": {
@@ -5770,6 +6136,37 @@
           "total"
         ],
         "title": "ListEnvelope[ProgramResponse]"
+      },
+      "ListEnvelope_StudentDirectoryItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StudentDirectoryItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[StudentDirectoryItem]"
       },
       "LoginRequest": {
         "properties": {
@@ -5917,33 +6314,6 @@
         ],
         "title": "MessageResponse"
       },
-      "PendingItemResponse": {
-        "properties": {
-          "verification": {
-            "$ref": "#/components/schemas/VerificationResponse"
-          },
-          "student": {
-            "$ref": "#/components/schemas/StudentSummaryResponse"
-          },
-          "file": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/VerificationFileMeta"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "verification",
-          "student"
-        ],
-        "title": "PendingItemResponse",
-        "description": "One queue/history entry: verification + applicant (+ COR metadata when pending)."
-      },
       "ProgramResponse": {
         "properties": {
           "program_id": {
@@ -5999,20 +6369,116 @@
         "title": "RegistrationResultResponse",
         "description": "Result of student self-registration (always PENDING_VERIFICATION)."
       },
-      "RejectRequest": {
+      "RegistrationWithCorResponse": {
         "properties": {
-          "comment": {
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "screening": {
+            "$ref": "#/components/schemas/CorScreeningResponse"
+          },
+          "unmatched_campus_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmatched Campus Name"
+          },
+          "unmatched_program_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmatched Program Name"
+          },
+          "next_step": {
             "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Comment"
+            "title": "Next Step"
           }
         },
         "type": "object",
         "required": [
-          "comment"
+          "user",
+          "screening",
+          "next_step"
         ],
-        "title": "RejectRequest"
+        "title": "RegistrationWithCorResponse",
+        "description": "Result of the atomic COR registration (account is PENDING_VERIFICATION)."
+      },
+      "ResubmitResponse": {
+        "properties": {
+          "screening": {
+            "$ref": "#/components/schemas/CorScreeningResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "screening"
+        ],
+        "title": "ResubmitResponse"
+      },
+      "ScreeningStudentSummary": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "account_status": {
+            "type": "string",
+            "title": "Account Status"
+          },
+          "student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "first_name",
+          "last_name",
+          "account_status"
+        ],
+        "title": "ScreeningStudentSummary"
       },
       "SessionUser": {
         "properties": {
@@ -6051,6 +6517,39 @@
           "last_name"
         ],
         "title": "SessionUser"
+      },
+      "StudentDirectoryItem": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudentProfileResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "screening": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorScreeningResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "title": "StudentDirectoryItem",
+        "description": "One Student row in the Counselor directory (profile + latest screening)."
       },
       "StudentProfileResponse": {
         "properties": {
@@ -6171,102 +6670,6 @@
         "title": "StudentRegistrationRequest",
         "description": "DFD 1.1 'Register Student Account' payload.\n\nCreates the pending account + academic profile; COR upload is a\nseparate step (limits ratified by ADR-024)."
       },
-      "StudentSummaryResponse": {
-        "properties": {
-          "user_id": {
-            "type": "integer",
-            "title": "User Id"
-          },
-          "email": {
-            "type": "string",
-            "title": "Email"
-          },
-          "first_name": {
-            "type": "string",
-            "title": "First Name"
-          },
-          "middle_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Middle Name"
-          },
-          "last_name": {
-            "type": "string",
-            "title": "Last Name"
-          },
-          "student_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Student Number"
-          },
-          "campus_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Campus Id"
-          },
-          "program_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Program Id"
-          },
-          "year_level": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Year Level"
-          },
-          "section": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Section"
-          }
-        },
-        "type": "object",
-        "required": [
-          "user_id",
-          "email",
-          "first_name",
-          "middle_name",
-          "last_name"
-        ],
-        "title": "StudentSummaryResponse",
-        "description": "Applicant details shown to the reviewer (DFD 1.3 review screen)."
-      },
       "UserResponse": {
         "properties": {
           "user_id": {
@@ -6283,7 +6686,8 @@
             "enum": [
               "STUDENT",
               "GUIDANCE_STAFF",
-              "COUNSELOR"
+              "COUNSELOR",
+              "SUPERADMIN"
             ],
             "title": "Role Code"
           },
@@ -6422,189 +6826,6 @@
           "message"
         ],
         "title": "ValidationFieldError"
-      },
-      "VerificationAssignmentRequest": {
-        "properties": {
-          "guidance_staff_user_id": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Guidance Staff User Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "guidance_staff_user_id"
-        ],
-        "title": "VerificationAssignmentRequest"
-      },
-      "VerificationFileMeta": {
-        "properties": {
-          "file_id": {
-            "type": "integer",
-            "title": "File Id"
-          },
-          "verification_id": {
-            "type": "integer",
-            "title": "Verification Id"
-          },
-          "mime_type": {
-            "type": "string",
-            "title": "Mime Type"
-          },
-          "size_bytes": {
-            "type": "integer",
-            "title": "Size Bytes"
-          },
-          "expires_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Expires At"
-          },
-          "cleanup_state": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "FAILED"
-            ],
-            "title": "Cleanup State"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file_id",
-          "verification_id",
-          "mime_type",
-          "size_bytes",
-          "expires_at",
-          "cleanup_state"
-        ],
-        "title": "VerificationFileMeta"
-      },
-      "VerificationResponse": {
-        "properties": {
-          "verification_id": {
-            "type": "integer",
-            "title": "Verification Id"
-          },
-          "student_user_id": {
-            "type": "integer",
-            "title": "Student User Id"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "NEEDS_RESUBMISSION",
-              "REJECTED",
-              "EXPIRED"
-            ],
-            "title": "Status"
-          },
-          "submitted_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Submitted At"
-          },
-          "assigned_guidance_staff_user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assigned Guidance Staff User Id"
-          },
-          "decision_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decision At"
-          },
-          "reviewed_by_user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed By User Id"
-          },
-          "reason_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason Code"
-          },
-          "reviewer_note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewer Note"
-          },
-          "valid_until": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Valid Until"
-          },
-          "email_status": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "SENT",
-                  "NOT_CONFIGURED",
-                  "FAILED"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email Status"
-          }
-        },
-        "type": "object",
-        "required": [
-          "verification_id",
-          "student_user_id",
-          "status",
-          "submitted_at",
-          "assigned_guidance_staff_user_id",
-          "decision_at",
-          "reviewed_by_user_id",
-          "reason_code",
-          "reviewer_note",
-          "valid_until"
-        ],
-        "title": "VerificationResponse"
       },
       "WeeklyScheduleCreateRequest": {
         "properties": {

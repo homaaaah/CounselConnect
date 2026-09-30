@@ -8,14 +8,14 @@
 |---|---|
 | Identity/academics | `users`, `student_profiles`, `campuses`, `departments`, `programs` |
 | Sessions | `user_sessions` |
-| Enrollment | `enrollment_verifications`, `enrollment_verification_files` |
+| Enrollment | `cor_screenings`, `cor_screening_files` (ADR-029). Legacy `enrollment_verifications`, `enrollment_verification_files` are retained for history. |
 | Appointments | `counselor_weekly_schedules`, `counselor_availability_blocks`, `availability_slots`, `appointments` |
 | Messaging | `conversations`, `messages` |
 | SOS | `sos_cases`, `sos_responses` |
 | Resources | `resource_sources`, `wellness_resources`, `resource_files`, `resource_categories`, `wellness_resource_categories` |
 | Content/operations | `content_items`, `emergency_contacts`, `audit_events` |
 
-`enrollment_verification_files` stores temporary metadata references only, never COR bytes. `resource_files` refers only to controlled durable internal resource attachments.
+`cor_screening_files` stores temporary metadata references only, never COR bytes. `resource_files` refers only to controlled durable internal resource attachments.
 
 ## Appointment and conversation fields
 

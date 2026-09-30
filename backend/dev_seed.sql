@@ -47,3 +47,11 @@ INSERT INTO users (email, password_hash, role_code, account_status, first_name, 
    '$argon2id$v=19$m=65536,t=3,p=4$43nTlIUufFh8aMcQiWuBeg$sIpNnGlbCkbgOdcdOEN0gpk8beIvUAkjfkVzVtQ+nuI',
    'COUNSELOR', 'ACTIVE', 'Guidance', 'Counselor')
 ON DUPLICATE KEY UPDATE email = email;
+
+-- Dev superadmin account (ADR-030: account-recovery/operations role).
+-- Password: superadmin-dev-2026 (dev only — rotate before any real deployment).
+INSERT INTO users (email, password_hash, role_code, account_status, first_name, last_name) VALUES
+  ('superadmin@ucc.edu.ph',
+   '$argon2id$v=19$m=65536,t=3,p=4$n3wS06XnrqYUyhm9HLl+Zg$eb6BAoymtbI1LF4iGQWJrQHY7N0VMadERUZhjkmm8vs',
+   'SUPERADMIN', 'ACTIVE', 'Super', 'Admin')
+ON DUPLICATE KEY UPDATE email = email;

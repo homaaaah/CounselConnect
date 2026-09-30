@@ -44,6 +44,15 @@ RECURRING_SCHEDULES_MIGRATION_FILE = (
 SCHEDULED_CHAT_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20260916_scheduled_appointment_chat.py"
 )
+COR_SCREENING_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20260930_automated_cor_screening.py"
+)
+EXTRACTED_VALIDITY_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20260930_extracted_validity.py"
+)
+SUPERADMIN_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20260930_superadmin_role.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -97,6 +106,36 @@ def load_recurring_schedules_migration_module():
 def load_scheduled_chat_migration_module():
     spec = importlib.util.spec_from_file_location(
         "scheduled_chat_migration", SCHEDULED_CHAT_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_cor_screening_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "cor_screening_migration", COR_SCREENING_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_extracted_validity_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "extracted_validity_migration", EXTRACTED_VALIDITY_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_superadmin_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "superadmin_migration", SUPERADMIN_MIGRATION_FILE
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -172,6 +211,9 @@ def mysql_test_engine():
                 load_blocked_dates_migration_module().upgrade()
                 load_recurring_schedules_migration_module().upgrade()
                 load_scheduled_chat_migration_module().upgrade()
+                load_cor_screening_migration_module().upgrade()
+                load_extracted_validity_migration_module().upgrade()
+                load_superadmin_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
 from app.modules.bases import BaseRepository
 from app.modules.accounts.models import Campus, Department, Program, StudentProfile, User
@@ -60,3 +60,33 @@ class AccountsRepository(BaseRepository[User]):
         return self.session.scalar(
             select(StudentProfile).where(StudentProfile.student_number == student_number)
         )
+
+    # -- counselor directory --------------------------------------------
+
+    def list_students(
+        self, *, q: str | None = None, account_status: str | None = None
+    ) -> list[tuple[User, StudentProfile | None]]:
+        """All STUDENT users (with profile when confirmed), optional filters.
+
+        Read-only Counselor directory. `q` matches email, name, or student
+        number (case-insensitive substring). Ordered by name for stable output.
+        """
+        stmt = (
+            select(User, StudentProfile)
+            .outerjoin(StudentProfile, StudentProfile.user_id == User.user_id)
+            .where(User.role_code == "STUDENT")
+        )
+        if account_status:
+            stmt = stmt.where(User.account_status == account_status)
+        if q and q.strip():
+            like = f"%{q.strip().lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(User.email).like(like),
+                    func.lower(User.first_name).like(like),
+                    func.lower(User.last_name).like(like),
+                    func.lower(func.coalesce(StudentProfile.student_number, "")).like(like),
+                )
+            )
+        stmt = stmt.order_by(User.last_name, User.first_name, User.user_id)
+        return [(user, profile) for user, profile in self.session.execute(stmt).all()]
