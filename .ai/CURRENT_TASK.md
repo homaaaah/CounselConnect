@@ -150,3 +150,9 @@ Updated stale role/flow references for ADR-029/030:
 - `docs/SYSTEM_OVERVIEW.md` — Superadmin mentioned.
 - Left unchanged intentionally: `design/DFD_AI_Readable_FULL.md` (large generated design artifact showing the original Staff COR-review flow), and historical changelog/plan files (`.kilo/plans/*`, `frontend/docs/UI_CHANGES.md`).
 
+## MergeMD doc merge (2026-09-30)
+
+Merged markdown from the `MergeMD/` checkout into every doc we did **not** edit today (files we changed today were excluded). Copied/added: `docs/AUDIO_VIDEO_CALLS.md`, `docs/COUNSELING_SESSION_RECORDS.md`, `docs/PRIVATE_CLINICAL_DOCUMENTS.md`, `.ai/{ARCHITECTURE,PROJECT,README,REQUIREMENTS,RULES,UI_CHANGE_SAFETY}.md`, `backend/README.md`, `docs/{AI_EMOTIONAL_BASELINE,APPOINTMENT_SCHEDULING,CONTENT_MANAGEMENT,README,REAL_TIME_MESSAGING,SCHEDULED_LIVE_CHAT_IMPLEMENTATION_PLAN,SOS_TRIAGE,VIRTUAL_GUIDANCE_ASSISTANT,WELLNESS_RESOURCE_DISCOVERY}.md`, `docs/structure/PROJECT_STRUCTURE.md`, `frontend/docs/UI_CHANGES.md`. Left ours-only: `design/DFD_*`, `design/ERD_*`.
+
+**Known inconsistency to reconcile:** the merged docs describe a newer target (ADR-029–036: drops Wellness Resources/assistant, roles `STUDENT`/`COUNSELOR`/`SUPERADMIN`, adds audio/video, counseling records, clinical docs), but the protected files we kept (`docs/USER_ROLES.md`, `.ai/DECISIONS.md`) still carry ADR-003/011/013 (Guidance Staff, wellness discovery, assistant) and do not include ADR-031–036. Bring those protected files up to the same target (or exclude MergeMD's governance files) before relying on the doc set.
+

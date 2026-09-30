@@ -1,15 +1,11 @@
-# `.ai/` — Agent Context
+# CounselConnect AI Context
 
-| File | Load when |
-|---|---|
-| `RULES.md` | every non-trivial task |
-| `CURRENT_TASK.md` | every non-trivial task |
-| `CONTEXT_MAP.md` | choose task-specific context |
-| `UI_CHANGE_SAFETY.md` | redesigning or refactoring a data-driven interface; preserve behavior, identity, and list completeness |
-| `NAMING_CONVENTIONS.md` | API, database, model, file, or event naming |
-| `PROJECT.md` | project-wide scope/facts |
-| `ARCHITECTURE.md` | boundaries or cross-module design |
-| `REQUIREMENTS.md` | requirement IDs/acceptance constraints |
-| `DECISIONS.md` | durable approved and pending choices |
+1. Read CONTEXT_MAP.md.
+2. Read DECISIONS.md, REQUIREMENTS.md, and the owning feature contract.
+3. Check CURRENT_TASK.md to distinguish current implementation from the approved target.
+4. Apply NAMING_CONVENTIONS.md.
+5. Preserve ARCHITECTURE.md privacy, assignment, and migration boundaries.
 
-Default: `RULES` → `CURRENT_TASK` → one `CONTEXT_MAP` route. Detailed feature contracts live in `docs/`; do not bulk-load them.
+The target roles are Student, Counselor, and Superadmin. Registration moves to automated COR format screening; scheduled sessions gain audio/video and protected records; AI stays non-diagnostic; the Wellness Resource Library is removed.
+
+Do not implement pending items: University QR/registrar verification, production storage provider, clinical retention periods, voice analysis, or a navigation-only assistant.

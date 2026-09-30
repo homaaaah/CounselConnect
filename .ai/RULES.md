@@ -17,12 +17,14 @@ Conflict order: current human/adviser instruction â†’ latest approved decision â
 
 ## Privacy/safety invariants
 
-- Current COR: private temporary storage only; authorized verification access; delete after decision or seven-day TTL; log cleanup outcome, not file content.
-- Expression cue: raw camera data stays on-device; no embeddings, cloud inference, persistence, broad logging, diagnosis, or SOS influence.
-- Wellness discovery: allowlisted sources, bounded metadata, Counselor review before publication, canonical links, no mirrored full articles/arbitrary hosted thumbnails.
-- Messaging: no recordings, generated transcripts, or summaries; purge message bodies 30 days after conversation closure.
-- CMS: structured/sanitized content only; never executable/configuration/security/AI-instruction data.
-- No psychological diagnosis or medical recommendation.
+- COR screening: private temporary storage, OCR/format checks only, Student confirmation, and cleanup logging without file content. Do not claim University authenticity; QR/registrar verification is pending.
+- Counseling access: support multiple Counselors and enforce assignment. Superadmin has no default access to chats, drafts, assessments, clinical files, SOS answers, or call media.
+- Assessments: Counselor drafts are private; finalized assessments are immutable; corrections use append-only Counselor-authored amendments; Students receive read-only final access.
+- Clinical files: store bytes through private storage, metadata/opaque keys in MySQL, and serve only through authorization-checked no-store responses.
+- Calls/AI: no recordings, generated transcripts, summaries, raw media, facial embeddings, or persisted AI observation history. AI remains optional, consented, non-diagnostic, and outside SOS.
+- Messaging: purge message bodies 30 days after conversation closure under the existing rule.
+- Wellness Resource discovery/library is removed; do not create new dependencies on legacy resource code.
+- No automated psychological diagnosis, medication recommendation, or replacement of Counselor judgment.
 
 ## Data and tests
 

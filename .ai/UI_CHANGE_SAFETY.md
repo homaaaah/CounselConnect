@@ -2,7 +2,7 @@
 
 ## When to use this checklist
 
-Read this before redesigning, restructuring, or refactoring a data-driven interface, including its navigation, forms, modals, lists, hooks, and event handlers. Apply it to appointments, Counselor lists, resources, conversations, verification queues, SOS cases, and dashboards.
+Read this before redesigning, restructuring, or refactoring a data-driven interface, including its navigation, forms, modals, lists, hooks, and event handlers. Apply it to appointments, Counselor lists, counseling history, clinical documents, conversations, COR screening, SOS cases, and dashboards.
 
 Follow [RULES.md](RULES.md) and the owning feature contract. This checklist does not authorize new behavior, broaden roles, or override the user's scope. Load only the relevant feature documentation and code.
 

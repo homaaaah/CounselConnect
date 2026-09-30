@@ -8,7 +8,7 @@ Scheduling follows the approved **CounselConnect Appointment Scheduling Process 
 
 **2. Counselor blocks unavailable time.** Instead of changing the weekly schedule, a Counselor creates a temporary block: a date or datetime range, optionally whole-day, with an optional short reason (≤ 255 characters). The system rejects a block that would overlap an existing `PENDING` or `CONFIRMED` appointment (`BLOCK_CONFLICT`) — the affected appointment must be resolved first; a block never cancels, rejects, reschedules, or moves an appointment. Valid blocks save without touching the recurring schedule. When generating and calculating bookable slots, the system excludes blocked periods, existing appointments, and past times. Weekly-schedule changes apply to future availability. Matching future `AVAILABLE` slots adopt the active schedule's supported mode when availability is materialized; leftover available slots attached to the replaced, inactive schedule are excluded from calendars and booking. `RESERVED` slots and existing appointments remain unchanged.
 
-**3. Student selects an appointment.** An `ACTIVE` Student searches future available slots. The system displays each slot's campus, date, time, supported modes, and Guidance Office location. The Student chooses a slot and a supported mode and submits the request.
+**3. Student selects an appointment.** An `ACTIVE` Student searches future available slots. The system displays each slot's campus, date, time, supported modes, and Guidance Office location. The Student chooses a slot and supported mode, selects a required `concern_category`, may add optional `concern_details`, and submits the request. Concern data is sensitive and is visible only to the Student and assigned Counselor; it must not appear in generic reminders, notifications, or ordinary logs.
 
 **4. System validates the request.** The system re-checks that the slot is still available, the mode is supported, and no participant conflict exists. A slot whose Manila date has already passed is rejected with `APPOINTMENT_DATE_PASSED`; a slot whose start time has already passed today is rejected with `APPOINTMENT_TIME_PASSED` (both 409, original reservation untouched on reschedule). Other failures inform the Student the selection is unavailable or incompatible (`SLOT_UNAVAILABLE`, `MODE_INCOMPATIBLE`, `SCHEDULE_CONFLICT`, `GUIDANCE_OFFICE_REQUIRED`) and returns to the available slots. On success the system atomically reserves the slot and creates a `PENDING` appointment. `ONLINE` keeps `meeting_location` empty; `FACE_TO_FACE` copies the current campus Guidance Office location into `appointments.meeting_location` as a booking-time snapshot — later campus-location edits do not alter the existing appointment.
 
@@ -16,11 +16,11 @@ Scheduling follows the approved **CounselConnect Appointment Scheduling Process 
 
 **6. Actions after confirmation.** Cancellation sets `CANCELLED` and releases the future slot. Students may cancel or reschedule only until 24 hours before start; the assigned Counselor is unrestricted by that cutoff. Rescheduling (`CONFIRMED` only) selects a replacement slot and supported mode, returns the appointment to `PENDING`, and replaces the location snapshot atomically. Any participant join/message activity prevents rescheduling. Before start and before chat activity, the assigned Counselor may change to another mode supported by the same slot while keeping the appointment `CONFIRMED`. A failed change leaves the original reservation intact.
 
-**7. Online appointment.** At the scheduled start, the system authorizes and opens a dedicated appointment Live Chat linked to the appointment (requirements in "Online appointment integration"; Live Chat transport/joining remains a separate unimplemented feature).
+**7. Online appointment.** The appointment lobby opens 30 minutes before start. At the scheduled start, the system authorizes the owning Student and assigned Counselor for the dedicated appointment text chat. The approved target also provides a one-to-one WebRTC audio/video call under `AUDIO_VIDEO_CALLS.md`; that call is planned, not yet implemented.
 
 **8. Face-to-face appointment.** The system displays the saved campus Guidance Office location snapshot, and the Student attends onsite at that location.
 
-**9. Session outcome.** After either mode, the system records the session outcome. Only the assigned Counselor sets outcomes, only from `CONFIRMED`, and only once the scheduled start is reached; face-to-face outcomes are entered manually by the Counselor. If the session finishes, the status becomes `COMPLETED`; if the Student is absent, `NO_SHOW`. Terminal transitions close the linked conversation when applicable. A `CANCELLED`, `COMPLETED`, or `NO_SHOW` appointment is considered closed.
+**9. Session outcome and documentation.** After either mode, only the assigned Counselor records the appointment outcome after start; face-to-face outcomes are entered manually. `COMPLETED` means the session occurred and `NO_SHOW` means the Student did not attend. The separate counseling-session record then moves through ending, documentation, and assessment finalization under `COUNSELING_SESSION_RECORDS.md`. Ending a chat/call does not by itself invent an appointment outcome.
 
 ## Appointment status guide
 
@@ -57,8 +57,8 @@ Weekly schedules and temporary blocks are fully implemented (`GET /weekly-schedu
 - Availability generation may accept a time range and slot duration but persists concrete slots (`POST /availability-slots` still supports manual concrete batches of 1–200 slots).
 - Status transitions and slot reservation/release must be atomic and auditable.
 - Mode compatibility and face-to-face location availability are validated server-side.
-- Guidance Staff has no appointment or campus-location-management access.
-- No separate meeting-platform integration; scheduled online counseling uses CounselConnect Real-Time Messaging.
+- Legacy Guidance Staff and Superadmin have no appointment-participant or campus-schedule authority. Superadmin may see minimal operational metadata only.
+- Scheduled online counseling retains CounselConnect text messaging and adds planned one-to-one WebRTC audio/video; no recording or transcript.
 
 ## Required tests
 
@@ -67,7 +67,8 @@ Weekly schedules and temporary blocks are fully implemented (`GET /weekly-schedu
 - Face-to-face-capable availability denied when the campus Guidance Office location is missing.
 - Correct face-to-face location snapshot and protection from later campus-location changes.
 - Pending review and each allowed/forbidden appointment transition.
-- Ownership and role access, including Guidance Staff denial.
+- Ownership and role access, including other-Counselor, legacy Guidance Staff, and Superadmin participant denial.
+- Required concern category, optional detail validation, and concern confidentiality.
 - Cancel/reschedule slot release and replacement-mode/location revalidation.
 - Weekly-schedule constraint enforcement (day, time range, duration bounds, mode enum, overlap, exact duplicate, foreign keys).
 - Availability-block overlap with active appointments denied; block deletion.
@@ -80,7 +81,7 @@ Weekly schedules and temporary blocks are fully implemented (`GET /weekly-schedu
 
 ## Implemented scheduling flow
 
-The scheduling UI is at `#appointments`, available from the signed-in navigation to active Students and Counselors. Student sign-in opens Student services with an appointment link. Guidance Staff and pending/expired Students cannot load appointment data. The reference is **Flowchart V1, page 4 (Appointment Scheduling)**.
+The scheduling UI is at `#appointments`, available from the signed-in navigation to active Students and Counselors. Student sign-in opens Student services with an appointment link. Legacy Guidance Staff, Superadmin-as-participant, and pending/expired Students cannot load appointment counseling data. The reference flow must be revised to include appointment concern, audio/video, and counseling-record finalization.
 
 - Counselor sets recurring university-local availability through weekly schedules (day 1–7 ISO, campus, local time range, 15–240-minute slot duration, mode). Slots are materialized lazily from active schedules when a calendar/slot search needs them, skipping availability-blocked periods and already-materialized times; manual concrete batch creation remains available. Counselor availability cannot overlap across campuses.
 - Students filter future slots by campus, Philippine date, and mode; requesting a slot creates `PENDING`. The owning Counselor can confirm or reject a pending request. Rejection optionally includes a note of at most 500 characters.
@@ -97,7 +98,7 @@ The scheduling UI is at `#appointments`, available from the signed-in navigation
 
 ## Pending policy and integration
 
-Slot duration/buffer defaults, booking horizon for slot materialization (currently the requested calendar/slot-search range), automatic slot-generation jobs, and detailed no-show policy.
+Slot duration/buffer defaults, detailed no-show policy, production video TURN service, and assessment/document retention. The 60-day booking horizon remains approved by ADR-021.
 
 ### Slot-list pagination
 
