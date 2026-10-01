@@ -22,11 +22,22 @@ Web authentication uses opaque sessions in the HttpOnly `counselconnect_session`
 - Login is allowed for `ACTIVE`, `PENDING_VERIFICATION`, and `VERIFICATION_EXPIRED` accounts (pending/expired students must still reach account/COR re-verification); feature-level authorization still requires `ACTIVE` where the feature docs say so.
 - Password-reset credentials will be hashed, single-use, 30-minute expiry, and a successful reset revokes all active sessions without revealing account existence (flow in its own task; no Remember Me in v1).
 
+## One-time COR verification token (ADR-031 — implemented)
+
+Registration no longer signs the Student in. `POST /accounts/register/student-with-cor` and `POST /cor-screenings/resubmit` return a single-use `verification_token`; the client keeps it in memory and sends it in the `X-COR-Token` header to authorize `confirm`, `reject`, and `resubmit` for that screening only.
+
+- The token is a 256-bit random value (`secrets.token_urlsafe(32)`); only its SHA-256 digest is stored (`cor_screenings.verification_token_hash BINARY(32)` plus `verification_token_issued_at`). Verification uses a constant-time digest compare. Raw tokens are never persisted, logged, or placed in URLs or error messages.
+- It shares the seven-day evidence window and is rotated on every re-upload, destroyed on activation (`PASSED`), and destroyed when the screening reaches `FAILED` at expiry (both on resolve and in the cleanup worker). An expired token also retires its screening.
+- Missing, unknown, tampered, expired, or rotated-away tokens fail closed with `401 INVALID_VERIFICATION_TOKEN` and a generic message. A present-but-invalid token never falls back to session authentication.
+- Token-authorized requests are cookie-less, so CSRF does not apply to them; session-authenticated requests keep the existing CSRF rule. Token-bearing responses are `Cache-Control: no-store`.
+- Residual: closing the registration modal before acting loses the token by design (it is memory-only); the Student recovers through the signed-in `#registration` session path.
+
 ## Sensitive data matrix
 
 | Data | Storage/retention | Key restriction |
 |---|---|---|
 | Login sessions | digest-only rows; deleted when expired/revoked or user deleted | no raw credentials in storage/logs/API; heartbeats never renew activity |
+| COR verification token | SHA-256 digest only on `cor_screenings`; expires with the 7-day window; destroyed on activation/TTL | returned once in the register/resubmit body; set `X-COR-Token`; never logged or in URLs; `no-store` |
 | Current COR | private temporary store; decision or seven-day TTL | no MySQL blob/public URL/backups beyond need |
 | Appointments | authorized durable records | owner/Counselor scope; mode compatibility; Counselor-only campus-location mutation |
 | Messages | authorized store; bodies purged 30 days after close | no recordings/transcripts/summaries/log bodies |
@@ -53,4 +64,4 @@ Validation errors return only field locations, error types, and safe messages. S
 
 ## Priority tests
 
-Horizontal/vertical authorization; pending/expired account block; Staff assignment isolation; malicious upload/direct path; cleanup failure/TTL; appointment/message ownership; appointment mode/slot compatibility; missing campus-location denial; Counselor-only campus-location mutation; pre-start/unconfirmed/cancelled online-chat denial; participant mismatch; face-to-face conversation denial; appointment/SOS link isolation; CMS injection; SSRF/unsafe redirect; raw-media network/storage prevention; SOS independence from cue; sensitive-log review.
+Horizontal/vertical authorization; pending/expired account block; Staff assignment isolation; malicious upload/direct path; cleanup failure/TTL; appointment/message ownership; appointment mode/slot compatibility; missing campus-location denial; Counselor-only campus-location mutation; pre-start/unconfirmed/cancelled online-chat denial; participant mismatch; face-to-face conversation denial; appointment/SOS link isolation; CMS injection; SSRF/unsafe redirect; raw-media network/storage prevention; SOS independence from cue; one-time COR token fail-closed (invalid/empty/expired/rotated, no session fallback, digest-only, destroyed on activation); sensitive-log review.

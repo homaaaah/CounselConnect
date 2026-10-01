@@ -15,7 +15,7 @@
 | Resources | `resource_sources`, `wellness_resources`, `resource_files`, `resource_categories`, `wellness_resource_categories` |
 | Content/operations | `content_items`, `emergency_contacts`, `audit_events` |
 
-`cor_screening_files` stores temporary metadata references only, never COR bytes. `resource_files` refers only to controlled durable internal resource attachments.
+`cor_screening_files` stores temporary metadata references only, never COR bytes. `resource_files` refers only to controlled durable internal resource attachments. `cor_screenings` also stores the one-time `verification_token_hash` (SHA-256 digest) and `verification_token_issued_at` used for in-modal confirmation (ADR-031); the raw token is never stored.
 
 ## Appointment and conversation fields
 

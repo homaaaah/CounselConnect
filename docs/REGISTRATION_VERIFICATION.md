@@ -13,13 +13,13 @@ validate credentials + COR PDF
 → account ACTIVE + valid_until, screening PASSED, COR deleted
 ```
 
-The confirmation step appears **inline on the registration form** (prototype-style): on a successful submission the client establishes the session with the just-registered credentials, then renders the extracted fields for review and confirmation in the same card — no separate sign-in detour. If the screening needs resubmission, the same card links to the re-upload step.
+The confirmation step appears **inline on the registration form** (prototype-style), but registration does **not** sign the Student in (ADR-031). The register response returns a one-time `verification_token`; the client sends it in the `X-COR-Token` header to authorize confirm/reject/re-upload for that screening, so the whole flow completes in the same card without a session. If the screening needs resubmission, the same card shows the re-upload step. The signed-in `#registration` page remains the fallback for a Student who loses the modal token (e.g. closes the tab): they sign in with their registration email or student number and use the session-authorized endpoints.
 
 There is no human approval queue. A screening is `AWAITING_CONFIRMATION` only when the format score and extraction confidence meet the configured thresholds **and** the embedded barcode decodes and matches the extracted student number. Anything less is `NEEDS_RESUBMISSION` and the Student re-uploads. If the screening tooling is unavailable, registration fails closed (`SCREENING_UNAVAILABLE`) and never activates an account.
 
 Students sign in with their registration email or their student number (ADR-019/ADR-030).
 
-The confirming Student must supply a strict UCC student number (`^\d{8}-[A-Za-z]$`, e.g. `20231234-A`) and select a campus/program that already exists as an active reference row. **All verified academic fields are read-only** during confirmation — student number, names, year level, section, academic year, and any campus/program the COR was mapped to. The Student either **confirms** or **rejects** the result; rejecting sets `NEEDS_RESUBMISSION` / `REJECTED_BY_STUDENT`, offers a re-upload, and signs the Student out. The backend rejects a request that changes any verified field (`FIELD_MISMATCH`) or the student number (`STUDENT_NUMBER_MISMATCH`), so a crafted request cannot rewrite verified data. Only a campus/program the COR could not be mapped to stays selectable. Extracted names are never used to create campuses or programs.
+The confirming Student must supply a strict UCC student number (`^\d{8}-[A-Za-z]$`, e.g. `20231234-A`) and select a campus/program that already exists as an active reference row. **All verified academic fields are read-only** during confirmation — student number, names, year level, section, academic year, and any campus/program the COR was mapped to. The Student either **confirms** or **rejects** the result; rejecting sets `NEEDS_RESUBMISSION` / `REJECTED_BY_STUDENT` and offers a re-upload (keeping the one-time token so the re-upload can proceed inline; on the signed-in fallback path it signs the Student out). The backend rejects a request that changes any verified field (`FIELD_MISMATCH`) or the student number (`STUDENT_NUMBER_MISMATCH`), so a crafted request cannot rewrite verified data. Only a campus/program the COR could not be mapped to stays selectable. Extracted names are never used to create campuses or programs.
 
 `AWAITING_CONFIRMATION` requires every required field (student number, name, course/program, year, section) to be present, plus a format score and extraction confidence at or above the thresholds, and a decoded barcode consistent with the extracted student number. The barcode's academic-period value is cross-checked against OCR when both are present, and the decode result/confidence is recorded. `valid_until` uses the enrollment-validity date read from the COR when it is still in the future, otherwise a 12-month default.
 
@@ -39,6 +39,15 @@ If an open screening is still pending after seven days: the screening becomes `F
 - Barcode statuses: `NOT_PROCESSED`, `NOT_FOUND`, `UNREADABLE`, `INVALID_FORMAT`, `DECODED`, `MISMATCH`.
 - Failure codes: `UNREADABLE_DOCUMENT`, `LOW_FORMAT_SCORE`, `MISSING_REQUIRED_FIELDS`, `LOW_EXTRACTION_CONFIDENCE`, `BARCODE_*`, `TECHNICAL_ERROR` (→ `FAILED`), `FIELD_MAPPING_FAILED`, `REJECTED_BY_STUDENT`, `ADMIN_RECOVERY`.
 - Confirmation codes: `STUDENT_NUMBER_MISMATCH` (number differs from the screened value) and `FIELD_MISMATCH` (any verified field differs).
+- Token authorization code: `INVALID_VERIFICATION_TOKEN` (401) for a missing, unknown, rotated-away, expired, or tampered `X-COR-Token`.
+
+## One-time verification token (ADR-031)
+
+- Registration returns `verification_token` once in the response body (`Cache-Control: no-store`); `resubmit` rotates it and returns the new value. The client keeps it in memory only and sends it in the `X-COR-Token` header. There is no token `GET`, and no secret ever appears in a URL or log.
+- The token authorizes only `confirm`, `reject`, and `resubmit` for its own screening. Those endpoints accept **either** the token **or** an authenticated Student session; a present-but-invalid token fails closed and never falls back to the session.
+- At rest only `sha256(raw)` is stored (`cor_screenings.verification_token_hash BINARY(32)`) plus `verification_token_issued_at`. The token uses a 256-bit random value and constant-time digest comparison.
+- The token shares the evidence window (`submitted_at + 7 days`; no separate setting). It is rotated on every re-upload, destroyed on activation (`PASSED`), and destroyed when the screening reaches `FAILED` at TTL expiry (in both `resolve` and the cleanup worker). An expired token also retires its screening to `FAILED`.
+- Token requests carry no session cookie, so CSRF does not apply; everyone else remains CSRF-bound. Resolve locks the Student row before the screening row, matching the session path.
 
 ## Implemented cleanup and concurrency
 
@@ -52,14 +61,14 @@ If an open screening is still pending after seven days: the screening becomes `F
 
 ## Authorization
 
-- Student: register, view own screening (`GET /cor-screenings/me`), confirm (`POST /cor-screenings/confirm`), reject (`POST /cor-screenings/reject`), resubmit (`POST /cor-screenings/resubmit`).
+- Student: register, view own screening (`GET /cor-screenings/me`), confirm (`POST /cor-screenings/confirm`), reject (`POST /cor-screenings/reject`), resubmit (`POST /cor-screenings/resubmit`). Confirm/reject/resubmit also accept the one-time `X-COR-Token` in place of a session (ADR-031); `GET /cor-screenings/me` stays session-only.
 - Counselor: read-only screening/audit list (`GET /cor-screenings`). No approval/edit action; the Counselor authority remains for account/academic corrections.
 - Guidance Staff: no COR screening access under ADR-029.
 - Pending/expired Student: own account and COR re-verification only.
 
 ## Required tests
 
-Pending/expired access block; unauthorized read; malicious name/MIME/size; outcome matrix (format/extraction/missing/barcode); strict student-number rejection; no auto-created reference rows; missing-tooling fail-closed; resubmission replacement; confirmation activation + `valid_until` + deletion; seven-day cleanup/retry; barcode payload never persisted or logged.
+Pending/expired access block; unauthorized read; malicious name/MIME/size; outcome matrix (format/extraction/missing/barcode); strict student-number rejection; no auto-created reference rows; missing-tooling fail-closed; resubmission replacement; confirmation activation + `valid_until` + deletion; seven-day cleanup/retry; barcode payload never persisted or logged. One-time token: register returns a hashed-only token; token confirm/reject/re-upload succeed with no session; invalid/expired/rotated tokens return `401 INVALID_VERIFICATION_TOKEN`; a present-but-invalid token never falls back to a valid session; the token is destroyed on activation.
 
 ## Pending
 

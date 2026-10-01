@@ -89,9 +89,9 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 
 ## 6. Demo flow to verify your setup (5 minutes)
 
-1. **Register** — http://localhost:5173 → *Register* → enter email + password and attach your current COR PDF → submit.
-2. **Confirm** — the confirmation step appears inline on the same form; review the extracted fields (read-only) and click **Confirm details**. Success = "Your account is now active."
-   - A COR whose barcode is missing/unreadable, or whose details cannot be read, asks for a re-upload instead (Poppler/Tesseract required).
+1. **Register** — http://localhost:5173 → *Register* → enter email + password and attach your current COR PDF → submit. Registration does **not** sign you in; it returns a one-time token for the inline steps.
+2. **Confirm** — the confirmation step appears inline on the same form; review the extracted fields (read-only) and click **Confirm details** (sent in the `X-COR-Token` header). Success = "Account activated. You can now sign in with your email or student number."
+   - A COR whose barcode is missing/unreadable, or whose details cannot be read, asks for a re-upload instead (Poppler/Tesseract required); rejecting/re-uploading also stays inline.
 3. **Counselor view** — `#staff-login` with the seeded counselor `counselor@ucc.edu.ph` / `counselor-dev-2026` → **Users** lists students and their screening status (read-only; click **View** for the full profile).
 4. **Superadmin view** — `#staff-login` with the seeded superadmin `superadmin@ucc.edu.ph` / `superadmin-dev-2026` → **Users** with a **Recover** action for non-active students.
    - Seeded staff come from `dev_seed.sql` (developer-created per ADR-005). Rotate these dev passwords before any real deployment.
@@ -115,7 +115,7 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 
 From `backend/`, `python -m pytest app/tests -q` runs database-free tests and skips MySQL tests unless `COUNSELCONNECT_TEST_DATABASE_URL` is explicitly supplied in the process environment. It does not read this test URL from `.env` or fall back to the application's database.
 
-Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema. The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
+Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema (a grant on `counselconnect_test%` is enough; no access to the `mysql` system schema is required). The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
 
 From `frontend/`, run `npm test` for session/registration component regressions and `npm run build` for the Vite production compilation. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
 

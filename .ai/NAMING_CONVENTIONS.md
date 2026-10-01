@@ -50,6 +50,7 @@ Keep API DTO fields exactly `snake_case` in frontend API types; use `camelCase` 
 - Use `guidance_office_location` for the Counselor-managed campus value and `meeting_location` for the immutable face-to-face appointment snapshot.
 - Use `conversation_type` to distinguish `GENERAL`, `APPOINTMENT`, and `SOS`; do not overload conversation `status` for purpose.
 - JSON columns end `_json`; byte counts end `_bytes`; ordered UI fields use `display_order`.
+- Credential/token digests end `_hash` and store a SHA-256 `BINARY(32)`; an issuance time is `_issued_at` (e.g. `verification_token_hash`, `verification_token_issued_at`). Never store a raw token or a boolean "used" flag when clearing the digest signals invalidation.
 - Do not prefix every column with its table name. Do not store COR blobs, expression cues, raw facial media, or assistant history.
 
 The v1 table names in `docs/DATABASE.md` are canonical.
@@ -68,6 +69,7 @@ The v1 table names in `docs/DATABASE.md` are canonical.
   - `POST /sos-cases/{sos_case_id}/close`
   - `POST /wellness-resources/{resource_id}/publish`
 - Auth action exceptions use `/auth/login`, `/auth/refresh`, `/auth/logout`.
+- The one-time COR verification credential travels in the `X-COR-Token` request header (never a cookie, URL, or query); its failure code is `INVALID_VERIFICATION_TOKEN`. Session CSRF stays in `X-CSRF-Token`.
 - Never use role-specific duplicate routes when authorization can govern one resource route.
 
 ## Payloads and errors

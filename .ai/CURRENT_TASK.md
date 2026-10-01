@@ -1,6 +1,6 @@
 # CounselConnect - Current Task
 
-**Status:** COMPLETED (pending human doc-contract decisions)
+**Status:** COMPLETED
 **Task:** In-modal enrollment verification with a one-time `X-COR-Token` and no auto-login (plan `.kilo/plans/inmodal-verification-token.md`).
 
 ## Objective
@@ -18,12 +18,13 @@ Registration must not sign the Student in. The whole verification (confirm / rej
 - Router: `X-COR-Token` OR Student session on confirm/reject/resubmit; register response returns the token; no token GET.
 - Frontend: remove auto-login/`setCsrfToken`, carry the token in memory, send `X-COR-Token`, done → Sign in.
 - Backend + frontend tests; OpenAPI snapshot.
+- Docs: ADR-031, `REGISTRATION_VERIFICATION.md`, `API_CONTRACT.md`, `SECURITY.md`, `NAMING_CONVENTIONS.md`, `WORKFLOWS.md`, `TEAM_SETUP_GUIDE.md`.
 
 ## Out of scope
 
 - New token `GET` endpoint; no secrets in URLs.
 - Session `#registration` fallback path (kept unchanged).
-- Docs contract edits (ADR/API/SECURITY) pending human approval.
+- Optional cleanup of the 3 pre-existing frontend calendar failures.
 
 ## Acceptance criteria
 
@@ -49,6 +50,8 @@ Registration must not sign the Student in. The whole verification (confirm / rej
 - OpenAPI: regenerated; `python scripts/export_openapi.py --check` passes (new `X-COR-Token` header + `verification_token` fields present).
 - Frontend: `npm test` → 66 passed, 3 failed. The 3 failures are the known `appointments.test.cjs` calendar date-rot cases (unrelated, pre-existing). `npm run build` succeeded.
 - HIGH-risk independent read-only review (token path): completed. No HIGH defect. Fixed the one MED correctness gap (present-but-empty `X-COR-Token` fell through to session auth); added the missing HTTP-level tests.
+- Manual browser E2E against the dev DB: confirmed working (register while signed out → inline confirm → "Account activated" → Sign in; reject → re-upload).
+- Docs updated to match: ADR-031 in `.ai/DECISIONS.md`; `REGISTRATION_VERIFICATION.md`, `API_CONTRACT.md`, `SECURITY.md`, `NAMING_CONVENTIONS.md`, `WORKFLOWS.md`, `TEAM_SETUP_GUIDE.md`.
 
 ## Pre-existing defects found by running the MySQL suite
 
@@ -68,4 +71,5 @@ These were never exercised before (the suite skips without a test DB). Fixed as 
 
 ## Unresolved human decisions
 
-- Docs contract updates (ADR-031/ADR-029, API_CONTRACT, SECURITY, NAMING_CONVENTIONS) deferred until the human owner approves.
+- Admin recovery policy: `recover_student` currently leaves an unexpired token valid (the Student continues the normal inline re-upload). Clear the token on recovery only if recovery must invalidate any outstanding modal credential.
+- Optional: fix/quarantine the 3 pre-existing `appointments.test.cjs` calendar date-rot failures so `npm test` exits clean.

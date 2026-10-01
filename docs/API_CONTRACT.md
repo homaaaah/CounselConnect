@@ -54,6 +54,7 @@ Use `GET` to read, `POST` to create or perform an explicit state transition, `PA
 - Passwords use Argon2id. Password-reset credentials are hashed, single-use, expire after 30 minutes, and successful reset revokes active sessions.
 - Exact Capacitor credential transport and production reset-email delivery remain pending under `ADR-P09`.
 - Never place credentials, tokens, COR links, message bodies, SOS answers, or other sensitive values in URLs or routine logs.
+- The one-time COR verification token (ADR-031) is an exception to session-only auth: `POST /cor-screenings/confirm|reject|resubmit` accept either an authenticated Student session or the `X-COR-Token` header (256-bit random, returned once in the register/resubmit body, SHA-256-hashed at rest, expires with the 7-day screening window, rotated on re-upload, destroyed on activation). A present-but-invalid token fails closed with `401 INVALID_VERIFICATION_TOKEN` and never falls back to the session; token requests are cookie-less, so CSRF does not apply to them. Token-bearing responses are `no-store`.
 
 ## Request semantics
 
@@ -140,18 +141,21 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 
 - COR uploads use `multipart/form-data` and private temporary storage outside MySQL.
 - API responses must not expose public or durable COR URLs.
-- Registration is email + password + COR; screening (ADR-029) extracts the academic fields and the Student confirms them. There is no counselor approval endpoint.
+- Registration is email + password + COR; screening (ADR-029) extracts the academic fields and the Student confirms them. There is no counselor approval endpoint. Registration does not sign the Student in; the register/resubmit response returns a one-time `verification_token` used as `X-COR-Token` for the inline confirm/reject/re-upload (ADR-031).
 
 | Method/path | Allowed caller and behavior |
 |---|---|
 | `POST /accounts/register/student` | Public; creates a `PENDING_VERIFICATION` account without a COR (account-only step). |
-| `POST /accounts/register/student-with-cor` | Public; `multipart/form-data` (`email`, `password`, `file`). Creates the account and its first screening atomically; returns the screening result plus any unmatched campus/program names. The client then signs in with the same credentials (email bootstrap) and confirms inline. |
-| `GET /cor-screenings/me` | Student; latest screening result (or `null`). |
-| `POST /cor-screenings/confirm` | Student; confirms the extracted academic fields, activates the account, and deletes the COR. |
-| `POST /cor-screenings/resubmit` | Student; `multipart/form-data` (`file`); replaces a failed screening. |
+| `POST /accounts/register/student-with-cor` | Public; `multipart/form-data` (`email`, `password`, `file`). Creates the account and its first screening atomically; returns the screening result, the one-time `verification_token`, and any unmatched campus/program names (`Cache-Control: no-store`). The client confirms inline with `X-COR-Token`; it does not sign in. |
+| `GET /cor-screenings/me` | Student session; latest screening result (or `null`). |
+| `POST /cor-screenings/confirm` | Student session **or** `X-COR-Token`; confirms the extracted academic fields, activates the account, deletes the COR, and destroys the token. |
+| `POST /cor-screenings/reject` | Student session **or** `X-COR-Token`; marks the screening `NEEDS_RESUBMISSION`/`REJECTED_BY_STUDENT` and offers a re-upload. |
+| `POST /cor-screenings/resubmit` | Student session **or** `X-COR-Token`; `multipart/form-data` (`file`); replaces a failed/again-needed screening and returns a **rotated** `verification_token`. |
 | `GET /cor-screenings` | Active Counselor; read-only screening/audit list (`status` filter). |
 | `GET /accounts/students` | Active Counselor or Superadmin; read-only student directory with profile + latest screening (`q`, `account_status`, `screening_status`, `page`, `page_size`). |
 | `POST /accounts/students/{user_id}/recover` | Active Superadmin; resets a non-active Student to `PENDING_VERIFICATION` so they can submit a fresh COR (ADR-030). |
+
+Invalid, expired, rotated-away, or malformed `X-COR-Token` values return `401 INVALID_VERIFICATION_TOKEN` with a generic message; the raw token is never echoed or logged.
 
 ### Appointments
 
