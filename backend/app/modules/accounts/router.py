@@ -5,7 +5,7 @@ Counselor-only management endpoints arrive with ADR-P01 (auth context).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from pydantic import EmailStr
 
 from app.modules.accounts.schemas import (
@@ -57,6 +57,7 @@ def register_student(
     summary="Atomic registration: account + automated COR screening (ADR-029)",
 )
 def register_student_with_cor(
+    response: Response,
     email: EmailStr = Form(...),
     password: str = Form(..., min_length=8, max_length=128),
     file: UploadFile = File(..., description="Current COR PDF (registration form)"),
@@ -64,29 +65,34 @@ def register_student_with_cor(
 ):
     from app.config import get_settings
 
+    # The one-time verification token is returned in this body: never cache it.
+    response.headers["Cache-Control"] = "no-store"
     # Sync endpoint (threadpooled) because screening runs blocking OCR
     # subprocesses. Read only enough to validate the configured limit,
     # including one extra byte to detect an oversized upload.
     cor_content = file.file.read(get_settings().cor_max_mb * 1024 * 1024 + 1)
-    user, screening, unmatched_campus, unmatched_program = service.register_student_with_cor(
-        str(email),
-        password,
-        cor_content,
-        file.filename or "cor.pdf",
+    user, screening, unmatched_campus, unmatched_program, verification_token = (
+        service.register_student_with_cor(
+            str(email),
+            password,
+            cor_content,
+            file.filename or "cor.pdf",
+        )
     )
     if screening.status == "AWAITING_CONFIRMATION":
         next_step = (
-            "Your registration form passed screening. Sign in and confirm your "
-            "details to activate your account."
+            "Your registration form passed screening. Confirm your details to "
+            "activate your account."
         )
     else:
         next_step = (
-            "Some details on your registration form could not be read. Sign in "
-            "and upload a clearer COR to continue."
+            "Some details on your registration form could not be read. Upload a "
+            "clearer COR to continue."
         )
     return RegistrationWithCorResponse(
         user=UserResponse.model_validate(user),
         screening=CorScreeningResponse.model_validate(screening),
+        verification_token=verification_token,
         unmatched_campus_name=unmatched_campus,
         unmatched_program_name=unmatched_program,
         next_step=next_step,

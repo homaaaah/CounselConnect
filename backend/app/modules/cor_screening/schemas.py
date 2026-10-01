@@ -52,6 +52,8 @@ class RegistrationWithCorResponse(BaseModel):
 
     user: UserResponse
     screening: CorScreeningResponse
+    # One-time in-modal verification token; returned only here and on resubmit.
+    verification_token: str
     unmatched_campus_name: str | None = None
     unmatched_program_name: str | None = None
     next_step: str
@@ -79,6 +81,8 @@ class ConfirmScreeningResponse(BaseModel):
 
 class ResubmitResponse(BaseModel):
     screening: CorScreeningResponse
+    # Rotated on re-upload; None on reject (the caller keeps its current token).
+    verification_token: str | None = None
 
 
 class CounselorScreeningItem(BaseModel):

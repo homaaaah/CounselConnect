@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core.exceptions import AppError
+from app.core.security import sha256_digest
 from app.modules.cor_screening import screening as engine
 from app.modules.cor_screening.models import CorScreening
 from app.modules.cor_screening.service import CorScreeningService
@@ -430,3 +431,38 @@ def test_directory_allows_superadmin_read():
     assert service.list_students(
         SimpleNamespace(role_code="SUPERADMIN", account_status="ACTIVE", user_id=1)
     ) == []
+
+
+# ------------------------------------------------- one-time verification token
+
+
+def test_issue_verification_token_stores_only_the_digest():
+    service = CorScreeningService(Session())
+    screening = make_screening()
+    raw = service._issue_verification_token(screening, datetime.now(timezone.utc))
+    assert raw
+    assert screening.verification_token_hash == sha256_digest(raw)
+    assert screening.verification_token_issued_at is not None
+    assert raw not in str(screening.verification_token_hash)
+
+    service._clear_verification_token(screening)
+    assert screening.verification_token_hash is None
+    assert screening.verification_token_issued_at is None
+
+
+def test_resolve_verification_token_rejects_missing_value():
+    service = make_service()
+    for bad in (None, "", "   "):
+        with pytest.raises(AppError) as caught:
+            service.resolve_verification_token(bad)
+        assert caught.value.code == "INVALID_VERIFICATION_TOKEN"
+        assert caught.value.status_code == 401
+
+
+def test_resolve_verification_token_rejects_unknown_digest():
+    service = make_service()
+    service.repository.find_by_token_hash.return_value = None
+    with pytest.raises(AppError) as caught:
+        service.resolve_verification_token("unknown-token")
+    assert caught.value.code == "INVALID_VERIFICATION_TOKEN"
+    assert caught.value.status_code == 401

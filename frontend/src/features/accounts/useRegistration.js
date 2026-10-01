@@ -3,11 +3,12 @@
  *
  * The student submits ONLY email + password + the current registration form
  * (COR) PDF. The backend screens the PDF synchronously and returns the
- * extracted fields; the student then confirms them from the Registration
- * Status screen. There is no reference-data (campus/program) lookup here.
+ * extracted fields plus a one-time verification token; the student then
+ * confirms the extracted fields inline, authorized by that token (no session
+ * and no auto sign-in). There is no reference-data lookup here.
  */
 import { useState } from "react";
-import { request, ApiError, setCsrfToken } from "../../services/apiClient";
+import { request, ApiError } from "../../services/apiClient";
 
 export const EMPTY_FORM = {
   email: "",
@@ -35,6 +36,8 @@ const ERROR_MESSAGES = {
   SCREENING_NOT_FOUND: "We could not find your registration form. Please upload it again.",
   REGISTRATION_DISABLED: "Student registration is temporarily unavailable. Please try again later.",
   FORBIDDEN_ROLE: "This registration path is for students only.",
+  INVALID_VERIFICATION_TOKEN:
+    "Your verification is no longer valid. Please sign in to continue.",
 };
 
 /** Human-readable screening failure reasons (mirrors the backend contract). */
@@ -107,27 +110,15 @@ export function useRegistration() {
       const status = screening?.status;
       const failureReason = failureReasonText(screening?.failure_reason_code);
 
-      // Prototype-style flow: establish the session immediately after
-      // registration so the student can confirm the extracted details inline
-      // without a separate sign-in. A pending account has no confirmed student
-      // number yet, so it signs in with its registration email.
-      let auth = null;
-      try {
-        auth = await request("/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ identifier: form.email, password: form.password }),
-        });
-        setCsrfToken(auth?.csrf_token ?? null);
-      } catch {
-        auth = null;
-      }
-
+      // No auto sign-in: the one-time verification token returned by the
+      // backend authorizes the inline confirm/reject/re-upload for this
+      // screening. It lives only in component memory.
       return {
         success: true,
         outcome: status ?? null,
         screening,
-        auth,
-        canConfirm: Boolean(auth) && status === "AWAITING_CONFIRMATION",
+        verificationToken: result?.verification_token ?? null,
+        canConfirm: status === "AWAITING_CONFIRMATION",
         unmatched_campus_name: result?.unmatched_campus_name ?? null,
         unmatched_program_name: result?.unmatched_program_name ?? null,
         next_step: result?.next_step ?? null,

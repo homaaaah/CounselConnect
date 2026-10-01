@@ -4,24 +4,26 @@ import {
   EMPTY_FORM,
   confirmedFieldsFrom,
   actionErrorMessage,
+  failureReasonText,
   ScreeningFields,
 } from "../features/accounts";
 import { request } from "../services/apiClient";
 
 /**
- * Student registration (automated COR screening), prototype-style:
- * one card with email + password + COR; on submit the student is signed in
- * automatically and the account-confirmation step appears inline so they can
- * review the extracted details and activate the account without a separate
- * sign-in. inModal renders the same card without the full-page shell.
+ * Student registration (automated COR screening): one card with email +
+ * password + COR. Registration does NOT sign the student in; the response's
+ * one-time verification token (kept only in component memory) authorizes the
+ * inline confirm / reject / re-upload steps so activation happens without a
+ * session. inModal renders the same card without the full-page shell.
  */
-export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin, onSignedIn, onActivated, onRejected }) {
+export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin }) {
   const { register, submitting } = useRegistration();
   const [form, setForm] = useState(EMPTY_FORM);
   const [corFile, setCorFile] = useState(null);
   const [result, setResult] = useState(null);
+  const [verificationToken, setVerificationToken] = useState(null);
 
-  const [phase, setPhase] = useState("form"); // "form" | "confirm" | "done"
+  const [phase, setPhase] = useState("form"); // "form" | "confirm" | "resubmit" | "done"
   const [screening, setScreening] = useState(null);
   const [unmatched, setUnmatched] = useState({ campus: null, program: null });
   const [confirmForm, setConfirmForm] = useState(null);
@@ -30,6 +32,12 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
   const [referenceError, setReferenceError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmError, setConfirmError] = useState("");
+  const [resubmitFile, setResubmitFile] = useState(null);
+  const [resubmitError, setResubmitError] = useState("");
+
+  // The one-time token header authorizes the modal actions. Omit it entirely
+  // when absent (never send an empty credential); the backend fails closed.
+  const tokenHeaders = verificationToken ? { "X-COR-Token": verificationToken } : {};
 
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -65,13 +73,19 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     const r = await register(form, corFile);
     setResult(r);
     if (r.success) {
-      if (r.auth && onSignedIn) onSignedIn(r.auth);
+      setVerificationToken(r.verificationToken ?? null);
       if (r.canConfirm) {
         setScreening(r.screening);
         setConfirmForm(confirmedFieldsFrom(r.screening));
         setUnmatched({ campus: r.unmatched_campus_name, program: r.unmatched_program_name });
         setConfirmError("");
         setPhase("confirm");
+      } else if (["NEEDS_RESUBMISSION", "FAILED"].includes(r.outcome)) {
+        // Keep the flow in this same card: offer a re-upload instead of a link out.
+        setScreening(r.screening);
+        setResubmitFile(null);
+        setResubmitError("");
+        setPhase("resubmit");
       }
     }
   }
@@ -90,6 +104,7 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     try {
       await request("/cor-screenings/confirm", {
         method: "POST",
+        headers: tokenHeaders,
         body: JSON.stringify({
           student_number: confirmForm.student_number.trim(),
           first_name: confirmForm.first_name.trim(),
@@ -103,7 +118,6 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
         }),
       });
       setPhase("done");
-      if (onActivated) await onActivated();
     } catch (err) {
       setConfirmError(actionErrorMessage(err));
     } finally {
@@ -115,14 +129,56 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     setBusy(true);
     setConfirmError("");
     try {
-      await request("/cor-screenings/reject", { method: "POST" });
-      if (onRejected) {
-        await onRejected();
-      } else {
-        window.location.hash = "registration";
-      }
+      const response = await request("/cor-screenings/reject", {
+        method: "POST",
+        headers: tokenHeaders,
+      });
+      setScreening(response?.screening ?? screening);
+      setResubmitFile(null);
+      setResubmitError("");
+      setPhase("resubmit");
     } catch (err) {
       setConfirmError(actionErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResubmit(e) {
+    e.preventDefault();
+    if (!resubmitFile) {
+      setResubmitError("Please choose your registration form (COR) PDF.");
+      return;
+    }
+    setBusy(true);
+    setResubmitError("");
+    try {
+      const body = new FormData();
+      body.append("file", resubmitFile);
+      const response = await request("/cor-screenings/resubmit", {
+        method: "POST",
+        headers: tokenHeaders,
+        body,
+      });
+      const next = response?.screening ?? null;
+      setScreening(next);
+      // Re-upload rotates the one-time token; keep the latest one in memory.
+      if (response?.verification_token) setVerificationToken(response.verification_token);
+      if (next?.status === "AWAITING_CONFIRMATION") {
+        setConfirmForm(confirmedFieldsFrom(next));
+        setUnmatched({ campus: null, program: null });
+        setConfirmError("");
+        setPhase("confirm");
+      } else {
+        setResubmitFile(null);
+        setResubmitError(
+          next?.failure_reason_code
+            ? failureReasonText(next.failure_reason_code)
+            : "We still could not read your COR. Please upload a clearer copy.",
+        );
+      }
+    } catch (err) {
+      setResubmitError(actionErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -147,7 +203,12 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
   if (phase === "done") {
     body = (
       <div className="form-message success" role="status">
-        Confirmed. Your account is now active. <a href="#home">Go to home</a>
+        Account activated. You can now sign in with your email or student number.
+        {inModal ? (
+          <> <button type="button" className="linklike" onClick={onSwitchToLogin}>Sign in</button></>
+        ) : (
+          <> <a href="#login">Sign in</a></>
+        )}
       </div>
     );
   } else if (phase === "confirm") {
@@ -174,6 +235,37 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
           </button>
           <button type="button" onClick={handleReject} disabled={busy} className="btn-submit">
             Reject and re-upload
+          </button>
+        </form>
+      </>
+    );
+  } else if (phase === "resubmit") {
+    const reason = screening?.failure_reason_code
+      ? failureReasonText(screening.failure_reason_code)
+      : "We could not read all of your registration form.";
+    body = (
+      <>
+        <div className="form-message error" role="alert">
+          {reason} Re-upload a clearer or corrected copy of your COR to continue.
+        </div>
+        {resubmitError && <div role="alert" className="form-message error">{resubmitError}</div>}
+        <form onSubmit={handleResubmit} encType="multipart/form-data">
+          <div className="upload-box">
+            <div className="upload-title">Registration form (COR) — re-upload</div>
+            <div className="upload-desc">
+              PDF only, max 10 MB. Stored privately and deleted after your account is activated.
+            </div>
+            <input
+              id="resubmit-cor"
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(e) => setResubmitFile(e.target.files?.[0] ?? null)}
+              className="form-input"
+            />
+            {resubmitFile && <div className="form-hint">Attached: {resubmitFile.name}</div>}
+          </div>
+          <button type="submit" disabled={busy || !resubmitFile} className="btn-submit">
+            {busy ? "Uploading…" : "Upload COR"}
           </button>
         </form>
       </>
@@ -252,9 +344,6 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
         {result && (
           <div className={`form-message ${resultClass}`} role="status">
             {result.message}
-            {result.success && !result.canConfirm && (
-              <> <a href="#registration">Continue</a></>
-            )}
           </div>
         )}
       </>
@@ -270,7 +359,7 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
       )}
 
       <div className="signup-header">
-        <h1>{phase === "confirm" || phase === "done" ? "Confirm your details" : "Create your account"}</h1>
+        <h1>{phase === "resubmit" ? "Re-upload your COR" : phase === "confirm" || phase === "done" ? "Confirm your details" : "Create your account"}</h1>
         <p>
           Register with your email and password, then attach your current registration
           form (COR) — your proof of enrollment at the University of Caloocan City. We

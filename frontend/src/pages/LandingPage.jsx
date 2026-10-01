@@ -18,7 +18,7 @@ import RegisterPage from "./RegisterPage";
  * (LoginPage / RegisterPage in inModal mode) instead of navigating away;
  * the full-page #login / #staff-login / #register hash routes remain.
  */
-export default function LandingPage({ onSignedIn, onActivated, onRejected }) {
+export default function LandingPage({ onSignedIn }) {
   const { cmsBlocks, faqs, announcements, loading } = usePublicContent();
   const [modal, setModal] = useState(null);
   const [scrolled, setScrolled] = useState(false);
@@ -318,9 +318,6 @@ export default function LandingPage({ onSignedIn, onActivated, onRejected }) {
           ) : (
             <RegisterPage
               inModal
-              onSignedIn={onSignedIn}
-              onActivated={onActivated}
-              onRejected={onRejected}
               onClose={() => setModal(null)}
               onSwitchToLogin={() => openLogin("student")}
             />

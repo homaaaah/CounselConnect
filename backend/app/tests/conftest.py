@@ -53,6 +53,9 @@ EXTRACTED_VALIDITY_MIGRATION_FILE = (
 SUPERADMIN_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20260930_superadmin_role.py"
 )
+COR_TOKEN_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261001_cor_verification_token.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -143,6 +146,16 @@ def load_superadmin_migration_module():
     return module
 
 
+def load_cor_token_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "cor_token_migration", COR_TOKEN_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture(scope="session")
 def mysql_test_engine():
     """Create, own, and remove a randomly named disposable MySQL schema."""
@@ -153,8 +166,11 @@ def mysql_test_engine():
     url = _test_url()
     schema = f"{TEST_DB_NAME}_{uuid.uuid4().hex}"
     assert re.fullmatch(r"counselconnect_test_[0-9a-f]{32}", schema)
+    # Connect with no default schema: CREATE/DROP DATABASE only needs the
+    # grant on the `counselconnect_test%` pattern, not access to `mysql`.
+    # (URL.set(database=None) is a no-op; an empty name clears the schema.)
     admin = create_engine(
-        url.set(database="mysql"),
+        url.set(database=""),
         poolclass=NullPool,
         connect_args={"connect_timeout": 5},
     )
@@ -214,6 +230,7 @@ def mysql_test_engine():
                 load_cor_screening_migration_module().upgrade()
                 load_extracted_validity_migration_module().upgrade()
                 load_superadmin_migration_module().upgrade()
+                load_cor_token_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

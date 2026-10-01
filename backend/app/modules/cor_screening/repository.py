@@ -33,6 +33,14 @@ class CorScreeningRepository(BaseRepository[CorScreening]):
             )
         )
 
+    def find_by_token_hash(self, token_hash: bytes) -> CorScreening | None:
+        """Non-locking lookup by verification-token digest (caller locks rows)."""
+        return self.session.scalar(
+            select(CorScreening)
+            .where(CorScreening.verification_token_hash == token_hash)
+            .execution_options(populate_existing=True)
+        )
+
     def find_latest_for_student(self, student_user_id: int, *, lock: bool = False) -> CorScreening | None:
         stmt = (
             select(CorScreening)

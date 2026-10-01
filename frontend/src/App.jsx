@@ -110,13 +110,7 @@ function AppShell() {
       <div className={counselorShell ? "lg:ml-64" : undefined}>
         {page === "login" && <LoginPage onSignedIn={session.accept} />}
         {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
-        {page === "register" && (
-          <RegisterPage
-            onSignedIn={session.accept}
-            onActivated={async () => { try { await session.continueSession(); } catch { /* 401 handling clears the session */ } }}
-            onRejected={handleRejected}
-          />
-        )}
+        {page === "register" && <RegisterPage />}
         {page === "home" && (session.user
           ? session.user.role_code === "SUPERADMIN"
             ? <CounselorUsersPage canRecover />
@@ -142,8 +136,6 @@ function AppShell() {
         {!["login", "staff-login", "register", "registration", "users", "home", "appointments"].includes(page) && !sessionAppointmentId && (
           <LandingPage
             onSignedIn={session.accept}
-            onActivated={async () => { try { await session.continueSession(); } catch { /* 401 handling clears the session */ } }}
-            onRejected={handleRejected}
           />
         )}
       </div>

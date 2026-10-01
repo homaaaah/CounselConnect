@@ -39,6 +39,7 @@ class CorScreening(Base):
         Index("idx_cor_screenings_barcode_status", "barcode_status", "submitted_at"),
         Index("idx_cor_screenings_campus", "extracted_campus_id"),
         Index("idx_cor_screenings_program", "extracted_program_id"),
+        Index("idx_cor_screenings_token", "verification_token_hash"),
         CheckConstraint(
             "status IN ('PROCESSING', 'AWAITING_CONFIRMATION', 'PASSED', 'NEEDS_RESUBMISSION', 'FAILED')",
             name="chk_cor_screenings_status",
@@ -92,6 +93,10 @@ class CorScreening(Base):
     barcode_student_number_match: Mapped[bool | None] = mapped_column(Boolean)
     barcode_academic_period_match: Mapped[bool | None] = mapped_column(Boolean)
     failure_reason_code: Mapped[str | None] = mapped_column(String(100))
+    # One-time in-modal verification token: only its SHA-256 digest is stored.
+    # Cleared on activation (PASSED) or expiry (FAILED); rotated on resubmit.
+    verification_token_hash: Mapped[bytes | None] = mapped_column(BINARY(32))
+    verification_token_issued_at: Mapped[datetime | None] = mapped_column(DATETIME6)
     # Safe validation codes and scores only; never raw OCR text.
     validation_results_json: Mapped[dict | None] = mapped_column(JSON)
     extracted_student_number: Mapped[str | None] = mapped_column(String(50))

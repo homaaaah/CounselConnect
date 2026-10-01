@@ -781,6 +781,22 @@
         "operationId": "confirm_screening_api_v1_cor_screenings_confirm_post",
         "parameters": [
           {
+            "name": "X-COR-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cor-Token"
+            }
+          },
+          {
             "name": "counselconnect_session",
             "in": "cookie",
             "required": false,
@@ -848,6 +864,22 @@
         "operationId": "reject_screening_api_v1_cor_screenings_reject_post",
         "parameters": [
           {
+            "name": "X-COR-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cor-Token"
+            }
+          },
+          {
             "name": "counselconnect_session",
             "in": "cookie",
             "required": false,
@@ -904,6 +936,22 @@
         "summary": "Student: re-upload a COR after a failed screening",
         "operationId": "resubmit_cor_api_v1_cor_screenings_resubmit_post",
         "parameters": [
+          {
+            "name": "X-COR-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cor-Token"
+            }
+          },
           {
             "name": "counselconnect_session",
             "in": "cookie",
@@ -6377,6 +6425,10 @@
           "screening": {
             "$ref": "#/components/schemas/CorScreeningResponse"
           },
+          "verification_token": {
+            "type": "string",
+            "title": "Verification Token"
+          },
           "unmatched_campus_name": {
             "anyOf": [
               {
@@ -6408,6 +6460,7 @@
         "required": [
           "user",
           "screening",
+          "verification_token",
           "next_step"
         ],
         "title": "RegistrationWithCorResponse",
@@ -6417,6 +6470,17 @@
         "properties": {
           "screening": {
             "$ref": "#/components/schemas/CorScreeningResponse"
+          },
+          "verification_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Token"
           }
         },
         "type": "object",

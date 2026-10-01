@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core.exceptions import AppError
+from app.core.security import digests_match, new_session_credential, sha256_digest
 from app.database import get_session
 from app.modules.accounts.models import StudentProfile, User
 from app.modules.accounts.repository import AccountsRepository
@@ -77,10 +78,13 @@ class CorScreeningService(BaseService[CorScreening]):
 
     def register_with_cor(
         self, email: str, password: str, content: bytes, filename: str
-    ) -> tuple[User, CorScreening, str | None, str | None]:
+    ) -> tuple[User, CorScreening, str | None, str | None, str]:
         """Create a PENDING_VERIFICATION account and screen its COR atomically.
 
-        Returns (user, screening, unmatched_campus_name, unmatched_program_name).
+        Returns (user, screening, unmatched_campus_name, unmatched_program_name,
+        verification_token). The raw token is returned only here; the screening
+        stores just its SHA-256 digest and is issued in the first (PROCESSING)
+        commit so it exists even if finalization fails.
         """
         settings = get_settings()
         if not settings.cor_screening_enabled:
@@ -152,6 +156,7 @@ class CorScreeningService(BaseService[CorScreening]):
         screening = self._create_screening_record(
             user.user_id, storage_key, content, filename, started
         )
+        verification_token = self._issue_verification_token(screening, started)
         try:
             self.repository.session.commit()
         except Exception:
@@ -176,14 +181,22 @@ class CorScreeningService(BaseService[CorScreening]):
         AuditService(self.repository.session).record(
             user.user_id, "cor_screening_submitted", "cor_screening", screening.cor_screening_id
         )
-        return user, screening, unmatched_campus, unmatched_program
+        return user, screening, unmatched_campus, unmatched_program, verification_token
 
     # ---------------------------------------------------------- confirm
 
     def confirm(self, actor: User, data) -> tuple[CorScreening, User, StudentProfile]:  # noqa: ANN001
-        """Student confirms extracted fields; activates the account."""
+        """Student session confirms extracted fields; activates the account."""
         student = self._lock_student(actor)
         screening = self.repository.find_latest_for_student(student.user_id, lock=True)
+        return self._confirm_core(student, screening, data)
+
+    def confirm_resolved(self, student: User, screening: CorScreening, data) -> tuple[CorScreening, User, StudentProfile]:  # noqa: ANN001
+        """Token-authorized confirm with an already locked screening."""
+        return self._confirm_core(student, screening, data)
+
+    def _confirm_core(self, student: User, screening: CorScreening | None, data) -> tuple[CorScreening, User, StudentProfile]:  # noqa: ANN001
+        """Shared confirm logic for the session and token paths."""
         if screening is None:
             raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
         if screening.status != "AWAITING_CONFIRMATION":
@@ -195,6 +208,7 @@ class CorScreeningService(BaseService[CorScreening]):
         # Independently deny expired evidence even between cleanup passes.
         if as_utc(screening.submitted_at) + SEVEN_DAYS <= datetime.now(timezone.utc):
             screening.status = "FAILED"
+            self._clear_verification_token(screening)
             self.repository.session.commit()
             self._purge_cor_files(screening.cor_screening_id)
             raise AppError(
@@ -262,6 +276,8 @@ class CorScreeningService(BaseService[CorScreening]):
 
         screening.status = "PASSED"
         screening.confirmed_at = now
+        # Activation destroys the one-time token: no further token action.
+        self._clear_verification_token(screening)
         # Prefer the validity date printed on the COR when it is still in the
         # future; otherwise fall back to a 12-month default.
         extracted_valid = screening.extracted_valid_until
@@ -292,9 +308,16 @@ class CorScreeningService(BaseService[CorScreening]):
     # ----------------------------------------------------------- reject
 
     def reject(self, actor: User) -> CorScreening:
-        """Student rejects the extracted details and must re-upload a COR."""
+        """Student session rejects the extracted details; must re-upload a COR."""
         student = self._lock_student(actor)
         screening = self.repository.find_latest_for_student(student.user_id, lock=True)
+        return self._reject_core(student, screening)
+
+    def reject_resolved(self, student: User, screening: CorScreening) -> CorScreening:
+        """Token-authorized reject with an already locked screening."""
+        return self._reject_core(student, screening)
+
+    def _reject_core(self, student: User, screening: CorScreening | None) -> CorScreening:
         if screening is None:
             raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
         if screening.status != "AWAITING_CONFIRMATION":
@@ -316,7 +339,24 @@ class CorScreeningService(BaseService[CorScreening]):
 
     # --------------------------------------------------------- resubmit
 
-    def resubmit(self, actor: User, content: bytes, filename: str) -> CorScreening:
+    def resubmit(self, actor: User, content: bytes, filename: str) -> tuple[CorScreening, str]:
+        """Student session re-uploads a COR; returns the rotated token."""
+        student = self._lock_student(actor)
+        return self._resubmit_core(student, content, filename)
+
+    def resubmit_resolved(
+        self, student: User, screening: CorScreening, content: bytes, filename: str
+    ) -> tuple[CorScreening, str]:
+        """Token-authorized re-upload with an already locked screening."""
+        return self._resubmit_core(student, content, filename, latest=screening)
+
+    def _resubmit_core(
+        self,
+        student: User,
+        content: bytes,
+        filename: str,
+        latest: CorScreening | None = None,
+    ) -> tuple[CorScreening, str]:
         settings = get_settings()
         if not settings.cor_screening_enabled:
             raise AppError(
@@ -333,9 +373,9 @@ class CorScreeningService(BaseService[CorScreening]):
                 status_code=503,
             ) from exc
 
-        student = self._lock_student(actor)
         now = datetime.now(timezone.utc)
-        latest = self.repository.find_latest_for_student(student.user_id, lock=True)
+        if latest is None:
+            latest = self.repository.find_latest_for_student(student.user_id, lock=True)
 
         # A fresh screening row is needed when there is no screening yet
         # (bare-registered account) or the previous enrollment expired.
@@ -356,9 +396,13 @@ class CorScreeningService(BaseService[CorScreening]):
             screening = latest
             old = self.repository.find_active_file(screening.cor_screening_id, lock=True)
             # Give an expired open flow a fresh seven-day window instead of
-            # deleting the replacement immediately.
+            # deleting the replacement immediately. Move submitted_at forward
+            # with the timeline fields so chk_cor_screenings_timeline holds
+            # (processed_at is cleared until the re-screen finalizes).
             if as_utc(screening.submitted_at) + SEVEN_DAYS <= now:
                 screening.submitted_at = now
+                screening.processing_started_at = now
+                screening.processed_at = None
         else:
             raise AppError(
                 code="SCREENING_NOT_CONFIRMABLE",
@@ -395,9 +439,12 @@ class CorScreeningService(BaseService[CorScreening]):
                 )
 
         # Mark PROCESSING (observable processing stage), then finalize below.
+        # Rotate the one-time token in this (first) commit so re-upload always
+        # invalidates the previous token even if finalization fails.
         screening.status = "PROCESSING"
         screening.failure_reason_code = None
         screening.processed_at = None
+        verification_token = self._issue_verification_token(screening, now)
         self.repository.session.commit()
 
         if old is not None:
@@ -430,7 +477,7 @@ class CorScreeningService(BaseService[CorScreening]):
         AuditService(self.repository.session).record(
             student.user_id, "cor_screening_resubmitted", "cor_screening", screening.cor_screening_id
         )
-        return screening
+        return screening, verification_token
 
     # ------------------------------------------------------------ reads
 
@@ -524,6 +571,64 @@ class CorScreeningService(BaseService[CorScreening]):
             actor.user_id, "account_recovery", "user", target.user_id
         )
         return target, profile, latest
+
+    # -------------------------------------------------- token verification
+
+    def resolve_verification_token(self, token: str | None) -> tuple[User, CorScreening]:
+        """Resolve a one-time token to (student, screening), locking safely.
+
+        Locks the Student row first, then the screening row (the same order as
+        the session path) to avoid deadlocks. Fails closed with a generic 401
+        for missing, unknown, rotated-away, expired, or tampered tokens; the
+        raw token is never logged.
+        """
+        raw = (token or "").strip()
+        if not raw:
+            raise self._invalid_token()
+        digest = sha256_digest(raw)
+        found = self.repository.find_by_token_hash(digest)
+        if found is None:
+            raise self._invalid_token()
+        student = self.accounts.lock_user(found.student_user_id)
+        if student is None or student.role_code != "STUDENT":
+            raise self._invalid_token()
+        screening = self.repository.lock_screening(found.cor_screening_id)
+        if (
+            screening is None
+            or screening.student_user_id != student.user_id
+            or not screening.verification_token_hash
+            or not digests_match(screening.verification_token_hash, digest)
+        ):
+            raise self._invalid_token()
+        if screening.status == "PASSED":
+            raise self._invalid_token()
+        if as_utc(screening.submitted_at) + SEVEN_DAYS <= datetime.now(timezone.utc):
+            # Expired evidence: retire the token and deny (cleanup purges files).
+            screening.status = "FAILED"
+            self._clear_verification_token(screening)
+            self.repository.session.commit()
+            raise self._invalid_token()
+        return student, screening
+
+    def _issue_verification_token(self, screening: CorScreening, now: datetime) -> str:
+        """Issue a new 256-bit token; persist only its SHA-256 digest."""
+        raw = new_session_credential()
+        screening.verification_token_hash = sha256_digest(raw)
+        screening.verification_token_issued_at = now
+        return raw
+
+    @staticmethod
+    def _clear_verification_token(screening: CorScreening) -> None:
+        screening.verification_token_hash = None
+        screening.verification_token_issued_at = None
+
+    @staticmethod
+    def _invalid_token() -> AppError:
+        return AppError(
+            code="INVALID_VERIFICATION_TOKEN",
+            message="Your verification session is no longer valid. Please sign in to continue.",
+            status_code=401,
+        )
 
     # ------------------------------------------------------- persistence
 
@@ -778,6 +883,7 @@ class CorScreeningService(BaseService[CorScreening]):
                     and as_utc(screening.submitted_at) + SEVEN_DAYS <= now
                 ):
                     screening.status = "FAILED"
+                    self._clear_verification_token(screening)
                 self.repository.session.commit()
                 self._purge_cor_files(screening_id)
             except Exception:

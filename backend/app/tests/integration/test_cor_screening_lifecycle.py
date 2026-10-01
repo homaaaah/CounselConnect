@@ -8,10 +8,12 @@ service/DB flow, not the OCR engine.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from app.core.exceptions import AppError
+from app.core.security import sha256_digest
 from app.modules.accounts.models import StudentProfile, User
 from app.modules.cor_screening import screening as engine
 from app.modules.cor_screening.schemas import ConfirmScreeningRequest
@@ -64,7 +66,7 @@ def test_registration_screen_confirm_activates_and_deletes_cor(
     stub_screening(monkeypatch, good_result())
     service = CorScreeningService(db_session)
 
-    user, screening, unmatched_campus, unmatched_program = service.register_with_cor(
+    user, screening, unmatched_campus, unmatched_program, _token = service.register_with_cor(
         "life@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
     )
     assert user.account_status == "PENDING_VERIFICATION"
@@ -72,14 +74,14 @@ def test_registration_screen_confirm_activates_and_deletes_cor(
     assert unmatched_campus is None and unmatched_program is None
 
     file_row = service.repository.find_active_file(screening.cor_screening_id)
-    path = service._storage_path(file_row.storage_key)
+    path = Path(service._storage_path(file_row.storage_key))
     assert path.exists()
 
     data = ConfirmScreeningRequest(
         student_number="20231234-A",
         first_name="Juan",
-        middle_name=None,
-        last_name="Dela Cruz",
+        middle_name="Dela",
+        last_name="Cruz",
         campus_id=campus_id,
         program_id=program_id,
         year_level=1,
@@ -98,15 +100,15 @@ def test_registration_screen_confirm_activates_and_deletes_cor(
 def test_resubmit_replaces_failed_screening(db_session, academic_references, monkeypatch):
     stub_screening(monkeypatch, failed_result())
     service = CorScreeningService(db_session)
-    user, screening, _, _ = service.register_with_cor(
+    user, screening, _, _, _ = service.register_with_cor(
         "resubmit@example.edu", "password1", b"%PDF-1.4 first", "cor.pdf"
     )
     assert screening.status == "NEEDS_RESUBMISSION"
     old = service.repository.find_active_file(screening.cor_screening_id)
-    old_path = service._storage_path(old.storage_key)
+    old_path = Path(service._storage_path(old.storage_key))
 
     stub_screening(monkeypatch, good_result())
-    updated = service.resubmit(user, b"%PDF-1.4 second", "cor.pdf")
+    updated, _token = service.resubmit(user, b"%PDF-1.4 second", "cor.pdf")
     assert updated.status == "AWAITING_CONFIRMATION"
     active = service.repository.find_active_file(screening.cor_screening_id)
     assert active.storage_key != old.storage_key
@@ -149,11 +151,11 @@ def test_expired_open_screening_is_failed_and_cor_deleted(
 ):
     stub_screening(monkeypatch, failed_result())
     service = CorScreeningService(db_session)
-    _, screening, _, _ = service.register_with_cor(
+    _, screening, _, _, _ = service.register_with_cor(
         "expire@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
     )
     file_row = service.repository.find_active_file(screening.cor_screening_id)
-    path = service._storage_path(file_row.storage_key)
+    path = Path(service._storage_path(file_row.storage_key))
 
     screening.submitted_at = datetime.now(timezone.utc) - timedelta(days=8)
     file_row.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
@@ -172,18 +174,22 @@ def test_confirm_independently_denies_expired_evidence(
     campus_id, program_id = academic_references
     stub_screening(monkeypatch, good_result())
     service = CorScreeningService(db_session)
-    user, screening, _, _ = service.register_with_cor(
+    user, screening, _, _, _ = service.register_with_cor(
         "aged@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
     )
     file_row = service.repository.find_active_file(screening.cor_screening_id)
-    path = service._storage_path(file_row.storage_key)
+    path = Path(service._storage_path(file_row.storage_key))
     screening.submitted_at = datetime.now(timezone.utc) - timedelta(days=8)
+    # Aged evidence: the file TTL (same 7-day clock) has lapsed too, so the
+    # confirm-time purge removes it even though the worker has not run.
+    file_row.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
     db_session.commit()
 
     data = ConfirmScreeningRequest(
         student_number="20231234-A",
         first_name="Juan",
-        last_name="Dela Cruz",
+        middle_name="Dela",
+        last_name="Cruz",
         campus_id=campus_id,
         program_id=program_id,
         year_level=1,
@@ -202,14 +208,14 @@ def test_resubmit_after_expiry_gets_a_fresh_window(
 ):
     stub_screening(monkeypatch, failed_result())
     service = CorScreeningService(db_session)
-    user, screening, _, _ = service.register_with_cor(
+    user, screening, _, _, _ = service.register_with_cor(
         "renew-window@example.edu", "password1", b"%PDF-1.4 first", "cor.pdf"
     )
     screening.submitted_at = datetime.now(timezone.utc) - timedelta(days=8)
     db_session.commit()
 
     stub_screening(monkeypatch, good_result())
-    updated = service.resubmit(user, b"%PDF-1.4 second", "cor.pdf")
+    updated, _token = service.resubmit(user, b"%PDF-1.4 second", "cor.pdf")
     assert updated.status == "AWAITING_CONFIRMATION"
     active = service.repository.find_active_file(screening.cor_screening_id)
     assert active is not None
@@ -221,7 +227,7 @@ def test_counselor_directory_lists_student_with_latest_screening(
 ):
     stub_screening(monkeypatch, good_result())
     service = CorScreeningService(db_session)
-    student_user, screening, _, _ = service.register_with_cor(
+    student_user, screening, _, _, _ = service.register_with_cor(
         "directory@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
     )
     counselor = User(
@@ -241,7 +247,9 @@ def test_counselor_directory_lists_student_with_latest_screening(
     assert user.user_id == student_user.user_id
     assert latest.cor_screening_id == screening.cor_screening_id
 
-    assert len(service.list_students(counselor, q="20231234-A")) == 1
+    assert len(service.list_students(counselor, q="directory")) == 1
+    # A non-matching query filters the directory down to nothing.
+    assert service.list_students(counselor, q="no-such-student") == []
     assert len(service.list_students(counselor, screening_status="AWAITING_CONFIRMATION")) == 1
     assert service.list_students(counselor, screening_status="PASSED") == []
 
@@ -252,17 +260,19 @@ def test_renewal_after_validity_starts_a_new_screening(
     campus_id, program_id = academic_references
     stub_screening(monkeypatch, good_result())
     service = CorScreeningService(db_session)
-    user, screening, _, _ = service.register_with_cor(
+    user, screening, _, _, _ = service.register_with_cor(
         "renew@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
     )
     data = ConfirmScreeningRequest(
         student_number="20231234-A",
         first_name="Juan",
-        last_name="Dela Cruz",
+        middle_name="Dela",
+        last_name="Cruz",
         campus_id=campus_id,
         program_id=program_id,
         year_level=1,
         section="A",
+        academic_period="2026-2027",
     )
     confirmed, activated, _ = service.confirm(user, data)
     first_id = confirmed.cor_screening_id
@@ -271,6 +281,115 @@ def test_renewal_after_validity_starts_a_new_screening(
     db_session.commit()
 
     stub_screening(monkeypatch, good_result())
-    renewed = service.resubmit(user, b"%PDF-1.4 renew", "cor.pdf")
+    renewed, _token = service.resubmit(user, b"%PDF-1.4 renew", "cor.pdf")
     assert renewed.cor_screening_id != first_id
     assert renewed.status == "AWAITING_CONFIRMATION"
+
+
+# --------------------------------------------------- one-time verification token
+
+
+def test_register_returns_only_a_hashed_token_and_token_confirms(
+    db_session, academic_references, monkeypatch
+):
+    campus_id, program_id = academic_references
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    user, screening, _, _, token = service.register_with_cor(
+        "token@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    assert token
+    assert screening.verification_token_hash == sha256_digest(token)
+    assert screening.verification_token_issued_at is not None
+    assert token not in str(screening.verification_token_hash)
+
+    # No session: the token alone resolves the student + screening.
+    student, resolved = service.resolve_verification_token(token)
+    assert student.user_id == user.user_id
+    assert resolved.cor_screening_id == screening.cor_screening_id
+
+    data = ConfirmScreeningRequest(
+        student_number="20231234-A",
+        first_name="Juan",
+        middle_name="Dela",
+        last_name="Cruz",
+        campus_id=campus_id,
+        program_id=program_id,
+        year_level=1,
+        section="A",
+        academic_period="2026-2027",
+    )
+    confirmed, activated, _profile = service.confirm_resolved(student, resolved, data)
+    assert activated.account_status == "ACTIVE"
+    assert confirmed.status == "PASSED"
+    # Activation destroys the token.
+    assert confirmed.verification_token_hash is None
+    with pytest.raises(AppError) as caught:
+        service.resolve_verification_token(token)
+    assert caught.value.code == "INVALID_VERIFICATION_TOKEN"
+
+
+def test_resubmit_rotates_the_token(db_session, academic_references, monkeypatch):
+    stub_screening(monkeypatch, failed_result())
+    service = CorScreeningService(db_session)
+    user, screening, _, _, first_token = service.register_with_cor(
+        "rotate@example.edu", "password1", b"%PDF-1.4 first", "cor.pdf"
+    )
+    assert screening.status == "NEEDS_RESUBMISSION"
+
+    stub_screening(monkeypatch, good_result())
+    updated, second_token = service.resubmit_resolved(
+        user, screening, b"%PDF-1.4 second", "cor.pdf"
+    )
+    assert second_token and second_token != first_token
+    assert updated.status == "AWAITING_CONFIRMATION"
+    # The previous token is dead; the rotated one resolves.
+    with pytest.raises(AppError) as caught:
+        service.resolve_verification_token(first_token)
+    assert caught.value.code == "INVALID_VERIFICATION_TOKEN"
+    student, resolved = service.resolve_verification_token(second_token)
+    assert resolved.cor_screening_id == updated.cor_screening_id
+
+
+def test_reject_keeps_the_token_valid_for_reupload(
+    db_session, academic_references, monkeypatch
+):
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    user, screening, _, _, token = service.register_with_cor(
+        "reject-token@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    student, resolved = service.resolve_verification_token(token)
+    rejected = service.reject_resolved(student, resolved)
+    assert rejected.status == "NEEDS_RESUBMISSION"
+    # Same token still authorizes the follow-up re-upload.
+    _student, still_valid = service.resolve_verification_token(token)
+    assert still_valid.cor_screening_id == screening.cor_screening_id
+
+
+def test_unknown_or_empty_token_fails_closed(db_session, academic_references, monkeypatch):
+    service = CorScreeningService(db_session)
+    for bad in (None, "", "   ", "not-a-real-token"):
+        with pytest.raises(AppError) as caught:
+            service.resolve_verification_token(bad)
+        assert caught.value.code == "INVALID_VERIFICATION_TOKEN"
+        assert caught.value.status_code == 401
+
+
+def test_expired_token_is_rejected_and_retired(
+    db_session, academic_references, monkeypatch
+):
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    _user, screening, _, _, token = service.register_with_cor(
+        "expired-token@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    screening.submitted_at = datetime.now(timezone.utc) - timedelta(days=8)
+    db_session.commit()
+
+    with pytest.raises(AppError) as caught:
+        service.resolve_verification_token(token)
+    assert caught.value.code == "INVALID_VERIFICATION_TOKEN"
+    db_session.refresh(screening)
+    assert screening.status == "FAILED"
+    assert screening.verification_token_hash is None

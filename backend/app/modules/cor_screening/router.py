@@ -14,7 +14,7 @@ POST /accounts/register/student-with-cor in the accounts router.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Response, UploadFile
 
 from app.modules.accounts.models import User
 from app.modules.accounts.schemas import StudentProfileResponse, UserResponse
@@ -30,7 +30,12 @@ from app.modules.cor_screening.service import (
     CorScreeningService,
     get_cor_screening_service,
 )
-from app.shared.dependencies import CurrentUser, require_roles
+from app.shared.dependencies import (
+    CurrentUser,
+    ScreeningActor,
+    get_screening_actor,
+    require_roles,
+)
 from app.shared.pagination import ListEnvelope, paginate
 
 router = APIRouter(prefix="/cor-screenings", tags=["cor_screening"])
@@ -55,10 +60,13 @@ def get_my_screening(
 )
 def confirm_screening(
     data: ConfirmScreeningRequest,
-    actor: User = Depends(require_roles("STUDENT")),
+    actor: ScreeningActor = Depends(get_screening_actor),
     service: CorScreeningService = Depends(get_cor_screening_service),
 ):
-    screening, user, profile = service.confirm(actor, data)
+    if actor.screening is not None:
+        screening, user, profile = service.confirm_resolved(actor.user, actor.screening, data)
+    else:
+        screening, user, profile = service.confirm(actor.user, data)
     return ConfirmScreeningResponse(
         screening=CorScreeningResponse.model_validate(screening),
         user=UserResponse.model_validate(user),
@@ -72,10 +80,13 @@ def confirm_screening(
     summary="Student: reject the extracted details and re-upload the COR",
 )
 def reject_screening(
-    actor: User = Depends(require_roles("STUDENT")),
+    actor: ScreeningActor = Depends(get_screening_actor),
     service: CorScreeningService = Depends(get_cor_screening_service),
 ):
-    screening = service.reject(actor)
+    if actor.screening is not None:
+        screening = service.reject_resolved(actor.user, actor.screening)
+    else:
+        screening = service.reject(actor.user)
     return ResubmitResponse(screening=CorScreeningResponse.model_validate(screening))
 
 
@@ -86,15 +97,26 @@ def reject_screening(
     summary="Student: re-upload a COR after a failed screening",
 )
 def resubmit_cor(
-    actor: User = Depends(require_roles("STUDENT")),
+    response: Response,
+    actor: ScreeningActor = Depends(get_screening_actor),
     file: UploadFile = File(..., description="Current COR PDF (registration form)"),
     service: CorScreeningService = Depends(get_cor_screening_service),
 ):
     from app.config import get_settings
 
+    # The rotated token is returned in this body: never cache it.
+    response.headers["Cache-Control"] = "no-store"
     content = file.file.read(get_settings().cor_max_mb * 1024 * 1024 + 1)
-    screening = service.resubmit(actor, content, file.filename or "cor.pdf")
-    return ResubmitResponse(screening=CorScreeningResponse.model_validate(screening))
+    if actor.screening is not None:
+        screening, token = service.resubmit_resolved(
+            actor.user, actor.screening, content, file.filename or "cor.pdf"
+        )
+    else:
+        screening, token = service.resubmit(actor.user, content, file.filename or "cor.pdf")
+    return ResubmitResponse(
+        screening=CorScreeningResponse.model_validate(screening),
+        verification_token=token,
+    )
 
 
 @router.get(

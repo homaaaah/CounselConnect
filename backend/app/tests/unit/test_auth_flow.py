@@ -114,18 +114,18 @@ def _login(client: TestClient, identifier: str, password: str):
 # --------------------------------------------------------------- service
 
 
-def test_student_login_uses_student_number(db_session, student):
+def test_student_login_accepts_student_number_or_email(db_session, student):
     from app.core.exceptions import AppError
 
     svc = AuthService(db_session)
     by_number = svc.login("2026-AUTHTST", "student-pass-1")
     assert by_number[0].user_id == student.user_id
-    with pytest.raises(AppError, match="Incorrect identifier or password"):
-        svc.login("auth-student@example.edu", "student-pass-1")
+    # Pending Students may also sign in with their registration email
+    # (ADR-029 bootstrap; #7 email-or-student-number login).
+    by_email = svc.login("auth-student@example.edu", "student-pass-1")
+    assert by_email[0].user_id == student.user_id
     # Same-error rule: unknown identifier and wrong password are identical.
     for bad in [("nope", "student-pass-1"), ("2026-AUTHTST", "wrong")]:
-        from app.core.exceptions import AppError
-
         with pytest.raises(AppError) as ei:
             svc.login(*bad)
         assert ei.value.code == "INVALID_CREDENTIALS"
@@ -352,3 +352,156 @@ def test_raw_credentials_never_stored(db_session, student):
     assert len(session.csrf_token_hash) == 32
     assert session.token_hash == hashlib.sha256(raw_credential.encode()).digest()
     assert session.csrf_token_hash == hashlib.sha256(raw_csrf.encode()).digest()
+
+
+# --------------------------------------------- one-time COR verification token
+
+
+def _seed_screening(db_session, student, *, status="AWAITING_CONFIRMATION", token=None):
+    from datetime import datetime, timezone
+
+    from app.core.security import sha256_digest
+    from app.modules.cor_screening.models import CorScreening
+
+    profile = db_session.query(StudentProfile).filter_by(user_id=student.user_id).one()
+    screening = CorScreening(
+        student_user_id=student.user_id,
+        status=status,
+        format_template_version="test",
+        submitted_at=datetime.now(timezone.utc),
+        extracted_student_number="20231234-A",
+        extracted_first_name="Ana",
+        extracted_last_name="Santos",
+        extracted_section="A",
+        extracted_campus_id=profile.campus_id,
+        extracted_program_id=profile.program_id,
+        extracted_year_level=1,
+        extracted_academic_period="2026-2027",
+    )
+    if token:
+        screening.verification_token_hash = sha256_digest(token)
+        screening.verification_token_issued_at = datetime.now(timezone.utc)
+    db_session.add(screening)
+    db_session.flush()
+    return profile, screening
+
+
+def _confirm_payload(profile) -> dict:
+    return {
+        "student_number": "20231234-A",
+        "first_name": "Ana",
+        "last_name": "Santos",
+        "campus_id": profile.campus_id,
+        "program_id": profile.program_id,
+        "year_level": 1,
+        "section": "A",
+        "academic_period": "2026-2027",
+    }
+
+
+def _good_result():
+    from app.modules.cor_screening import screening as engine
+
+    return engine.ScreeningResult(
+        fields=engine.ExtractedFields(
+            student_no="20231234-A",
+            name="Ana Santos",
+            course="Test Program",
+            year="1",
+            section="A",
+            campus="Test Campus",
+            academic_period="2026-2027",
+        ),
+        method="text",
+        format_score=1.0,
+        extraction_confidence=1.0,
+        missing=[],
+        barcode_status=engine.BARCODE_DECODED,
+        barcode_symbology="QRCode",
+        barcode_payload="20231234-A",
+        barcode_format_valid=True,
+        barcode_student_number_match=True,
+    )
+
+
+def test_token_confirm_without_session_activates(client, db_session, student):
+    token = "cor-token-confirm"
+    profile, screening = _seed_screening(db_session, student, token=token)
+    r = client.post(
+        "/api/v1/cor-screenings/confirm",
+        json=_confirm_payload(profile),
+        headers={"X-COR-Token": token},
+    )
+    assert r.status_code == 200, r.text
+    db_session.refresh(student)
+    db_session.refresh(screening)
+    assert student.account_status == "ACTIVE"
+    assert screening.status == "PASSED"
+    # The one-time token dies on activation.
+    assert screening.verification_token_hash is None
+
+
+def test_invalid_token_fails_closed_even_with_a_valid_session(client, db_session, student):
+    profile, _screening = _seed_screening(db_session, student, token="real-token")
+    login = _login(client, "auth-student@example.edu", "student-pass-1").json()
+    r = client.post(
+        "/api/v1/cor-screenings/confirm",
+        json=_confirm_payload(profile),
+        headers={"X-CSRF-Token": login["csrf_token"], "X-COR-Token": "bogus-token"},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+
+
+def test_empty_token_header_fails_closed_even_with_a_valid_session(client, db_session, student):
+    """An empty X-COR-Token is a PRESENT (invalid) token, not 'no token'."""
+    profile, screening = _seed_screening(db_session, student, token="real-token")
+    login = _login(client, "auth-student@example.edu", "student-pass-1").json()
+    r = client.post(
+        "/api/v1/cor-screenings/confirm",
+        json=_confirm_payload(profile),
+        headers={"X-CSRF-Token": login["csrf_token"], "X-COR-Token": ""},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+    # The session path must not have activated the account.
+    db_session.refresh(student)
+    assert student.account_status == "PENDING_VERIFICATION"
+
+
+def test_token_reject_marks_needs_resubmission(client, db_session, student):
+    token = "cor-token-reject"
+    _profile, screening = _seed_screening(db_session, student, token=token)
+    r = client.post("/api/v1/cor-screenings/reject", headers={"X-COR-Token": token})
+    assert r.status_code == 200, r.text
+    db_session.refresh(screening)
+    assert screening.status == "NEEDS_RESUBMISSION"
+    assert screening.failure_reason_code == "REJECTED_BY_STUDENT"
+
+
+def test_token_resubmit_rotates_the_token(client, db_session, student, monkeypatch):
+    from app.core.security import sha256_digest
+    from app.modules.cor_screening import screening as engine
+
+    monkeypatch.setattr(engine, "ensure_dependencies", lambda settings: None)
+    monkeypatch.setattr(engine, "screen_pdf", lambda path, settings: _good_result())
+
+    token = "cor-token-resubmit"
+    _profile, screening = _seed_screening(
+        db_session, student, status="NEEDS_RESUBMISSION", token=token
+    )
+    r = client.post(
+        "/api/v1/cor-screenings/resubmit",
+        files={"file": ("cor.pdf", b"%PDF-1.4 test", "application/pdf")},
+        headers={"X-COR-Token": token},
+    )
+    assert r.status_code == 201, r.text
+    rotated = r.json()["verification_token"]
+    assert rotated and rotated != token
+    db_session.refresh(screening)
+    assert screening.verification_token_hash == sha256_digest(rotated)
+
+    # The old token is dead; the rotated token authorizes the next action.
+    reject = client.post("/api/v1/cor-screenings/reject", headers={"X-COR-Token": token})
+    assert reject.status_code == 401
+    assert reject.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
