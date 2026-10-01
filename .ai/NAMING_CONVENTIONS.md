@@ -70,6 +70,8 @@ The v1 table names in `docs/DATABASE.md` are canonical.
   - `POST /wellness-resources/{resource_id}/publish`
 - Auth action exceptions use `/auth/login`, `/auth/refresh`, `/auth/logout`.
 - The one-time COR verification credential travels in the `X-COR-Token` request header (never a cookie, URL, or query); its failure code is `INVALID_VERIFICATION_TOKEN`. Session CSRF stays in `X-CSRF-Token`.
+- Student profile-edit requests use `POST /cor-screenings/request-edit`; review uses the `/profile-change-requests` resource (`approve`/`reject`) (ADR-032).
+- Registration/self-service codes include `SCREENING_FAILED` (technical screening failure created no account) and `ACCOUNT_NOT_REJECTABLE` (self-cancellation of an active account) (ADR-033).
 - Never use role-specific duplicate routes when authorization can govern one resource route.
 
 ## Payloads and errors
@@ -88,6 +90,7 @@ The v1 table names in `docs/DATABASE.md` are canonical.
 | Role | `STUDENT`, `GUIDANCE_STAFF`, `COUNSELOR`, `SUPERADMIN` |
 | Verification (legacy `enrollment_verifications`) | `PENDING`, `APPROVED`, `NEEDS_RESUBMISSION`, `REJECTED`, `EXPIRED` |
 | COR screening | `PROCESSING`, `AWAITING_CONFIRMATION`, `PASSED`, `NEEDS_RESUBMISSION`, `FAILED` |
+| Profile change request | `PENDING`, `APPROVED`, `REJECTED` |
 | COR barcode | `NOT_PROCESSED`, `NOT_FOUND`, `UNREADABLE`, `INVALID_FORMAT`, `DECODED`, `MISMATCH` |
 | Availability status | `AVAILABLE`, `RESERVED` |
 | Availability delivery mode | `ONLINE`, `FACE_TO_FACE`, `BOTH` |
@@ -102,7 +105,7 @@ Do not invent additional values in code; record and document the business transi
 
 ## Events and acronyms
 
-- Audit `event_type` uses past-tense `snake_case`: `cor_screening_submitted`, `account_activated`, `appointment_cancelled`.
-- `target_type` uses singular `snake_case`: `cor_screening`.
+- Audit `event_type` uses past-tense `snake_case`: `cor_screening_submitted`, `account_activated`, `account_rejected`, `appointment_cancelled`, `profile_change_approved`.
+- `target_type` uses singular `snake_case`: `cor_screening`, `profile_change_request`, `user`.
 - Keep established acronyms uppercase in prose/types (`CORFile`, `SOSCase`, `APIError`) and lowercase inside compound `snake_case` (`cor_file`, `sos_case`).
 - DFD labels such as `P1`, `P21`, and `D7` are diagram references only, never production identifiers.

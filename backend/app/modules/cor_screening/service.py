@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -34,6 +35,7 @@ from app.modules.bases import BaseService
 from app.modules.cor_screening import screening as engine
 from app.modules.cor_screening.models import CorScreening, CorScreeningFile
 from app.modules.cor_screening.repository import OPEN_STATUSES, CorScreeningRepository
+from app.modules.profile_change.models import ProfileChangeRequest
 
 PDF_MAGIC = b"%PDF"
 SEVEN_DAYS = timedelta(days=7)
@@ -130,6 +132,15 @@ class CorScreeningService(BaseService[CorScreening]):
         student_no = (result.fields.student_no or "").strip().upper()
         if student_no and not engine.STUDENT_NO_RE.match(student_no):
             student_no = ""
+        # A technical screening failure (derive_outcome -> FAILED) must not
+        # create an account at all (ADR-033); the Student retries registration.
+        if engine.derive_outcome(result, settings)[0] == "FAILED":
+            self._delete_cor_bytes(storage_key)
+            raise AppError(
+                code="SCREENING_FAILED",
+                message="We could not process your registration form. Please try again.",
+                status_code=503,
+            )
         if student_no and self.accounts.find_student_profile_by_number(student_no) is not None:
             self._delete_cor_bytes(storage_key)
             raise AppError(
@@ -250,28 +261,67 @@ class CorScreeningService(BaseService[CorScreening]):
         if program is None or not program.is_active:
             raise AppError(code="PROGRAM_NOT_FOUND", message="Program does not exist or is inactive.", status_code=404)
 
+        profile = self._activate(
+            student,
+            screening,
+            student_number=student_number,
+            first_name=data.first_name,
+            middle_name=data.middle_name,
+            last_name=data.last_name,
+            campus_id=data.campus_id,
+            program_id=data.program_id,
+            year_level=data.year_level,
+            section=data.section,
+            academic_period=data.academic_period,
+        )
+        # Commit before deleting evidence (never delete on a failed decision).
+        self.repository.session.commit()
+        self._purge_cor_files(screening.cor_screening_id)
+        from app.modules.audit.service import AuditService
+
+        AuditService(self.repository.session).record(
+            student.user_id, "account_activated", "user", student.user_id
+        )
+        return screening, student, profile
+
+    def _activate(
+        self,
+        student: User,
+        screening: CorScreening,
+        *,
+        student_number: str,
+        first_name: str,
+        middle_name: str | None,
+        last_name: str,
+        campus_id: int,
+        program_id: int,
+        year_level: int,
+        section: str,
+        academic_period: str | None,
+    ) -> StudentProfile:
+        """Apply the activation state (no commit). Shared by confirm/request-edit."""
         now = datetime.now(timezone.utc)
         profile = self.accounts.find_student_profile(student.user_id)
         if profile is None:
             profile = StudentProfile(
                 user_id=student.user_id,
                 student_number=student_number,
-                campus_id=data.campus_id,
-                program_id=data.program_id,
-                year_level=data.year_level,
-                section=data.section,
+                campus_id=campus_id,
+                program_id=program_id,
+                year_level=year_level,
+                section=section,
             )
             self.repository.session.add(profile)
         else:
             profile.student_number = student_number
-            profile.campus_id = data.campus_id
-            profile.program_id = data.program_id
-            profile.year_level = data.year_level
-            profile.section = data.section
+            profile.campus_id = campus_id
+            profile.program_id = program_id
+            profile.year_level = year_level
+            profile.section = section
 
-        student.first_name = data.first_name
-        student.middle_name = data.middle_name
-        student.last_name = data.last_name
+        student.first_name = first_name
+        student.middle_name = middle_name
+        student.last_name = last_name
         student.account_status = "ACTIVE"
 
         screening.status = "PASSED"
@@ -286,24 +336,189 @@ class CorScreeningService(BaseService[CorScreening]):
             else _add_months(now, ACCOUNT_VALID_MONTHS)
         )
         screening.extracted_student_number = student_number
-        screening.extracted_first_name = data.first_name
-        screening.extracted_middle_name = data.middle_name
-        screening.extracted_last_name = data.last_name
-        screening.extracted_campus_id = data.campus_id
-        screening.extracted_program_id = data.program_id
-        screening.extracted_year_level = data.year_level
-        screening.extracted_section = data.section
-        screening.extracted_academic_period = data.academic_period
+        screening.extracted_first_name = first_name
+        screening.extracted_middle_name = middle_name
+        screening.extracted_last_name = last_name
+        screening.extracted_campus_id = campus_id
+        screening.extracted_program_id = program_id
+        screening.extracted_year_level = year_level
+        screening.extracted_section = section
+        screening.extracted_academic_period = academic_period
+        return profile
 
-        # Commit before deleting evidence (never delete on a failed decision).
+    # ------------------------------------------------------- request edit
+
+    def request_edit(self, actor: User, data) -> tuple[CorScreening, User, StudentProfile, ProfileChangeRequest | None]:  # noqa: ANN001
+        """Student session requests edits during verification; activates + queues."""
+        student = self._lock_student(actor)
+        screening = self.repository.find_latest_for_student(student.user_id, lock=True)
+        return self._request_edit_core(student, screening, data)
+
+    def request_edit_resolved(self, student: User, screening: CorScreening, data) -> tuple[CorScreening, User, StudentProfile, ProfileChangeRequest | None]:  # noqa: ANN001
+        """Token-authorized request-edit with an already locked screening."""
+        return self._request_edit_core(student, screening, data)
+
+    def _request_edit_core(self, student: User, screening: CorScreening | None, data) -> tuple[CorScreening, User, StudentProfile, ProfileChangeRequest | None]:  # noqa: ANN001
+        """Activate with COR-verified values; queue the Student's requested edits.
+
+        Excluded fields (student number, academic period, mapped campus/program)
+        must match the COR; changing them raises FIELD_NOT_EDITABLE. Only the
+        editable fields (names, year_level, section) may differ and are stored
+        as a PENDING request for Superadmin review (ADR-032).
+        """
+        if screening is None:
+            raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
+        if screening.status != "AWAITING_CONFIRMATION":
+            raise AppError(
+                code="SCREENING_NOT_CONFIRMABLE",
+                message="This screening is not awaiting confirmation.",
+                status_code=409,
+            )
+        # Edit requests belong to the verification phase only (ADR-032).
+        if student.account_status not in ("PENDING_VERIFICATION", "VERIFICATION_EXPIRED"):
+            raise AppError(
+                code="PROFILE_EDIT_NOT_ALLOWED",
+                message="Profile edits can only be requested during registration verification.",
+                status_code=409,
+            )
+        if as_utc(screening.submitted_at) + SEVEN_DAYS <= datetime.now(timezone.utc):
+            screening.status = "FAILED"
+            self._clear_verification_token(screening)
+            self.repository.session.commit()
+            self._purge_cor_files(screening.cor_screening_id)
+            raise AppError(
+                code="SCREENING_EXPIRED",
+                message="This COR screening has expired. Please upload a new COR.",
+                status_code=409,
+            )
+
+        def norm(value) -> str:  # noqa: ANN001
+            return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+
+        student_number = (data.student_number or "").strip().upper()
+        if not engine.STUDENT_NO_RE.match(student_number):
+            raise AppError(
+                code="INVALID_STUDENT_NUMBER",
+                message="Use your university-issued student number (e.g. 20231234-A).",
+                status_code=422,
+            )
+        extracted_number = (screening.extracted_student_number or "").strip().upper()
+        if extracted_number and extracted_number != student_number:
+            raise AppError(
+                code="STUDENT_NUMBER_MISMATCH",
+                message="The student number must match the one on your registration form.",
+                status_code=422,
+            )
+
+        # Excluded fields: a value the COR yielded may never be changed here.
+        if (
+            screening.extracted_academic_period is not None
+            and norm(data.academic_period) != norm(screening.extracted_academic_period)
+        ):
+            raise AppError(
+                code="FIELD_NOT_EDITABLE",
+                message="The academic year cannot be changed here.",
+                status_code=422,
+            )
+        if screening.extracted_campus_id is not None and int(data.campus_id) != screening.extracted_campus_id:
+            raise AppError(
+                code="FIELD_NOT_EDITABLE",
+                message="The campus cannot be changed here.",
+                status_code=422,
+            )
+        if screening.extracted_program_id is not None and int(data.program_id) != screening.extracted_program_id:
+            raise AppError(
+                code="FIELD_NOT_EDITABLE",
+                message="The program cannot be changed here.",
+                status_code=422,
+            )
+
+        owner = self.accounts.find_student_profile_by_number(student_number)
+        if owner is not None and owner.user_id != student.user_id:
+            raise AppError(
+                code="STUDENT_NUMBER_ALREADY_REGISTERED",
+                message="This student number is already registered.",
+                status_code=409,
+            )
+
+        campus = self.accounts.find_campus(data.campus_id)
+        if campus is None or not campus.is_active:
+            raise AppError(code="CAMPUS_NOT_FOUND", message="Campus does not exist or is inactive.", status_code=404)
+        program = self.accounts.find_program(data.program_id)
+        if program is None or not program.is_active:
+            raise AppError(code="PROGRAM_NOT_FOUND", message="Program does not exist or is inactive.", status_code=404)
+
+        # Activate with the COR-verified value when present; otherwise use the
+        # Student-supplied value (only possible when the COR did not yield it).
+        act_first = screening.extracted_first_name or data.first_name
+        act_middle = (
+            screening.extracted_middle_name
+            if screening.extracted_middle_name is not None
+            else data.middle_name
+        )
+        act_last = screening.extracted_last_name or data.last_name
+        act_year = (
+            screening.extracted_year_level
+            if screening.extracted_year_level is not None
+            else data.year_level
+        )
+        act_section = screening.extracted_section or data.section
+
+        changes: dict[str, object] = {}
+        if screening.extracted_first_name is not None and norm(data.first_name) != norm(screening.extracted_first_name):
+            changes["first_name"] = data.first_name
+        if screening.extracted_middle_name is not None and norm(data.middle_name) != norm(screening.extracted_middle_name):
+            changes["middle_name"] = data.middle_name
+        if screening.extracted_last_name is not None and norm(data.last_name) != norm(screening.extracted_last_name):
+            changes["last_name"] = data.last_name
+        if screening.extracted_year_level is not None and int(data.year_level) != screening.extracted_year_level:
+            changes["year_level"] = data.year_level
+        if screening.extracted_section is not None and norm(data.section) != norm(screening.extracted_section):
+            changes["section"] = data.section
+
+        from app.modules.profile_change.service import ProfileChangeService
+
+        change_request: ProfileChangeRequest | None = None
+        if changes:
+            change_request = ProfileChangeService(self.repository.session).create_pending(
+                student,
+                screening.cor_screening_id,
+                first_name=str(changes.get("first_name", act_first)),
+                middle_name=(
+                    changes["middle_name"] if "middle_name" in changes else act_middle
+                ),  # type: ignore[arg-type]
+                last_name=str(changes.get("last_name", act_last)),
+                year_level=int(changes.get("year_level", act_year)),
+                section=str(changes.get("section", act_section)),
+            )
+
+        profile = self._activate(
+            student,
+            screening,
+            student_number=student_number,
+            first_name=act_first,
+            middle_name=act_middle,
+            last_name=act_last,
+            campus_id=data.campus_id,
+            program_id=data.program_id,
+            year_level=act_year,
+            section=act_section,
+            academic_period=data.academic_period,
+        )
         self.repository.session.commit()
         self._purge_cor_files(screening.cor_screening_id)
         from app.modules.audit.service import AuditService
 
-        AuditService(self.repository.session).record(
-            student.user_id, "account_activated", "user", student.user_id
-        )
-        return screening, student, profile
+        audit = AuditService(self.repository.session)
+        audit.record(student.user_id, "account_activated", "user", student.user_id)
+        if change_request is not None:
+            audit.record(
+                student.user_id,
+                "profile_change_requested",
+                "profile_change_request",
+                change_request.change_request_id,
+            )
+        return screening, student, profile, change_request
 
     # ----------------------------------------------------------- reject
 
@@ -463,6 +678,10 @@ class CorScreeningService(BaseService[CorScreening]):
                 cleanup_state="PENDING",
             )
         )
+        # A fresh screening supersedes any pending profile-edit request (ADR-032).
+        from app.modules.profile_change.service import ProfileChangeService
+
+        ProfileChangeService(self.repository.session).supersede_pending(student.user_id)
         try:
             self.repository.session.commit()
         except Exception:
@@ -571,6 +790,90 @@ class CorScreeningService(BaseService[CorScreening]):
             actor.user_id, "account_recovery", "user", target.user_id
         )
         return target, profile, latest
+
+    # ---------------------------------------------------- reject account
+
+    def reject_account(self, actor: User) -> None:
+        """Student cancels a not-yet-active registration and deletes everything.
+
+        Removes the account, its screenings/files, sessions, profile, and any
+        pending profile-edit requests so the email and student number are free
+        again (ADR-033). Recorded as a single `account_rejected` audit event.
+        """
+        student = self._lock_student(actor)
+        # First-registration only: a previously active account may own
+        # counseling history with RESTRICT FKs, so it must never self-delete.
+        if student.account_status != "PENDING_VERIFICATION":
+            raise AppError(
+                code="ACCOUNT_NOT_REJECTABLE",
+                message="Only a registration that is not yet active can be cancelled.",
+                status_code=409,
+            )
+
+        from sqlalchemy import delete
+
+        from app.modules.enrollment_verification.models import (
+            EnrollmentVerification,
+            EnrollmentVerificationFile,
+        )
+
+        storage_keys = list(
+            self.repository.session.scalars(
+                select(CorScreeningFile.storage_key)
+                .join(
+                    CorScreening,
+                    CorScreeningFile.cor_screening_id == CorScreening.cor_screening_id,
+                )
+                .where(CorScreening.student_user_id == student.user_id)
+            )
+        )
+        legacy_ids = select(EnrollmentVerification.verification_id).where(
+            EnrollmentVerification.student_user_id == student.user_id
+        )
+        storage_keys += list(
+            self.repository.session.scalars(
+                select(EnrollmentVerificationFile.storage_key).where(
+                    EnrollmentVerificationFile.verification_id.in_(legacy_ids)
+                )
+            )
+        )
+
+        from app.modules.audit.service import AuditService
+
+        AuditService(self.repository.session).record(
+            student.user_id, "account_rejected", "user", student.user_id
+        )
+        # Production sessions use autoflush=False, so flush the audit INSERT
+        # before the deletes; otherwise the pending row would be flushed at
+        # commit against a now-deleted user and fail the FK.
+        self.repository.session.flush()
+
+        # Legacy enrollment_verifications hold a RESTRICT FK to users.
+        self.repository.session.execute(
+            delete(EnrollmentVerificationFile).where(
+                EnrollmentVerificationFile.verification_id.in_(legacy_ids)
+            )
+        )
+        self.repository.session.execute(
+            delete(EnrollmentVerification).where(
+                EnrollmentVerification.student_user_id == student.user_id
+            )
+        )
+
+        # Screenings first (users FK is RESTRICT on cor_screenings); files and
+        # profile_change_requests cascade, as do sessions/profile on user delete.
+        self.repository.session.execute(
+            delete(CorScreening).where(CorScreening.student_user_id == student.user_id)
+        )
+        self.repository.session.execute(delete(User).where(User.user_id == student.user_id))
+        self.repository.session.commit()
+
+        for storage_key in storage_keys:
+            if not self._delete_cor_bytes(storage_key):
+                logger.warning(
+                    "cor_screening_account_reject_file_cleanup_retry_required"
+                )
+            self._clear_pending_marker(storage_key)
 
     # -------------------------------------------------- token verification
 

@@ -135,7 +135,7 @@ test("reload waits for CSRF recovery before loading the registration status", as
   assert.equal(calls.some((call) => call.path.includes("cor-screenings")), false);
   await act(async () => { resolve(json(studentAuth)); });
   await waitFor(() => calls.some((call) => call.path.endsWith("/cor-screenings/me")));
-  assert.match(JSON.stringify(root.toJSON()), /Confirm your enrollment/);
+  assert.match(JSON.stringify(root.toJSON()), /Review your details/);
 });
 
 test("failed session recovery never loads confidential screening data", async (t) => {
@@ -151,12 +151,12 @@ test("sign out uses recovered CSRF and clears the protected screening page", asy
   environment(t, "#registration");
   const calls = fakeApi(t, () => json(studentAuth));
   const root = await mount(t);
-  await waitFor(() => JSON.stringify(root.toJSON()).includes("Confirm your enrollment"));
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Review your details"));
   const logout = root.root.findAllByType("button").find((button) => button.children.includes("Sign out"));
   await act(async () => { await logout.props.onClick(); });
   assert.equal(calls.find((call) => call.path.endsWith("/logout")).headers["X-CSRF-Token"], auth.csrf_token);
   assert.equal(getCsrfToken(), null);
-  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Confirm your enrollment/);
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Review your details/);
 });
 
 test("a late unauthenticated response cannot erase a newer login token", async (t) => {

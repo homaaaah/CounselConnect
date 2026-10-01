@@ -52,8 +52,7 @@ async function fillValid(root) {
   await attach(root, "register-cor", corFile());
 }
 
-test("registration collects only email, password, confirmation, and the COR PDF", async (t) => {
-  setCsrfToken(null);
+test("registration collects only email, password, confirmation, and the COR PDF", async (t) => {  setCsrfToken(null);
   const calls = [];
   t.mock.method(global, "fetch", async (url, init = {}) => {
     calls.push({ url, ...init });
@@ -141,6 +140,14 @@ test("inline confirmation sends the token, activates the account, and reports su
   assert.equal(field(root, "confirm-student-number").props.readOnly, true);
   assert.equal(field(root, "confirm-academic-period").props.readOnly, true);
   assert.equal(field(root, "confirm-student-number").props.value, "20231234-A");
+  // Editable vs read-only is stated, and the confirm step never re-uploads.
+  assert.match(field(root, "confirm-student-number").props.className, /input-locked/);
+  assert.match(JSON.stringify(root.toJSON()), /Read-only/);
+  assert.match(JSON.stringify(root.toJSON()), /Editable/);
+  assert.ok(
+    !root.root.findAllByType("button").some((b) => b.children.join("").includes("Re-upload COR")),
+    "no re-upload option while awaiting confirmation",
+  );
 
   await change(root, "confirm-campus", "1");
   await change(root, "confirm-program", "1");
@@ -237,4 +244,115 @@ test("registration keeps a NEEDS_RESUBMISSION in the same card as an inline re-u
   const confirm = calls.find((call) => call.path === "/api/v1/cor-screenings/confirm");
   assert.ok(confirm, "confirmation after re-upload posts");
   assert.equal(confirm.headers["X-COR-Token"], "cor-token-2", "the rotated token is used");
+});
+
+test("editing an editable field submits a profile edit request with the token", async (t) => {  setCsrfToken(null);
+  const calls = [];
+  t.mock.method(global, "fetch", async (url, init = {}) => {
+    const path = new URL(url, "http://localhost:5173").pathname;
+    calls.push({ path, ...init });
+    if (path === "/api/v1/accounts/campuses") return json({ items: [{ campus_id: 1, campus_name: "Main" }] });
+    if (path === "/api/v1/accounts/programs") return json({ items: [{ program_id: 1, program_name: "BSIT" }] });
+    if (path === "/api/v1/cor-screenings/request-edit") {
+      return json({
+        screening: screening({ status: "PASSED" }),
+        user: { user_id: 2 },
+        profile: {},
+        change_request: { change_request_id: 7, status: "PENDING" },
+      });
+    }
+    return json({
+      user: { user_id: 2 },
+      screening: screening({
+        extracted_student_number: "20231234-A",
+        extracted_first_name: "Ana",
+        extracted_last_name: "Santos",
+        extracted_section: "A",
+        extracted_campus_id: 1,
+        extracted_program_id: 1,
+        extracted_year_level: 1,
+        extracted_academic_period: "1st Semester 2025-2026",
+      }),
+      verification_token: "cor-token-1",
+      unmatched_campus_name: null,
+      unmatched_program_name: null,
+    }, 201);
+  });
+  const root = await mount(t);
+  await fillValid(root);
+  await submit(root);
+
+  // Only the number and academic year stay locked; names/section are editable.
+  assert.equal(field(root, "confirm-student-number").props.readOnly, true);
+  assert.equal(field(root, "confirm-academic-period").props.readOnly, true);
+  assert.match(JSON.stringify(root.toJSON()), /Confirm details/);
+
+  await change(root, "confirm-last-name", "Reyes");
+  assert.match(JSON.stringify(root.toJSON()), /Submit edit request/);
+
+  await submit(root);
+  const edit = calls.find((call) => call.path === "/api/v1/cor-screenings/request-edit");
+  assert.ok(edit, "the edit request posts to /cor-screenings/request-edit");
+  assert.equal(edit.headers["X-COR-Token"], "cor-token-1");
+  assert.match(JSON.stringify(root.toJSON()), /pending Superadmin approval/i);
+});
+
+test("a technical screening failure shows a retry message and creates no account", async (t) => {
+  setCsrfToken(null);
+  t.mock.method(global, "fetch", async (url) => {
+    const path = new URL(url, "http://localhost:5173").pathname;
+    if (path.endsWith("/accounts/register/student-with-cor")) {
+      return json({ error: { code: "SCREENING_FAILED", message: "failed" } }, 503);
+    }
+    return json({ items: [] });
+  });
+  const root = await mount(t);
+  await fillValid(root);
+  await submit(root);
+
+  const rendered = JSON.stringify(root.toJSON());
+  assert.match(rendered, /could not process your registration form/i);
+  assert.equal(root.root.findAllByProps({ id: "confirm-student-number" }).length, 0);
+  assert.ok(root.root.findByProps({ id: "register-email" }), "stays on the registration form");
+});
+
+test("reject account in the modal deletes and shows the cancelled state", async (t) => {
+  setCsrfToken(null);
+  const calls = [];
+  t.mock.method(global, "fetch", async (url, init = {}) => {
+    const path = new URL(url, "http://localhost:5173").pathname;
+    calls.push({ path, ...init });
+    if (path === "/api/v1/accounts/campuses") return json({ items: [{ campus_id: 1, campus_name: "Main" }] });
+    if (path === "/api/v1/accounts/programs") return json({ items: [{ program_id: 1, program_name: "BSIT" }] });
+    if (path === "/api/v1/cor-screenings/reject-account") return new Response(null, { status: 204 });
+    return json({
+      user: { user_id: 2 },
+      screening: screening({
+        extracted_student_number: "20231234-A",
+        extracted_first_name: "Ana",
+        extracted_last_name: "Santos",
+        extracted_section: "A",
+        extracted_campus_id: 1,
+        extracted_program_id: 1,
+        extracted_year_level: 1,
+        extracted_academic_period: "1st Semester 2025-2026",
+      }),
+      verification_token: "cor-token-1",
+      unmatched_campus_name: null,
+      unmatched_program_name: null,
+    }, 201);
+  });
+  const root = await mount(t);
+  await fillValid(root);
+  await submit(root);
+
+  const button = root.root.findAllByType("button")
+    .find((candidate) => candidate.children.join("").includes("Reject account"));
+  assert.ok(button, "review step offers Reject account");
+  await act(async () => { await button.props.onClick(); });
+
+  const call = calls.find((c) => c.path === "/api/v1/cor-screenings/reject-account");
+  assert.ok(call, "reject-account posts");
+  assert.equal(call.headers["X-COR-Token"], "cor-token-1");
+  assert.match(JSON.stringify(root.toJSON()), /Registration cancelled/i);
 });

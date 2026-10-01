@@ -28,7 +28,7 @@ Connect to your local MySQL as any admin user and run:
 CREATE DATABASE counselconnect CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 ```
 
-Keep this connection info (host/user/password) — you'll put it in `backend/.env` next. You do NOT need to create any tables by hand; migrations do that.
+Keep this connection info (host/user/password) — you'll put it in `backend/.env` next. You do NOT need to create any tables by hand; step 3 loads the canonical schema file and then runs migrations.
 
 ## 2. Backend setup
 
@@ -59,12 +59,28 @@ The Gmail app password is NOT your normal password — create one at myaccount.g
 
 ## 3. Create tables + seed data
 
+Tables are created in two parts: the canonical v4.1 schema file is loaded first, then Alembic applies the post-baseline migrations. The Alembic baseline revision (`8f0f8c585641`) is intentionally empty — do not rely on `alembic upgrade head` alone, or you will hit `Failed to open the referenced table 'users'`.
+
+From `backend/` (where step 2 left you; `alembic.ini` and `.env` must be found here):
+
 ```bash
-alembic upgrade head     # creates all 21 tables
+# 1) Load the canonical v4.1 schema (note the ../ path to db/)
+mysql -u your_mysql_user -p counselconnect < ../db/CounselConnect_Initial_Database_v4.1.sql
+
+# 2) Apply the remaining migrations on top
+alembic upgrade head
+
+# 3) Seed the shared demo data
 mysql -u your_mysql_user -p counselconnect < dev_seed.sql
 ```
 
-`dev_seed.sql` inserts the shared demo data (2 campuses, 1 department, 2 programs, hero text, 3 FAQs, 1 announcement, 3 emergency contacts). Without it the landing page looks empty and the registration form has no programs to pick.
+On Windows PowerShell, `<` redirection is not supported — wrap step 1/3 in `cmd /c` or pipe the file, for example:
+
+```powershell
+cmd /c "mysql -u your_mysql_user -p counselconnect < ..\db\CounselConnect_Initial_Database_v4.1.sql"
+```
+
+`dev_seed.sql` inserts the shared demo data (2 campuses, 1 department, 2 programs, hero text, 3 FAQs, 1 announcement, 3 emergency contacts, the dev Counselor and Superadmin). Without it the landing page looks empty and the registration form has no programs to pick.
 
 ## 4. Start the backend
 
@@ -109,6 +125,7 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 | COR always requests resubmission | Install Tesseract/Poppler (above); a scanned/photo COR needs OCR. Open barcode must decode to the student number. |
 | Frontend shows "Request failed" on everything | Backend not running → start it first (step 4), frontend depends on it |
 | `alembic upgrade head` says access denied | MySQL user lacks privileges on the `counselconnect` DB → grant ALL on `counselconnect.*` to your user |
+| `alembic upgrade head` fails with `(1824, "Failed to open the referenced table 'users'")` | The canonical schema was not loaded first (the Alembic baseline revision is a no-op) → run step 3 in order: load `db/CounselConnect_Initial_Database_v4.1.sql`, then `alembic upgrade head` |
 | Weird route 404s after editing backend files | Rare reload hiccup → restart uvicorn |
 
 ## Automated checks

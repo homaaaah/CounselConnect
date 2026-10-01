@@ -19,8 +19,9 @@ A five-minute warning permits explicit continuation. Genuine CounselConnect acti
 ```text
 register + current COR → automated screening (format + OCR + barcode)
 → register returns a one-time X-COR-Token (no auto sign-in)
-→ AWAITING_CONFIRMATION → Student confirms (or rejects) with the token → ACTIVE until valid_until
-                        ↘ NEEDS_RESUBMISSION / FAILED / reject / 7-day expiry → re-upload (token rotated) or restricted access
+   ↘ technical FAILED → NO account created; retry later (`503 SCREENING_FAILED`)
+→ AWAITING_CONFIRMATION / NEEDS_RESUBMISSION → Student confirms or requests an edit (Superadmin approves) → ACTIVE until valid_until
+   ↘ Re-upload COR (new COR, token rotated) or Reject account (deletes the account; email/student number freed)
 expired validity → new current COR → screening → confirm → new valid_until → ACTIVE
 closing the modal loses the token → Student signs in → session-authorized #registration path
 Superadmin recovery resets a stuck non-active Student to PENDING_VERIFICATION.

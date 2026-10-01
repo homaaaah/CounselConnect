@@ -8,14 +8,14 @@
 |---|---|
 | Identity/academics | `users`, `student_profiles`, `campuses`, `departments`, `programs` |
 | Sessions | `user_sessions` |
-| Enrollment | `cor_screenings`, `cor_screening_files` (ADR-029). Legacy `enrollment_verifications`, `enrollment_verification_files` are retained for history. |
+| Enrollment | `cor_screenings`, `cor_screening_files` (ADR-029), `profile_change_requests` (ADR-032). Legacy `enrollment_verifications`, `enrollment_verification_files` are retained for history. |
 | Appointments | `counselor_weekly_schedules`, `counselor_availability_blocks`, `availability_slots`, `appointments` |
 | Messaging | `conversations`, `messages` |
 | SOS | `sos_cases`, `sos_responses` |
 | Resources | `resource_sources`, `wellness_resources`, `resource_files`, `resource_categories`, `wellness_resource_categories` |
 | Content/operations | `content_items`, `emergency_contacts`, `audit_events` |
 
-`cor_screening_files` stores temporary metadata references only, never COR bytes. `resource_files` refers only to controlled durable internal resource attachments. `cor_screenings` also stores the one-time `verification_token_hash` (SHA-256 digest) and `verification_token_issued_at` used for in-modal confirmation (ADR-031); the raw token is never stored.
+`cor_screening_files` stores temporary metadata references only, never COR bytes. `resource_files` refers only to controlled durable internal resource attachments. `cor_screenings` also stores the one-time `verification_token_hash` (SHA-256 digest) and `verification_token_issued_at` used for in-modal confirmation (ADR-031); the raw token is never stored. `profile_change_requests` stores a Student's requested names/year_level/section with a `PENDING`/`APPROVED`/`REJECTED` status for Superadmin review (ADR-032).
 
 ## Appointment and conversation fields
 

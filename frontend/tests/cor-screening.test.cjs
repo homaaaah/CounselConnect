@@ -42,10 +42,21 @@ function setup(t, { me = screening(), confirmResponse, resubmitResponse, rejectR
         ? confirmResponse()
         : json({ screening: screening({ status: "PASSED" }), user: { user_id: 2 }, profile: {} });
     }
+    if (path.endsWith("/cor-screenings/request-edit")) {
+      return json({
+        screening: screening({ status: "PASSED" }),
+        user: { user_id: 2 },
+        profile: {},
+        change_request: { change_request_id: 11, status: "PENDING" },
+      });
+    }
     if (path.endsWith("/cor-screenings/reject")) {
       return rejectResponse
         ? rejectResponse()
         : json({ screening: screening({ status: "NEEDS_RESUBMISSION", failure_reason_code: "REJECTED_BY_STUDENT" }) });
+    }
+    if (path.endsWith("/cor-screenings/reject-account")) {
+      return new Response(null, { status: 204 });
     }
     if (path.endsWith("/cor-screenings/resubmit")) {
       return resubmitResponse
@@ -89,14 +100,19 @@ test("status page seeds the extracted fields and defaults campus/program from th
   const root = await mount(t);
   await waitFor(() => hasId(root, "confirm-student-number"));
   assert.equal(field(root, "confirm-student-number").props.value, "20231234-A");
-  // Barcode-backed and verified fields are read-only during verification.
+  // Barcode-backed fields are read-only; names/section are editable so the
+  // Student can request an edit (ADR-032).
   assert.equal(field(root, "confirm-student-number").props.readOnly, true);
   assert.equal(field(root, "confirm-academic-period").props.readOnly, true);
   assert.equal(field(root, "confirm-academic-period").props.value, "1st Semester 2025-2026");
   assert.equal(field(root, "confirm-first-name").props.value, "Ana");
   assert.equal(field(root, "confirm-last-name").props.value, "Santos");
-  assert.equal(field(root, "confirm-first-name").props.readOnly, true);
-  assert.equal(field(root, "confirm-section").props.readOnly, true);
+  assert.equal(field(root, "confirm-first-name").props.readOnly, undefined);
+  assert.equal(field(root, "confirm-section").props.readOnly, undefined);
+  // Editable vs read-only is stated on every field.
+  assert.match(field(root, "confirm-student-number").props.className, /input-locked/);
+  assert.match(JSON.stringify(root.toJSON()), /Read-only/);
+  assert.match(JSON.stringify(root.toJSON()), /Editable/);
   assert.equal(field(root, "confirm-campus").props.value, "Main");
   assert.equal(field(root, "confirm-program").props.value, "BS Psychology");
   assert.equal(field(root, "confirm-year-level").props.value, "1");
@@ -206,32 +222,55 @@ test("no screening yet offers the COR upload prompt", async (t) => {
   setCsrfToken(null);
 });
 
-test("reject marks the screening for resubmission and offers re-upload", async (t) => {
+test("awaiting confirmation offers confirm/reject but no re-upload", async (t) => {
   setCsrfToken("synthetic-csrf");
-  const calls = setup(t);
+  setup(t);
   const root = await mount(t);
   await waitFor(() => hasId(root, "confirm-section"));
-  const rejectButton = root.root.findAllByType("button")
-    .find((button) => button.children.join("").includes("Reject and re-upload"));
-  assert.ok(rejectButton, "reject action is offered");
-  await act(async () => { await rejectButton.props.onClick(); });
-  const post = calls.find((call) => call.path.endsWith("/cor-screenings/reject"));
-  assert.ok(post, "reject posts to /cor-screenings/reject");
-  assert.equal(post.method, "POST");
-  assert.match(JSON.stringify(root.toJSON()), /discarded those details/i);
-  await waitFor(() => hasId(root, "resubmit-cor"));
+  const buttons = root.root.findAllByType("button").map((b) => b.children.join(""));
+  assert.ok(buttons.some((text) => text.includes("Confirm details")), "confirm action is offered");
+  assert.ok(buttons.some((text) => text.includes("Reject account")), "reject-account is offered");
+  assert.ok(!buttons.some((text) => text.includes("Re-upload COR")), "no re-upload on the confirm step");
+  assert.equal(root.root.findAllByProps({ id: "resubmit-cor" }).length, 0);
   setCsrfToken(null);
 });
 
-test("a successful reject triggers the auto-logout callback", async (t) => {
+test("reject account deletes and triggers the logout callback", async (t) => {
   setCsrfToken("synthetic-csrf");
-  setup(t);
+  const calls = setup(t);
   const onRejected = t.mock.fn();
   const root = await mount(t, { onRejected });
   await waitFor(() => hasId(root, "confirm-section"));
-  const rejectButton = root.root.findAllByType("button")
-    .find((button) => button.children.join("").includes("Reject and re-upload"));
-  await act(async () => { await rejectButton.props.onClick(); });
+  const button = root.root.findAllByType("button")
+    .find((candidate) => candidate.children.join("").includes("Reject account"));
+  assert.ok(button, "reject-account action is offered");
+  await act(async () => { await button.props.onClick(); });
+  assert.ok(
+    calls.some((call) => call.path.endsWith("/cor-screenings/reject-account")),
+    "reject-account posts to the endpoint",
+  );
   assert.equal(onRejected.mock.callCount(), 1);
+  setCsrfToken(null);
+});
+
+test("status page submits a profile edit request when an editable field changes", async (t) => {
+  setCsrfToken("synthetic-csrf");
+  const calls = setup(t);
+  const root = await mount(t);
+  await waitFor(() => hasId(root, "confirm-last-name"));
+
+  await act(async () => {
+    field(root, "confirm-last-name").props.onChange({ target: { value: "Reyes" } });
+  });
+  assert.match(JSON.stringify(root.toJSON()), /Submit edit request/);
+
+  const form = root.root.findByType("form");
+  await act(async () => { await form.props.onSubmit({ preventDefault() {} }); });
+
+  const edit = calls.find((call) => call.path === "/api/v1/cor-screenings/request-edit");
+  assert.ok(edit, "edit request posts to /cor-screenings/request-edit");
+  assert.equal(edit.method, "POST");
+  assert.equal(JSON.parse(edit.body).last_name, "Reyes");
+  assert.match(JSON.stringify(root.toJSON()), /pending Superadmin approval/i);
   setCsrfToken(null);
 });

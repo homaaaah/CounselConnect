@@ -11,11 +11,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from app.core.exceptions import AppError
 from app.core.security import sha256_digest
 from app.modules.accounts.models import StudentProfile, User
 from app.modules.cor_screening import screening as engine
+from app.modules.cor_screening.models import CorScreening
 from app.modules.cor_screening.schemas import ConfirmScreeningRequest
 from app.modules.cor_screening.service import CorScreeningService
 
@@ -393,3 +395,85 @@ def test_expired_token_is_rejected_and_retired(
     db_session.refresh(screening)
     assert screening.status == "FAILED"
     assert screening.verification_token_hash is None
+
+
+# ----------------------------------------- failure isolation / reject account
+
+
+def technical_failed_result():
+    """A decoder/processing state we cannot attribute to the document."""
+    return engine.ScreeningResult(
+        fields=engine.ExtractedFields(student_no="20231234-A", name="Juan Dela Cruz"),
+        method="text",
+        format_score=1.0,
+        extraction_confidence=1.0,
+        missing=[],
+        barcode_status=engine.BARCODE_NOT_PROCESSED,
+    )
+
+
+def test_technical_failure_creates_no_account(db_session, academic_references, monkeypatch):
+    stub_screening(monkeypatch, technical_failed_result())
+    service = CorScreeningService(db_session)
+
+    with pytest.raises(AppError) as caught:
+        service.register_with_cor(
+            "noaccount@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+        )
+    assert caught.value.code == "SCREENING_FAILED"
+    assert (
+        db_session.scalars(select(User).where(User.email == "noaccount@example.edu")).first()
+        is None
+    )
+
+    # The same email can register once the screener recovers.
+    stub_screening(monkeypatch, good_result())
+    user, screening, _, _, _ = service.register_with_cor(
+        "noaccount@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    assert user.account_status == "PENDING_VERIFICATION"
+
+
+def test_reject_account_deletes_everything_and_frees_identity(
+    db_session, academic_references, monkeypatch
+):
+    # Mirror the production session (autoflush=False) so the audit-insert
+    # ordering before the deletes is actually exercised.
+    db_session.autoflush = False
+    stub_screening(monkeypatch, failed_result())  # NEEDS_RESUBMISSION -> account created
+    service = CorScreeningService(db_session)
+    user, screening, _, _, _ = service.register_with_cor(
+        "rejectme@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    file_row = service.repository.find_active_file(screening.cor_screening_id)
+    path = Path(service._storage_path(file_row.storage_key))
+    assert path.exists()
+    user_id, screening_id = user.user_id, screening.cor_screening_id
+
+    service.reject_account(user)
+
+    assert db_session.scalars(select(User).where(User.user_id == user_id)).first() is None
+    assert db_session.scalars(
+        select(CorScreening).where(CorScreening.cor_screening_id == screening_id)
+    ).first() is None
+    assert not path.exists()
+
+    # Email is free again for a fresh registration.
+    user2, _screening2, _, _, _ = service.register_with_cor(
+        "rejectme@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    assert user2.email == "rejectme@example.edu"
+
+
+def test_reject_account_denied_when_active(db_session, academic_references, monkeypatch):
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    user, _screening, _, _, _ = service.register_with_cor(
+        "activereject@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    user.account_status = "ACTIVE"
+    db_session.commit()
+
+    with pytest.raises(AppError) as caught:
+        service.reject_account(user)
+    assert caught.value.code == "ACCOUNT_NOT_REJECTABLE"

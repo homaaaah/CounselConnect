@@ -18,6 +18,7 @@ from app.modules.content.router import router as content_router
 from app.modules.cor_screening.router import router as cor_screening_router
 from app.modules.messaging.router import router as messaging_router
 from app.modules.operations.router import router as operations_router
+from app.modules.profile_change.router import router as profile_change_router
 from app.modules.sos.router import router as sos_router
 from app.modules.wellness_resources.router import router as wellness_resources_router
 
@@ -26,6 +27,7 @@ api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth_router)
 api_router.include_router(accounts_router)
 api_router.include_router(cor_screening_router)
+api_router.include_router(profile_change_router)
 api_router.include_router(appointments_router)
 api_router.include_router(messaging_router)
 api_router.include_router(sos_router)

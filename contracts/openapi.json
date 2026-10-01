@@ -855,6 +855,89 @@
         }
       }
     },
+    "/api/v1/cor-screenings/request-edit": {
+      "post": {
+        "tags": [
+          "cor_screening"
+        ],
+        "summary": "Student: request edits during verification (Superadmin approves; ADR-032)",
+        "operationId": "request_edit_screening_api_v1_cor_screenings_request_edit_post",
+        "parameters": [
+          {
+            "name": "X-COR-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cor-Token"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestEditResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Request Edit Screening Api V1 Cor Screenings Request Edit Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cor-screenings/reject": {
       "post": {
         "tags": [
@@ -921,6 +1004,72 @@
                     }
                   ],
                   "title": "Response 422 Reject Screening Api V1 Cor Screenings Reject Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cor-screenings/reject-account": {
+      "post": {
+        "tags": [
+          "cor_screening"
+        ],
+        "summary": "Student: cancel registration and delete the account (ADR-033)",
+        "operationId": "reject_account_api_v1_cor_screenings_reject_account_post",
+        "parameters": [
+          {
+            "name": "X-COR-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Cor-Token"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reject Account Api V1 Cor Screenings Reject Account Post"
                 }
               }
             }
@@ -1077,6 +1226,245 @@
                     }
                   ],
                   "title": "Response 422 List Screenings Api V1 Cor Screenings Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests": {
+      "get": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "Superadmin: list profile edit requests (ADR-032)",
+        "operationId": "list_change_requests_api_v1_profile_change_requests_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "PENDING",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ProfileChangeRequestItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 List Change Requests Api V1 Profile Change Requests Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests/{change_request_id}/approve": {
+      "post": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "Superadmin: approve a profile edit request (ADR-032)",
+        "operationId": "approve_change_request_api_v1_profile_change_requests__change_request_id__approve_post",
+        "parameters": [
+          {
+            "name": "change_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Request Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Approve Change Request Api V1 Profile Change Requests  Change Request Id  Approve Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests/{change_request_id}/reject": {
+      "post": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "Superadmin: reject a profile edit request (ADR-032)",
+        "operationId": "reject_change_request_api_v1_profile_change_requests__change_request_id__reject_post",
+        "parameters": [
+          {
+            "name": "change_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Request Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectChangeRequestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reject Change Request Api V1 Profile Change Requests  Change Request Id  Reject Post"
                 }
               }
             }
@@ -5262,6 +5650,50 @@
         ],
         "title": "CampusResponse"
       },
+      "ChangeRequestStudentSummary": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "account_status": {
+            "type": "string",
+            "title": "Account Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "first_name",
+          "last_name",
+          "account_status"
+        ],
+        "title": "ChangeRequestStudentSummary"
+      },
       "ConfirmScreeningRequest": {
         "properties": {
           "student_number": {
@@ -6154,6 +6586,37 @@
         ],
         "title": "ListEnvelope[EmergencyContactResponse]"
       },
+      "ListEnvelope_ProfileChangeRequestItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileChangeRequestItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[ProfileChangeRequestItem]"
+      },
       "ListEnvelope_ProgramResponse_": {
         "properties": {
           "items": {
@@ -6362,6 +6825,178 @@
         ],
         "title": "MessageResponse"
       },
+      "ProfileChangeRequestItem": {
+        "properties": {
+          "change_request": {
+            "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+          },
+          "student": {
+            "$ref": "#/components/schemas/ChangeRequestStudentSummary"
+          },
+          "current_first_name": {
+            "type": "string",
+            "title": "Current First Name"
+          },
+          "current_middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Middle Name"
+          },
+          "current_last_name": {
+            "type": "string",
+            "title": "Current Last Name"
+          },
+          "current_year_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Year Level"
+          },
+          "current_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request",
+          "student",
+          "current_first_name",
+          "current_middle_name",
+          "current_last_name",
+          "current_year_level",
+          "current_section"
+        ],
+        "title": "ProfileChangeRequestItem",
+        "description": "Queue row: the request plus the Student's current values for the diff."
+      },
+      "ProfileChangeRequestResponse": {
+        "properties": {
+          "change_request_id": {
+            "type": "integer",
+            "title": "Change Request Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "cor_screening_id": {
+            "type": "integer",
+            "title": "Cor Screening Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Status"
+          },
+          "requested_first_name": {
+            "type": "string",
+            "title": "Requested First Name"
+          },
+          "requested_middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Middle Name"
+          },
+          "requested_last_name": {
+            "type": "string",
+            "title": "Requested Last Name"
+          },
+          "requested_year_level": {
+            "type": "integer",
+            "title": "Requested Year Level"
+          },
+          "requested_section": {
+            "type": "string",
+            "title": "Requested Section"
+          },
+          "reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By User Id"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request_id",
+          "student_user_id",
+          "cor_screening_id",
+          "status",
+          "requested_first_name",
+          "requested_middle_name",
+          "requested_last_name",
+          "requested_year_level",
+          "requested_section",
+          "reviewed_by_user_id",
+          "reviewed_at",
+          "decision_reason",
+          "created_at"
+        ],
+        "title": "ProfileChangeRequestResponse",
+        "description": "A Student's requested profile edit and its review state."
+      },
       "ProgramResponse": {
         "properties": {
           "program_id": {
@@ -6465,6 +7100,133 @@
         ],
         "title": "RegistrationWithCorResponse",
         "description": "Result of the atomic COR registration (account is PENDING_VERIFICATION)."
+      },
+      "RejectChangeRequestRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "RejectChangeRequestRequest",
+        "description": "A rejection must record the reviewer's reason (ADR-024 precedent)."
+      },
+      "RequestEditRequest": {
+        "properties": {
+          "student_number": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Student Number"
+          },
+          "first_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name"
+          },
+          "campus_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Program Id"
+          },
+          "year_level": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Year Level"
+          },
+          "section": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Section"
+          },
+          "academic_period": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Academic Period"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_number",
+          "first_name",
+          "last_name",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section"
+        ],
+        "title": "RequestEditRequest",
+        "description": "Student-requested edits during verification (ADR-032).\n\nCarries the same fields as confirm so activation can use the COR-mapped or\nStudent-selected campus/program and validate the student number; the server\nrejects any change to an excluded field with `FIELD_NOT_EDITABLE`."
+      },
+      "RequestEditResponse": {
+        "properties": {
+          "screening": {
+            "$ref": "#/components/schemas/CorScreeningResponse"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/StudentProfileResponse"
+          },
+          "change_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "screening",
+          "user",
+          "profile"
+        ],
+        "title": "RequestEditResponse",
+        "description": "Activation result; `change_request` is present only when a field differs."
       },
       "ResubmitResponse": {
         "properties": {

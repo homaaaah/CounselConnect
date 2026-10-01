@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { useCorScreening, confirmedFieldsFrom, failureReasonText } from "../../features/accounts";
+import {
+  useCorScreening,
+  confirmedFieldsFrom,
+  editedEditableFields,
+  failureReasonText,
+} from "../../features/accounts";
 import ScreeningFields from "../../features/accounts/ScreeningFields";
 
 const STATUS_LABELS = {
@@ -32,11 +37,25 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
 
   async function handleConfirm(e) {
     e.preventDefault();
+    if (hasEdits) {
+      await state.requestEdit(form);
+      return;
+    }
     await state.confirm(form);
   }
 
-  async function handleReject() {
-    const result = await state.reject();
+  async function handleRequestEdit() {
+    await state.requestEdit(form);
+  }
+
+  async function handleRejectAccount() {
+    const confirmed = typeof window === "undefined" || typeof window.confirm !== "function"
+      ? true
+      : window.confirm("Reject this registration? Your account and uploaded COR will be deleted.");
+    if (!confirmed) {
+      return;
+    }
+    const result = await state.rejectAccount();
     if (result?.success && onRejected) await onRejected();
   }
 
@@ -48,8 +67,21 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
 
   const screening = state.screening;
   const confirmable = screening?.status === "AWAITING_CONFIRMATION";
+  const rejectable = !screening || screening.status !== "PASSED";
   const canResubmit = !state.loading
     && (!screening || ["NEEDS_RESUBMISSION", "FAILED"].includes(screening.status));
+  const editDiffs = form && confirmable ? editedEditableFields(screening, form) : [];
+  const hasEdits = editDiffs.length > 0;
+  const headerTitle = confirmable
+    ? "Review your details"
+    : canResubmit
+      ? "Re-upload your COR"
+      : "Your registration status";
+  const headerSubtitle = confirmable
+    ? "We read the details from your registration form (COR). Confirm to activate your account, or reject the account."
+    : canResubmit
+      ? "We could not read all of your registration form. Upload a clearer or corrected PDF to continue."
+      : "Your enrollment details are on file.";
   const failureText = failureReasonText(screening?.failure_reason_code);
   const campusHint = screening && !screening.extracted_campus_id
     ? unmatchedCampusName
@@ -66,11 +98,8 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
     <main className="auth-shell">
       <div className="signup-card">
         <div className="signup-header">
-          <h1>Confirm your enrollment</h1>
-          <p>
-            We read the details from your registration form (COR). Review and correct
-            anything below, then confirm to activate your account.
-          </p>
+          <h1>{headerTitle}</h1>
+          <p>{headerSubtitle}</p>
         </div>
 
         {state.loading && <p role="status" className="form-hint">Loading your registration status...</p>}
@@ -107,19 +136,39 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
               programHint={programHint}
               referenceError={state.referenceError}
               onRetryReference={() => void state.retryReferenceData()}
+              editable={confirmable}
             />
 
-            <button type="submit" disabled={state.busy || !confirmable} className="btn-submit btn-success">
-              {state.busy ? "Confirming…" : "Confirm details"}
-            </button>
-            <button
-              type="button"
-              onClick={handleReject}
-              disabled={state.busy || !confirmable}
-              className="btn-submit"
-            >
-              Reject and re-upload
-            </button>
+            {hasEdits && confirmable && (
+              <div className="form-hint">
+                Your changes will be reviewed by a Superadmin; your account activates now
+                with the details printed on your COR.
+              </div>
+            )}
+            <div className="form-actions">
+              {hasEdits ? (
+                <button
+                  type="button"
+                  onClick={handleRequestEdit}
+                  disabled={state.busy || !confirmable}
+                  className="btn-submit btn-success"
+                >
+                  {state.busy ? "Submitting…" : "Submit edit request"}
+                </button>
+              ) : (
+                <button type="submit" disabled={state.busy || !confirmable} className="btn-submit btn-success">
+                  {state.busy ? "Confirming…" : "Confirm details"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleRejectAccount}
+                disabled={state.busy || !rejectable}
+                className="btn-submit btn-danger"
+              >
+                Reject account
+              </button>
+            </div>
             {!confirmable && (
               <div className="form-hint">
                 These details cannot be confirmed right now. Follow the instructions above.
@@ -150,9 +199,19 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
                 </div>
               )}
             </div>
-            <button type="submit" disabled={state.busy || !file} className="btn-submit">
-              {state.busy ? "Uploading…" : "Re-upload COR"}
-            </button>
+            <div className="form-actions">
+              <button type="submit" disabled={state.busy || !file} className="btn-danger btn-danger">
+                {state.busy ? "Uploading…" : "Re-upload COR"}
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectAccount}
+                disabled={state.busy || !rejectable}
+                className="btn-submit btn-danger"
+              >
+                Reject account
+              </button>
+            </div>
           </form>
         )}
 

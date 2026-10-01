@@ -26,6 +26,8 @@ const ERROR_MESSAGES = {
   COR_TOO_LARGE: "The PDF is too large (max 10 MB).",
   SCREENING_UNAVAILABLE:
     "We could not screen your registration form right now. Please try again in a moment.",
+  SCREENING_FAILED:
+    "We could not process your registration form, so no account was created. Please try again.",
   INVALID_STUDENT_NUMBER: "Use your university-issued student number (e.g. 20231234-A).",
   STUDENT_NUMBER_MISMATCH: "The student number must match the one on your COR. Reload the page and try again.",
   FIELD_MISMATCH: "Some details do not match your COR. Reload the page and try again, or reject and re-upload.",
@@ -38,6 +40,14 @@ const ERROR_MESSAGES = {
   FORBIDDEN_ROLE: "This registration path is for students only.",
   INVALID_VERIFICATION_TOKEN:
     "Your verification is no longer valid. Please sign in to continue.",
+  FIELD_NOT_EDITABLE:
+    "The student number, academic year, campus, and program cannot be changed here. Contact the guidance office if they are wrong.",
+  PROFILE_EDIT_NOT_ALLOWED: "Profile edits can only be requested during registration verification.",
+  INVALID_PROFILE_EDIT: "Enter a valid name, year level, and section.",
+  CHANGE_REQUEST_PENDING: "You already have an edit request awaiting review.",
+  CHANGE_REQUEST_NOT_PENDING: "That edit request has already been decided.",
+  CHANGE_REQUEST_REASON_REQUIRED: "Enter a reason for rejecting this request.",
+  CHANGE_REQUEST_NOT_FOUND: "That edit request could not be found.",
 };
 
 /** Human-readable screening failure reasons (mirrors the backend contract). */
@@ -65,6 +75,27 @@ export function failureReasonText(code) {
 export function actionErrorMessage(err) {
   if (err instanceof ApiError) return ERROR_MESSAGES[err.code] ?? err.message;
   return "Something went wrong. Please try again.";
+}
+
+/** Fields a Student may request to edit (never number/academic year/campus/program). */
+const EDITABLE_FIELD_KEYS = ["first_name", "middle_name", "last_name", "year_level", "section"];
+
+function sameField(a, b) {
+  const norm = (value) => String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/**
+ * Editable fields whose form value differs from the COR-extracted value.
+ * Empty when the form still matches the COR (a plain confirmation).
+ */
+export function editedEditableFields(screening, form) {
+  if (!screening || !form) return [];
+  return EDITABLE_FIELD_KEYS.filter((key) => {
+    const extracted = screening[`extracted_${key}`];
+    if (extracted === null || extracted === undefined) return false;
+    return !sameField(form[key], extracted);
+  });
 }
 
 /** Outcome copy shown on the register page after a successful submission. */

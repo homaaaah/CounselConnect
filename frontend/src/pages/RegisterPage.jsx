@@ -5,6 +5,7 @@ import {
   confirmedFieldsFrom,
   actionErrorMessage,
   failureReasonText,
+  editedEditableFields,
   ScreeningFields,
 } from "../features/accounts";
 import { request } from "../services/apiClient";
@@ -34,10 +35,29 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
   const [confirmError, setConfirmError] = useState("");
   const [resubmitFile, setResubmitFile] = useState(null);
   const [resubmitError, setResubmitError] = useState("");
+  const [pendingEdit, setPendingEdit] = useState(false);
 
   // The one-time token header authorizes the modal actions. Omit it entirely
   // when absent (never send an empty credential); the backend fails closed.
   const tokenHeaders = verificationToken ? { "X-COR-Token": verificationToken } : {};
+
+  // Editable fields (names/year_level/section) that differ from the COR.
+  const editDiffs = phase === "confirm" ? editedEditableFields(screening, confirmForm) : [];
+  const hasEdits = editDiffs.length > 0;
+
+  function confirmPayload() {
+    return {
+      student_number: confirmForm.student_number.trim(),
+      first_name: confirmForm.first_name.trim(),
+      middle_name: (confirmForm.middle_name ?? "").trim() || null,
+      last_name: confirmForm.last_name.trim(),
+      campus_id: Number(confirmForm.campus_id),
+      program_id: Number(confirmForm.program_id),
+      year_level: Number(confirmForm.year_level),
+      section: confirmForm.section.trim(),
+      academic_period: (confirmForm.academic_period ?? "").trim() || null,
+    };
+  }
 
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -90,13 +110,20 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     }
   }
 
-  async function handleConfirm(e) {
-    e.preventDefault();
-    const missing = !confirmForm.student_number || !confirmForm.first_name || !confirmForm.last_name
+  function confirmMissing() {
+    return !confirmForm.student_number || !confirmForm.first_name || !confirmForm.last_name
       || confirmForm.campus_id === "" || confirmForm.program_id === ""
       || confirmForm.year_level === "" || !confirmForm.section;
-    if (missing) {
+  }
+
+  async function handleConfirm(e) {
+    e.preventDefault();
+    if (confirmMissing()) {
       setConfirmError("Please complete every required field before confirming.");
+      return;
+    }
+    if (hasEdits) {
+      await handleRequestEdit();
       return;
     }
     setBusy(true);
@@ -105,17 +132,7 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
       await request("/cor-screenings/confirm", {
         method: "POST",
         headers: tokenHeaders,
-        body: JSON.stringify({
-          student_number: confirmForm.student_number.trim(),
-          first_name: confirmForm.first_name.trim(),
-          middle_name: (confirmForm.middle_name ?? "").trim() || null,
-          last_name: confirmForm.last_name.trim(),
-          campus_id: Number(confirmForm.campus_id),
-          program_id: Number(confirmForm.program_id),
-          year_level: Number(confirmForm.year_level),
-          section: confirmForm.section.trim(),
-          academic_period: (confirmForm.academic_period ?? "").trim() || null,
-        }),
+        body: JSON.stringify(confirmPayload()),
       });
       setPhase("done");
     } catch (err) {
@@ -125,20 +142,50 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     }
   }
 
-  async function handleReject() {
+  async function handleRequestEdit() {
+    if (confirmMissing()) {
+      setConfirmError("Please complete every required field.");
+      return;
+    }
     setBusy(true);
     setConfirmError("");
     try {
-      const response = await request("/cor-screenings/reject", {
+      const response = await request("/cor-screenings/request-edit", {
+        method: "POST",
+        headers: tokenHeaders,
+        body: JSON.stringify(confirmPayload()),
+      });
+      setScreening(response?.screening ?? screening);
+      setPendingEdit(Boolean(response?.change_request));
+      setPhase("done");
+    } catch (err) {
+      setConfirmError(actionErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRejectAccount() {
+    const confirmed = typeof window === "undefined" || typeof window.confirm !== "function"
+      ? true
+      : window.confirm("Reject this registration? Your account and uploaded COR will be deleted.");
+    if (!confirmed) {
+      return;
+    }
+    setBusy(true);
+    setConfirmError("");
+    setResubmitError("");
+    try {
+      await request("/cor-screenings/reject-account", {
         method: "POST",
         headers: tokenHeaders,
       });
-      setScreening(response?.screening ?? screening);
-      setResubmitFile(null);
-      setResubmitError("");
-      setPhase("resubmit");
+      setVerificationToken(null);
+      setPhase("cancelled");
     } catch (err) {
-      setConfirmError(actionErrorMessage(err));
+      const text = actionErrorMessage(err);
+      setConfirmError(text);
+      setResubmitError(text);
     } finally {
       setBusy(false);
     }
@@ -203,7 +250,9 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
   if (phase === "done") {
     body = (
       <div className="form-message success" role="status">
-        Account activated. You can now sign in with your email or student number.
+        {pendingEdit
+          ? "Account activated. Your requested changes are pending Superadmin approval."
+          : "Account activated. You can now sign in with your email or student number."}
         {inModal ? (
           <> <button type="button" className="linklike" onClick={onSwitchToLogin}>Sign in</button></>
         ) : (
@@ -215,8 +264,9 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     body = (
       <>
         <div className="form-message" role="status">
-          Your registration form passed screening. Review and correct anything below,
-          then confirm to activate your account.
+          {hasEdits
+            ? "You changed some details. Submit an edit request for Superadmin approval; your account activates now with the details printed on your COR."
+            : "Your registration form passed screening. Review and correct anything below, then confirm to activate your account."}
         </div>
         {confirmError && <div role="alert" className="form-message error">{confirmError}</div>}
         <form onSubmit={handleConfirm}>
@@ -229,13 +279,27 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
             programHint={programHint}
             referenceError={referenceError}
             onRetryReference={() => void loadReference()}
+            editable
           />
-          <button type="submit" disabled={busy} className="btn-submit btn-success">
-            {busy ? "Confirming…" : "Confirm details"}
-          </button>
-          <button type="button" onClick={handleReject} disabled={busy} className="btn-submit">
-            Reject and re-upload
-          </button>
+          <div className="form-actions">
+            {hasEdits ? (
+              <button type="button" onClick={handleRequestEdit} disabled={busy} className="btn-submit btn-success">
+                {busy ? "Submitting…" : "Submit edit request"}
+              </button>
+            ) : (
+              <button type="submit" disabled={busy} className="btn-submit btn-success">
+                {busy ? "Confirming…" : "Confirm details"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleRejectAccount}
+              disabled={busy}
+              className="btn-submit btn-danger"
+            >
+              Reject account
+            </button>
+          </div>
         </form>
       </>
     );
@@ -264,11 +328,32 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
             />
             {resubmitFile && <div className="form-hint">Attached: {resubmitFile.name}</div>}
           </div>
-          <button type="submit" disabled={busy || !resubmitFile} className="btn-submit">
-            {busy ? "Uploading…" : "Upload COR"}
-          </button>
+          <div className="form-actions">
+            <button type="submit" disabled={busy || !resubmitFile} className="btn-submit btn-success">
+              {busy ? "Uploading…" : "Upload COR"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRejectAccount}
+              disabled={busy}
+              className="btn-submit btn-danger"
+            >
+              Reject account
+            </button>
+          </div>
         </form>
       </>
+    );
+  } else if (phase === "cancelled") {
+    body = (
+      <div className="form-message error" role="status">
+        Registration cancelled. Your account and uploaded COR were deleted.
+        {inModal ? (
+          <> <button type="button" className="linklike" onClick={onClose}>Close</button></>
+        ) : (
+          <> <a href="#home">Back to home</a></>
+        )}
+      </div>
     );
   } else {
     body = (
@@ -350,6 +435,27 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
     );
   }
 
+  const headers = {
+    form: {
+      title: "Create your account",
+      subtitle:
+        "Register with your email and password, then attach your current registration form (COR) — your proof of enrollment at the University of Caloocan City.",
+    },
+    confirm: {
+      title: "Review your details",
+      subtitle:
+        "Check the details we read from your COR. Confirm to activate your account, or request an edit for Superadmin approval.",
+    },
+    resubmit: {
+      title: "Re-upload your COR",
+      subtitle:
+        "We could not read your COR clearly. Upload a clearer or corrected PDF to continue.",
+    },
+    done: { title: "You're all set", subtitle: "" },
+    cancelled: { title: "Registration cancelled", subtitle: "" },
+  };
+  const header = headers[phase] ?? headers.form;
+
   const card = (
     <div className="signup-card">
       {inModal && (
@@ -359,12 +465,8 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
       )}
 
       <div className="signup-header">
-        <h1>{phase === "resubmit" ? "Re-upload your COR" : phase === "confirm" || phase === "done" ? "Confirm your details" : "Create your account"}</h1>
-        <p>
-          Register with your email and password, then attach your current registration
-          form (COR) — your proof of enrollment at the University of Caloocan City. We
-          read the details from your COR and you confirm them to activate your account.
-        </p>
+        <h1>{header.title}</h1>
+        {header.subtitle && <p>{header.subtitle}</p>}
       </div>
 
       {body}

@@ -34,6 +34,15 @@ const ERROR_MESSAGES = {
   SCREENING_NOT_FOUND: "We could not find your registration form. Please upload it again.",
   REGISTRATION_DISABLED: "Registration is temporarily unavailable. Please try again later.",
   FORBIDDEN_ROLE: "This page is for students only.",
+  SCREENING_FAILED: "We could not process your registration form. Please try again.",
+  ACCOUNT_NOT_REJECTABLE: "Only a registration that is not yet active can be cancelled.",
+  FIELD_NOT_EDITABLE: "The student number, academic year, campus, and program cannot be changed here.",
+  PROFILE_EDIT_NOT_ALLOWED: "Profile edits can only be requested during registration verification.",
+  INVALID_PROFILE_EDIT: "Enter a valid name, year level, and section.",
+  CHANGE_REQUEST_PENDING: "You already have an edit request awaiting review.",
+  CHANGE_REQUEST_NOT_PENDING: "That edit request has already been decided.",
+  CHANGE_REQUEST_REASON_REQUIRED: "Enter a reason for rejecting this request.",
+  CHANGE_REQUEST_NOT_FOUND: "That edit request could not be found.",
 };
 
 export function failureReasonText(code) {
@@ -165,8 +174,52 @@ export function useCorScreening() {
     }
   }
 
-  async function reject() {
+  async function requestEdit(fields) {
+    const missing = !fields.student_number || !fields.first_name || !fields.last_name
+      || fields.campus_id === "" || fields.program_id === "" || fields.year_level === ""
+      || !fields.section;
+    if (missing) {
+      const text = "Please complete every required field before submitting.";
+      setError(text);
+      return { success: false, message: text };
+    }
     setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await request("/cor-screenings/request-edit", {
+        method: "POST",
+        body: JSON.stringify({
+          student_number: (fields.student_number ?? "").trim(),
+          first_name: (fields.first_name ?? "").trim(),
+          middle_name: (fields.middle_name ?? "").trim() || null,
+          last_name: (fields.last_name ?? "").trim(),
+          campus_id: fields.campus_id === "" ? null : Number(fields.campus_id),
+          program_id: fields.program_id === "" ? null : Number(fields.program_id),
+          year_level: fields.year_level === "" ? null : Number(fields.year_level),
+          section: (fields.section ?? "").trim() || null,
+          academic_period: (fields.academic_period ?? "").trim() || null,
+        }),
+      });
+      if (mounted.current) {
+        setScreening(result?.screening ?? null);
+        setMessage(
+          result?.change_request
+            ? "Account activated. Your requested changes are pending Superadmin approval."
+            : "Your enrollment details were confirmed. Your account is now active.",
+        );
+      }
+      return { success: true, data: result, changeRequest: result?.change_request ?? null };
+    } catch (err) {
+      const text = toError(err, "Could not submit your edit request. Please try again.");
+      if (mounted.current) setError(text);
+      return { success: false, message: text };
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  async function reject() {    setBusy(true);
     setError("");
     setMessage("");
     try {
@@ -178,6 +231,22 @@ export function useCorScreening() {
       return { success: true, data: result };
     } catch (err) {
       const text = toError(err, "Could not reject the extracted details. Please try again.");
+      if (mounted.current) setError(text);
+      return { success: false, message: text };
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  async function rejectAccount() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await request("/cor-screenings/reject-account", { method: "POST" });
+      return { success: true };
+    } catch (err) {
+      const text = toError(err, "Could not cancel your registration. Please try again.");
       if (mounted.current) setError(text);
       return { success: false, message: text };
     } finally {
@@ -222,7 +291,9 @@ export function useCorScreening() {
     busy,
     load,
     confirm,
+    requestEdit,
     reject,
+    rejectAccount,
     resubmit,
     retryReferenceData: load,
   };

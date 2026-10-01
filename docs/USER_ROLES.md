@@ -1,6 +1,6 @@
 # CounselConnect — Roles and Access
 
-Backend checks are authoritative. Counselor is the highest-authority role for counseling operations. A narrow `SUPERADMIN` recovery role exists (ADR-030); it has no COR-approval or counseling authority.
+Backend checks are authoritative. Counselor is the highest-authority role for counseling operations. A narrow `SUPERADMIN` recovery role exists (ADR-030); it has no COR-approval or counseling authority, but it does ratify Student-initiated profile-edit requests during verification (ADR-032).
 
 | Capability | Student | Guidance Staff | Counselor |
 |---|:---:|:---:|:---:|
@@ -27,5 +27,7 @@ Backend checks are authoritative. Counselor is the highest-authority role for co
 - Students may select only a mode supported by the slot and may access only their own confirmed online appointment conversation at the authorized time.
 - Counselor authority still follows assignment, purpose, and least privilege; it is not permission to browse unrelated confidential content.
 - Initial staff accounts are developer-created. Counselor may later manage authorized accounts and Guidance Staff.
-- Superadmin (ADR-030) signs in with email, may read the student directory, and may reset a non-active Student to `PENDING_VERIFICATION` for a fresh COR (`POST /accounts/students/{user_id}/recover`). It must not declare a COR authentic, approve a registration, or access appointments, messaging, SOS, CMS, or audit content.
+- Superadmin (ADR-030) signs in with email, may read the student directory, and may reset a non-active Student to `PENDING_VERIFICATION` for a fresh COR (`POST /accounts/students/{user_id}/recover`). It must not declare a COR authentic or approve a registration, or access appointments, messaging, SOS, CMS, or audit content.
+- Superadmin also reviews Student **profile-edit requests** made during verification (ADR-032): `GET /profile-change-requests` and `POST /profile-change-requests/{change_request_id}/approve|reject` (reject reason required). The Student's own submission activates the account with the COR-verified values; the Superadmin only ratifies the requested names/year_level/section. This is not registration or COR approval, and only editable fields can be requested (never student number, academic year, campus, or program).
 - Students may sign in with their registered email or their student number (ADR-030); staff use email.
+- A `PENDING_VERIFICATION` Student may cancel their own registration (`POST /cor-screenings/reject-account`, ADR-033): the account, screenings, COR files, sessions, profile, and pending edit requests are deleted and the email/student number are freed. Other statuses (including previously active accounts) cannot self-cancel. A technical screening failure creates no account at all.

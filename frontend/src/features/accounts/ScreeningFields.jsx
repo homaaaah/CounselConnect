@@ -1,11 +1,12 @@
 /**
- * ScreeningFields — read-only summary of the COR-extracted academic fields
- * (shared by the Registration Status page and the inline confirm step).
+ * ScreeningFields — summary of the COR-extracted academic fields, shared by the
+ * Registration Status page and the inline confirm step.
  *
- * Verified fields are read-only: the Student must not rewrite them, they must
- * match what the COR/barcode yielded. The only values the Student may supply
- * are campus/program the COR could not be mapped to, which render as selects.
- * The parent supplies the wrapping <form> and the Confirm/Reject buttons.
+ * Every field states whether it can be edited: a lock chip marks values read
+ * from the COR (student number, academic year, and a COR-matched campus/program)
+ * and a pencil chip marks the values a Student may request to change (names,
+ * year level, section, and an unmapped campus/program selection). The parent
+ * supplies the wrapping <form> and the action buttons.
  */
 export const YEAR_LEVELS = [1, 2, 3, 4, 5, 6];
 
@@ -13,18 +14,51 @@ function isSet(value) {
   return value !== "" && value !== null && value !== undefined;
 }
 
+function Chip({ editable }) {
+  return editable ? (
+    <span className="field-chip field-chip--editable">
+      <i className="fa-solid fa-pen" aria-hidden="true" /> Editable
+    </span>
+  ) : (
+    <span className="field-chip field-chip--locked">
+      <i className="fa-solid fa-lock" aria-hidden="true" /> Read-only
+    </span>
+  );
+}
+
 function Locked({ id, label, value, hint }) {
   return (
     <div className="form-group">
-      <label className="form-group-label" htmlFor={id}>{label}</label>
+      <label className="form-group-label" htmlFor={id}>
+        {label}
+        <Chip editable={false} />
+      </label>
       <input
         id={id}
         readOnly
         aria-readonly="true"
         tabIndex={-1}
-        className="form-input bg-slate-100 text-slate-700"
+        className="form-input input-locked"
         value={value ?? ""}
         onChange={() => {}}
+      />
+      {hint && <div className="form-hint">{hint}</div>}
+    </div>
+  );
+}
+
+function Editable({ id, label, value, onChange, hint }) {
+  return (
+    <div className="form-group">
+      <label className="form-group-label" htmlFor={id}>
+        {label}
+        <Chip editable />
+      </label>
+      <input
+        id={id}
+        className="form-input"
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
       />
       {hint && <div className="form-hint">{hint}</div>}
     </div>
@@ -40,6 +74,7 @@ export default function ScreeningFields({
   programHint,
   referenceError,
   onRetryReference,
+  editable = false,
 }) {
   const campusMatched = isSet(form.campus_id);
   const programMatched = isSet(form.program_id);
@@ -57,9 +92,10 @@ export default function ScreeningFields({
         </div>
       )}
 
-      <p className="form-hint">
-        These details were read from your COR and cannot be edited here. If anything
-        is wrong, reject and upload a clearer or corrected COR.
+      <p className="field-legend">
+        {editable
+          ? "Fields marked \u{1F512} Read-only were read from your COR and cannot be changed. Fields marked \u270E Editable you can change; those changes are reviewed by a Superadmin."
+          : "Every field is marked \u{1F512} Read-only: these details were read from your COR and cannot be changed here."}
       </p>
 
       <div className="form-row">
@@ -78,12 +114,24 @@ export default function ScreeningFields({
       </div>
 
       <div className="form-row">
-        <Locked id="confirm-first-name" label="First name" value={form.first_name} />
-        <Locked id="confirm-last-name" label="Last name" value={form.last_name} />
+        {editable ? (
+          <Editable id="confirm-first-name" label="First name" value={form.first_name} onChange={(v) => set("first_name", v)} />
+        ) : (
+          <Locked id="confirm-first-name" label="First name" value={form.first_name} />
+        )}
+        {editable ? (
+          <Editable id="confirm-last-name" label="Last name" value={form.last_name} onChange={(v) => set("last_name", v)} />
+        ) : (
+          <Locked id="confirm-last-name" label="Last name" value={form.last_name} />
+        )}
       </div>
 
       <div className="form-group full-width">
-        <Locked id="confirm-middle-name" label="Middle name (optional)" value={form.middle_name} />
+        {editable ? (
+          <Editable id="confirm-middle-name" label="Middle name (optional)" value={form.middle_name} onChange={(v) => set("middle_name", v)} />
+        ) : (
+          <Locked id="confirm-middle-name" label="Middle name (optional)" value={form.middle_name} />
+        )}
       </div>
 
       <div className="form-row">
@@ -91,7 +139,10 @@ export default function ScreeningFields({
           <Locked id="confirm-campus" label="Campus" value={campus?.campus_name ?? ""} />
         ) : (
           <div className="form-group">
-            <label className="form-group-label" htmlFor="confirm-campus">Campus</label>
+            <label className="form-group-label" htmlFor="confirm-campus">
+              Campus
+              <Chip editable />
+            </label>
             <select
               id="confirm-campus"
               required
@@ -111,7 +162,10 @@ export default function ScreeningFields({
           <Locked id="confirm-program" label="Program" value={program?.program_name ?? ""} />
         ) : (
           <div className="form-group">
-            <label className="form-group-label" htmlFor="confirm-program">Program</label>
+            <label className="form-group-label" htmlFor="confirm-program">
+              Program
+              <Chip editable />
+            </label>
             <select
               id="confirm-program"
               required
@@ -130,8 +184,32 @@ export default function ScreeningFields({
       </div>
 
       <div className="form-row">
-        <Locked id="confirm-year-level" label="Year level" value={form.year_level} />
-        <Locked id="confirm-section" label="Section" value={form.section} />
+        {editable ? (
+          <div className="form-group">
+            <label className="form-group-label" htmlFor="confirm-year-level">
+              Year level
+              <Chip editable />
+            </label>
+            <select
+              id="confirm-year-level"
+              className="form-select"
+              value={form.year_level}
+              onChange={(event) => set("year_level", event.target.value)}
+            >
+              <option value="" disabled>Select year level</option>
+              {YEAR_LEVELS.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <Locked id="confirm-year-level" label="Year level" value={form.year_level} />
+        )}
+        {editable ? (
+          <Editable id="confirm-section" label="Section" value={form.section} onChange={(v) => set("section", v)} />
+        ) : (
+          <Locked id="confirm-section" label="Section" value={form.section} />
+        )}
       </div>
     </>
   );

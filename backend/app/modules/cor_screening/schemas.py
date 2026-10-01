@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.accounts.schemas import StudentProfileResponse, UserResponse
+from app.modules.profile_change.schemas import ProfileChangeRequestResponse
 
 ScreeningStatus = Literal[
     "PROCESSING", "AWAITING_CONFIRMATION", "PASSED", "NEEDS_RESUBMISSION", "FAILED"
@@ -77,6 +78,24 @@ class ConfirmScreeningResponse(BaseModel):
     screening: CorScreeningResponse
     user: UserResponse
     profile: StudentProfileResponse
+
+
+class RequestEditRequest(ConfirmScreeningRequest):
+    """Student-requested edits during verification (ADR-032).
+
+    Carries the same fields as confirm so activation can use the COR-mapped or
+    Student-selected campus/program and validate the student number; the server
+    rejects any change to an excluded field with `FIELD_NOT_EDITABLE`.
+    """
+
+
+class RequestEditResponse(BaseModel):
+    """Activation result; `change_request` is present only when a field differs."""
+
+    screening: CorScreeningResponse
+    user: UserResponse
+    profile: StudentProfileResponse
+    change_request: ProfileChangeRequestResponse | None = None
 
 
 class ResubmitResponse(BaseModel):

@@ -141,19 +141,24 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 
 - COR uploads use `multipart/form-data` and private temporary storage outside MySQL.
 - API responses must not expose public or durable COR URLs.
-- Registration is email + password + COR; screening (ADR-029) extracts the academic fields and the Student confirms them. There is no counselor approval endpoint. Registration does not sign the Student in; the register/resubmit response returns a one-time `verification_token` used as `X-COR-Token` for the inline confirm/reject/re-upload (ADR-031).
+- Registration is email + password + COR; screening (ADR-029) extracts the academic fields and the Student confirms them. There is no counselor approval endpoint. Registration does not sign the Student in; the register/resubmit response returns a one-time `verification_token` used as `X-COR-Token` for the inline confirm/reject/re-upload (ADR-031). A Student may change names/year_level/section via a request-edit, reviewed by a Superadmin (ADR-032).
 
 | Method/path | Allowed caller and behavior |
 |---|---|
 | `POST /accounts/register/student` | Public; creates a `PENDING_VERIFICATION` account without a COR (account-only step). |
-| `POST /accounts/register/student-with-cor` | Public; `multipart/form-data` (`email`, `password`, `file`). Creates the account and its first screening atomically; returns the screening result, the one-time `verification_token`, and any unmatched campus/program names (`Cache-Control: no-store`). The client confirms inline with `X-COR-Token`; it does not sign in. |
+| `POST /accounts/register/student-with-cor` | Public; `multipart/form-data` (`email`, `password`, `file`). Creates the account and its first screening atomically; returns the screening result, the one-time `verification_token`, and any unmatched campus/program names (`Cache-Control: no-store`). A **technical** screening failure (`FAILED`) creates **no account** and returns `503 SCREENING_FAILED` (ADR-033). The client confirms inline with `X-COR-Token`; it does not sign in. |
 | `GET /cor-screenings/me` | Student session; latest screening result (or `null`). |
 | `POST /cor-screenings/confirm` | Student session **or** `X-COR-Token`; confirms the extracted academic fields, activates the account, deletes the COR, and destroys the token. |
-| `POST /cor-screenings/reject` | Student session **or** `X-COR-Token`; marks the screening `NEEDS_RESUBMISSION`/`REJECTED_BY_STUDENT` and offers a re-upload. |
+| `POST /cor-screenings/reject` | **Deprecated for the UI** (kept for compatibility); Student session **or** `X-COR-Token`; marks the screening `NEEDS_RESUBMISSION`/`REJECTED_BY_STUDENT`. |
+| `POST /cor-screenings/request-edit` | Student session **or** `X-COR-Token`; activates the account with the COR-verified values and, when names/year_level/section differ, queues one `PENDING` profile-edit request (ADR-032). Excluded fields changed -> `422 FIELD_NOT_EDITABLE`. |
+| `POST /cor-screenings/reject-account` | Student session **or** `X-COR-Token`; `PENDING_VERIFICATION` only; deletes the account, screenings/files, sessions, profile, and pending edit requests (`204`); frees the email/student number; audited `account_rejected` (ADR-033). Any other status -> `409 ACCOUNT_NOT_REJECTABLE`. |
 | `POST /cor-screenings/resubmit` | Student session **or** `X-COR-Token`; `multipart/form-data` (`file`); replaces a failed/again-needed screening and returns a **rotated** `verification_token`. |
 | `GET /cor-screenings` | Active Counselor; read-only screening/audit list (`status` filter). |
 | `GET /accounts/students` | Active Counselor or Superadmin; read-only student directory with profile + latest screening (`q`, `account_status`, `screening_status`, `page`, `page_size`). |
 | `POST /accounts/students/{user_id}/recover` | Active Superadmin; resets a non-active Student to `PENDING_VERIFICATION` so they can submit a fresh COR (ADR-030). |
+| `GET /profile-change-requests` | Active Superadmin; profile-edit request queue with current-vs-requested values (`status` (default `PENDING`), `page`, `page_size`). |
+| `POST /profile-change-requests/{change_request_id}/approve` | Active Superadmin; applies the requested names/year_level/section. Non-pending -> `409 CHANGE_REQUEST_NOT_PENDING`. |
+| `POST /profile-change-requests/{change_request_id}/reject` | Active Superadmin; rejects the request; `reason` required (max 500). |
 
 Invalid, expired, rotated-away, or malformed `X-COR-Token` values return `401 INVALID_VERIFICATION_TOKEN` with a generic message; the raw token is never echoed or logged.
 

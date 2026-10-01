@@ -961,6 +961,78 @@ html {
   cursor: not-allowed;
 }
 
+.btn-submit.btn-secondary {
+  background: #ffffff;
+  color: var(--text-dark);
+  border: 1px solid var(--border-color);
+}
+
+.btn-submit.btn-secondary:hover {
+  background: #f4f4f5;
+}
+
+.btn-submit.btn-danger {
+  background: #ffffff;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.btn-submit.btn-danger:hover {
+  background: #fef2f2;
+}
+
+/* Group the review/resubmit actions so stacked buttons are spaced. */
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 1rem;
+}
+
+/* Editable vs read-only affordances on the screening review fields. */
+.field-legend {
+  display: block;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0.25rem 0 0.85rem;
+}
+
+.field-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.field-chip i {
+  font-size: 0.62rem;
+}
+
+.field-chip--locked {
+  background: #e4e4e7;
+  color: #52525b;
+}
+
+.field-chip--editable {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.input-locked {
+  background: #f4f4f5;
+  color: #71717a;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
 .social-logins {
   display: flex;
   gap: 10px;

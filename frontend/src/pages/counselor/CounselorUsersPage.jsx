@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUserDirectory } from "../../features/accounts";
+import { useUserDirectory, useProfileChangeRequests } from "../../features/accounts";
 import { useToast } from "../../components/feedback";
 import { request } from "../../services/apiClient";
 
@@ -132,8 +132,152 @@ function StudentDetailModal({ item, campusName, programName, onClose }) {
 /**
  * Counselor "Users" directory — read-only list of Student accounts with their
  * latest automated COR screening result (ADR-029). Backend authorized.
- * Selecting a row opens the complete profile + screening record.
+ * Selecting a row opens the complete profile + screening record. The Superadmin
+ * also sees the pending profile-edit request queue (ADR-032).
  */
+function changeLines(row) {
+  const cr = row.change_request;
+  const currentName = [row.current_first_name, row.current_middle_name, row.current_last_name]
+    .filter(Boolean).join(" ");
+  const requestedName = [cr.requested_first_name, cr.requested_middle_name, cr.requested_last_name]
+    .filter(Boolean).join(" ");
+  const lines = [];
+  if (currentName !== requestedName) lines.push({ label: "Name", from: currentName, to: requestedName });
+  if ((row.current_year_level ?? null) !== cr.requested_year_level) {
+    lines.push({ label: "Year level", from: row.current_year_level ?? "—", to: cr.requested_year_level });
+  }
+  if ((row.current_section ?? null) !== cr.requested_section) {
+    lines.push({ label: "Section", from: row.current_section ?? "—", to: cr.requested_section });
+  }
+  return lines;
+}
+
+function PendingEditRequests() {
+  const { items, loading, error, busyId, load, approve, reject } = useProfileChangeRequests(true);
+  const toast = useToast();
+  const [rejectingId, setRejectingId] = useState(null);
+  const [reason, setReason] = useState("");
+
+  async function handleApprove(changeRequestId) {
+    const result = await approve(changeRequestId);
+    if (result.success) toast.success("Profile edit approved.", { title: "Edit request" });
+    else toast.error(result.message, { title: "Approval failed" });
+  }
+
+  async function handleReject(changeRequestId) {
+    if (!reason.trim()) {
+      toast.error("Enter a reason for rejecting this request.", { title: "Reason required" });
+      return;
+    }
+    const result = await reject(changeRequestId, reason.trim());
+    if (result.success) {
+      toast.success("Profile edit rejected.", { title: "Edit request" });
+      setRejectingId(null);
+      setReason("");
+    } else {
+      toast.error(result.message, { title: "Rejection failed" });
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-slate-900">Pending edit requests</h2>
+        <button type="button" className="linklike" onClick={() => void load()}>Refresh</button>
+      </div>
+      <p className="mt-1 text-sm text-slate-600">
+        Student-requested changes to names, year level, or section. Approving applies them.
+      </p>
+
+      {error && (
+        <div role="alert" className="form-message error mt-3">
+          {error} <button type="button" className="linklike" onClick={() => void load()}>Retry</button>
+        </div>
+      )}
+      {loading && <p className="mt-3 text-sm text-slate-600" role="status">Loading edit requests…</p>}
+      {!loading && !error && items.length === 0 && (
+        <p className="mt-3 text-sm text-slate-600">No pending edit requests.</p>
+      )}
+
+      {!loading && items.map((row) => {
+        const cr = row.change_request;
+        const lines = changeLines(row);
+        return (
+          <div key={cr.change_request_id} className="mt-4 rounded-lg border border-slate-200 p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <div className="font-medium text-slate-800">
+                  {[row.student.first_name, row.student.last_name].filter(Boolean).join(" ") || row.student.email}
+                </div>
+                <div className="text-xs text-slate-600">{row.student.email} · #{row.student.user_id}</div>
+              </div>
+              <div className="text-xs text-slate-500">Requested {formatDateTime(cr.created_at)}</div>
+            </div>
+
+            <dl className="mt-2">
+              {lines.map((line) => (
+                <div key={line.label} className="flex flex-col gap-0.5 border-b border-slate-100 py-1 sm:flex-row sm:gap-3">
+                  <dt className="w-28 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">{line.label}</dt>
+                  <dd className="text-sm text-slate-800">
+                    <span className="text-slate-400 line-through">{line.from}</span>
+                    {" → "}
+                    <span className="font-medium">{line.to}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            {rejectingId === cr.change_request_id ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  id={`edit-reason-${cr.change_request_id}`}
+                  type="text"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder="Reason for rejection"
+                  className="form-input max-w-xs"
+                />
+                <button
+                  id={`edit-reject-confirm-${cr.change_request_id}`}
+                  type="button"
+                  className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                  disabled={busyId === cr.change_request_id}
+                  onClick={() => handleReject(cr.change_request_id)}
+                >
+                  {busyId === cr.change_request_id ? "Rejecting…" : "Confirm reject"}
+                </button>
+                <button type="button" className="linklike" onClick={() => { setRejectingId(null); setReason(""); }}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 flex gap-2">
+                <button
+                  id={`edit-approve-${cr.change_request_id}`}
+                  type="button"
+                  className="rounded-md border border-emerald-300 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+                  disabled={busyId === cr.change_request_id}
+                  onClick={() => handleApprove(cr.change_request_id)}
+                >
+                  {busyId === cr.change_request_id ? "Approving…" : "Approve"}
+                </button>
+                <button
+                  id={`edit-reject-${cr.change_request_id}`}
+                  type="button"
+                  className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  onClick={() => { setRejectingId(cr.change_request_id); setReason(""); }}
+                >
+                  Reject
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 export default function CounselorUsersPage({ canRecover = false }) {
   const {
     items,
@@ -182,6 +326,8 @@ export default function CounselorUsersPage({ canRecover = false }) {
             </div>
             <p className="text-sm text-slate-600">{total} student{total === 1 ? "" : "s"}</p>
           </div>
+
+          {canRecover && <PendingEditRequests />}
 
           <form
             className="mt-5 flex flex-wrap items-center gap-3"

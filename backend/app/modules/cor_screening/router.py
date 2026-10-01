@@ -1,9 +1,12 @@
 """cor_screening router.
 
-Student (ADR-029 automated flow):
-- GET  /cor-screenings/me        (latest screening for the signed-in Student)
-- POST /cor-screenings/confirm   (confirm extracted fields -> activate account)
-- POST /cor-screenings/resubmit  (replace a failed/again-needed COR)
+Student (ADR-029 automated flow; session or X-COR-Token on the POSTs):
+- GET  /cor-screenings/me             (latest screening for the signed-in Student)
+- POST /cor-screenings/confirm        (confirm extracted fields -> activate account)
+- POST /cor-screenings/request-edit   (request name/year/section edits; Superadmin approves)
+- POST /cor-screenings/reject-account (cancel registration; deletes the account)
+- POST /cor-screenings/reject         (deprecated for the UI; kept for compatibility)
+- POST /cor-screenings/resubmit       (replace a failed/again-needed COR)
 
 Counselor read-only recovery/audit view:
 - GET  /cor-screenings           (list screenings; COUNSELOR only)
@@ -23,6 +26,8 @@ from app.modules.cor_screening.schemas import (
     ConfirmScreeningResponse,
     CorScreeningResponse,
     CounselorScreeningItem,
+    RequestEditRequest,
+    RequestEditResponse,
     ResubmitResponse,
     ScreeningStudentSummary,
 )
@@ -30,6 +35,7 @@ from app.modules.cor_screening.service import (
     CorScreeningService,
     get_cor_screening_service,
 )
+from app.modules.profile_change.schemas import ProfileChangeRequestResponse
 from app.shared.dependencies import (
     CurrentUser,
     ScreeningActor,
@@ -75,6 +81,34 @@ def confirm_screening(
 
 
 @router.post(
+    "/request-edit",
+    response_model=RequestEditResponse,
+    summary="Student: request edits during verification (Superadmin approves; ADR-032)",
+)
+def request_edit_screening(
+    data: RequestEditRequest,
+    actor: ScreeningActor = Depends(get_screening_actor),
+    service: CorScreeningService = Depends(get_cor_screening_service),
+):
+    if actor.screening is not None:
+        screening, user, profile, change_request = service.request_edit_resolved(
+            actor.user, actor.screening, data
+        )
+    else:
+        screening, user, profile, change_request = service.request_edit(actor.user, data)
+    return RequestEditResponse(
+        screening=CorScreeningResponse.model_validate(screening),
+        user=UserResponse.model_validate(user),
+        profile=StudentProfileResponse.model_validate(profile),
+        change_request=(
+            ProfileChangeRequestResponse.model_validate(change_request)
+            if change_request is not None
+            else None
+        ),
+    )
+
+
+@router.post(
     "/reject",
     response_model=ResubmitResponse,
     summary="Student: reject the extracted details and re-upload the COR",
@@ -88,6 +122,19 @@ def reject_screening(
     else:
         screening = service.reject(actor.user)
     return ResubmitResponse(screening=CorScreeningResponse.model_validate(screening))
+
+
+@router.post(
+    "/reject-account",
+    status_code=204,
+    summary="Student: cancel registration and delete the account (ADR-033)",
+)
+def reject_account(
+    actor: ScreeningActor = Depends(get_screening_actor),
+    service: CorScreeningService = Depends(get_cor_screening_service),
+):
+    service.reject_account(actor.user)
+    return Response(status_code=204)
 
 
 @router.post(
