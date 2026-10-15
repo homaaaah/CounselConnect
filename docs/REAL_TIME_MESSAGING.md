@@ -2,56 +2,38 @@
 
 ## Contract
 
-Each conversation is one authorized Student ↔ one authorized Counselor. Guidance Staff has no access. Validate participant scope and `conversation_type` on open, read, send, reconnect, and close; handle client message IDs to avoid duplicate sends where practical.
+Each conversation is one authorized Student and one authorized Counselor. Revalidate participant ownership and conversation purpose on open, read, send, reconnect, and close. Other Counselors, Superadmin, and legacy Guidance Staff have no participant access.
 
-Approved conversation types are:
+Conversation types remain GENERAL, APPOINTMENT, and SOS. A conversation cannot be linked to both an appointment and an SOS case. GENERAL chat remains an unimplemented/future workflow unless separately approved; scheduled APPOINTMENT text chat is implemented.
 
-- `GENERAL`: ordinary authorized Live Chat independent of an appointment or SOS case.
-- `APPOINTMENT`: dedicated to one confirmed online appointment.
-- `SOS`: dedicated to one authorized SOS case.
+## Scheduled appointment chat
 
-A conversation must not be linked to both an appointment and SOS case. All participants require a valid approved session. Genuine send/read/navigation actions may renew the one-hour idle timer; WebSocket ping/pong, automatic reconnect, polling, and connection heartbeats do not.
+- Confirmation does not create a conversation.
+- The launcher/lobby appears 30 minutes before a confirmed ONLINE appointment.
+- At or after start, the first explicit authorized join locks/revalidates the appointment and lazily creates/reuses its single APPOINTMENT conversation.
+- REST is the durable source for ordered messages/history. FastAPI WebSockets deliver committed events; reconnect catches up through REST.
+- The safety deadline is appointment end plus the configured 15-minute grace period.
+- Timeout closes chat without inventing COMPLETED or NO_SHOW; the assigned Counselor records the outcome.
+- Face-to-face, pending, rejected, cancelled, completed, unauthorized, or mismatched appointments cannot create a scheduled chat.
 
-## Appointment-linked conversations
+## Audio/video relationship
 
-The implemented scheduled-session contract is:
+Planned WebRTC audio/video uses the same appointment participants/window but is a separate media/signaling domain described in AUDIO_VIDEO_CALLS.md. Text messages remain durable. Call media, recordings, transcripts, and automatic summaries are never message content or persistent records.
 
-- Confirmation never creates a conversation. The appointment lobby opens 30 minutes before start, while explicit joining and messaging open at the scheduled start.
-- The first authorized participant join locks and revalidates the confirmed online appointment, then lazily creates the single conversation.
-- REST writes and cursor history are durable. WebSockets deliver committed message, appointment, reminder, and closure events; reconnect uses REST catch-up.
-- The safety deadline is appointment end plus `COUNSELCONNECT_CHAT_GRACE_MINUTES` (15 by default). Timeout closes chat with `TIMEOUT` but leaves the appointment `CONFIRMED`; only the assigned Counselor records the outcome.
-- Before start and before any join/message activity, the assigned Counselor may change a compatible appointment mode in place without changing confirmation or the reserved slot.
+## Counseling-record relationship
 
-- The appointments service supplies an authorized confirmed-online-appointment reference when the scheduled start is reached.
-- Messaging revalidates the Student, Counselor, appointment mode/status, and participant match before creating or reopening the conversation.
-- One appointment may link at most one `APPOINTMENT` conversation, and one conversation may belong to at most one appointment.
-- Face-to-face, pending, rejected, cancelled, completed, or otherwise unauthorized appointments cannot create a new appointment conversation.
-- Closing an appointment conversation reports session closure to the appointment workflow but does not by itself invent the appointment outcome.
+Counselor draft notes and finalized assessments are not chat messages. Store them only through COUNSELING_SESSION_RECORDS.md authorization and lifecycle. Ending chat may signal that a session ended, but only the Counselor records appointment outcome and finalizes assessment.
 
-Optional expression flow: local scan → session-only `observed_expression_cue` → Counselor read-only context. No raw camera data enters message/API payloads, and scan denial/failure never blocks chat.
+## Retention and sessions
 
-## Lifecycle/retention
+Message bodies are retained for 30 days after conversation closure under the current decision, then purged while allowed minimal metadata remains. Genuine send/read/navigation may renew the one-hour idle timer; WebSocket ping/pong, reconnect, polling, and heartbeats do not. Reauthentication must reauthorize from server state.
 
-- Conversation: authorized open → text exchange → closed with `closed_at`.
-- Retain message bodies for 30 days after closure, then delete bodies/rows according to implementation while keeping only permitted minimal conversation/audit metadata.
-- Keep the expression cue only for the active interaction; discard on close.
-- No audio/video recording, generated transcript, or automatic summary.
-- Session expiry closes protected access but must not corrupt persisted messages or falsely mark an appointment/SOS outcome. After reauthentication, reconnect and reauthorize from server state.
+## AI boundary
+
+Optional AI-assisted observation is consented/session-only and separate from messaging. No raw media, observed-cue history, or AI diagnosis enters message/API payloads or SOS logic.
 
 ## Required tests
 
-- Participant/role authorization and cross-conversation denial.
-- Conversation-type validation and prevention of appointment/SOS dual linkage.
-- General Live Chat independent of appointment state.
-- Confirmed online appointment access at the scheduled start.
-- Denial before confirmation/start and after rejection/cancellation.
-- Appointment/conversation Student and Counselor mismatch denial.
-- Face-to-face appointment conversation denial and unique appointment link.
-- Send/retry/idempotency, reconnect, and close behavior.
-- Cue present/absent without raw media.
-- Cleanup deadline and failure handling.
-- One-hour idle and 12-hour absolute session expiry, five-minute continuation warning, revocation, reauthentication, and proof that heartbeat/reconnect traffic does not renew idle activity.
+Participant and multi-Counselor isolation; Superadmin/legacy-role denial; purpose validation; pre-window/unconfirmed/cancelled/face-to-face denial; participant mismatch; unique appointment link; send/retry/idempotency; reconnect/catch-up; timeout/outcome separation; message purge; session expiry; no heartbeat renewal; no clinical notes/media/AI observations in messages.
 
-## Transport limits
-
-The v1 registry is process-local and requires one backend process. Messages are text-only with a configurable 4,000-character default. Attachments, delivery/read receipts, and multi-process fan-out are not implemented.
+The process-local WebSocket registry supports one backend process in v1. Messages are text-only with a configurable 4,000-character default. Attachments, delivery/read receipts, and multi-process fan-out are not implemented.

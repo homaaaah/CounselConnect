@@ -1,34 +1,24 @@
-# CounselConnect — Wellness Resources
+# CounselConnect — Wellness Resource Feature Removal
 
-## Automated discovery
+**Status: removed from approved target scope (ADR-036).**
 
-```text
-allowlisted source → RSS/Atom/structured metadata first
-→ approved bounded scraping fallback → validate/normalize/canonicalize/dedupe
-→ PENDING → Counselor edit/categorize/approve/reject
-→ PUBLISHED card → canonical publisher link
-```
+Decommission:
 
-Store only bounded card metadata: title, summary/excerpt, source, canonical URL, publication/discovery/review fields, categories, and safely permitted image reference. Never mirror a third-party full article or bypass paywalls/auth/anti-bot controls. Enforce domain/redirect checks, timeouts, size limits, sanitization, and deduplication.
+- automated RSS/metadata discovery and scraping,
+- Counselor review/publication queues,
+- manual/internal/external Wellness Resources,
+- resource files, categories, and Student views,
+- discovery jobs and allowlists,
+- resource-based assistant retrieval,
+- related routes, UI, tests, seeds, and tables.
 
-## Manual resources
+## Safe removal order
 
-Counselor may create:
+1. Stop new discovery/publication writes.
+2. Remove or disable UI and API exposure.
+3. Decide whether data needs export; production deletion needs an approved plan.
+4. Remove jobs, services, tests, and configuration.
+5. Drop resource-only tables in a reversible Alembic migration after dependency checks.
+6. Regenerate OpenAPI and update references.
 
-- external link with validated metadata/URL,
-- internal Guidance Office article,
-- internal resource with one or more controlled durable attachments.
-
-A resource may have multiple categories. Tags are deferred. Manual-resource publication/review policy is pending.
-
-## Publication/access
-
-Statuses: `PENDING`, `PUBLISHED`, `REJECTED`, `DISABLED`. Only `PUBLISHED` resources appear to Students or the assistant. Counselor may later disable a publication. Guidance Staff has no access.
-
-## Required tests
-
-Allowlist/redirect/SSRF safety; malformed/oversized fetch; canonical dedupe; pending exclusion; review/status transitions; no full-body persistence; controlled attachment authorization; multiple categories; safe missing image.
-
-## Pending
-
-Final source allowlist, fetch cadence, manual publication rule, attachment limits, and image/license policy.
+This is a removal record, not a contract for new resource work.

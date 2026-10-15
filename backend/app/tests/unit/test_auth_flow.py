@@ -94,6 +94,21 @@ def counselor(db_session: Session) -> User:
 
 
 @pytest.fixture()
+def superadmin(db_session: Session) -> User:
+    user = User(
+        email="auth-super@example.edu",
+        password_hash=hash_password("super-pass-1"),
+        role_code="SUPERADMIN",
+        account_status="ACTIVE",
+        first_name="Super",
+        last_name="Admin",
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture()
 def client(db_session: Session) -> TestClient:
     """App wired to the rollback session (DB state never escapes a test)."""
     app = create_app(run_cleanup=False)
@@ -114,18 +129,18 @@ def _login(client: TestClient, identifier: str, password: str):
 # --------------------------------------------------------------- service
 
 
-def test_student_login_uses_student_number(db_session, student):
+def test_student_login_accepts_student_number_or_email(db_session, student):
     from app.core.exceptions import AppError
 
     svc = AuthService(db_session)
     by_number = svc.login("2026-AUTHTST", "student-pass-1")
     assert by_number[0].user_id == student.user_id
-    with pytest.raises(AppError, match="Incorrect identifier or password"):
-        svc.login("auth-student@example.edu", "student-pass-1")
+    # Pending Students may also sign in with their registration email
+    # (ADR-029 bootstrap; #7 email-or-student-number login).
+    by_email = svc.login("auth-student@example.edu", "student-pass-1")
+    assert by_email[0].user_id == student.user_id
     # Same-error rule: unknown identifier and wrong password are identical.
     for bad in [("nope", "student-pass-1"), ("2026-AUTHTST", "wrong")]:
-        from app.core.exceptions import AppError
-
         with pytest.raises(AppError) as ei:
             svc.login(*bad)
         assert ei.value.code == "INVALID_CREDENTIALS"
@@ -263,52 +278,27 @@ def test_logout_revokes_session_and_clears_cookie(client, student):
     assert client.get("/api/v1/auth/me").status_code == 401
 
 
-def test_role_gates_counselor_endpoints(client, student, counselor):
-    # Student session: every reviewer endpoint is 403.
-    login = _login(client, "2026-AUTHTST", "student-pass-1").json()
-    csrf = {"X-CSRF-Token": login["csrf_token"]}
-    for path, method, extra_headers in (
-        ("/api/v1/enrollment-verifications/pending", "GET", {}),
-        ("/api/v1/enrollment-verifications/history", "GET", {}),
-        ("/api/v1/enrollment-verifications/1/cor", "GET", {}),
-        ("/api/v1/enrollment-verifications/1/approve", "POST", csrf),
-        ("/api/v1/enrollment-verifications/1/reject", "POST", csrf),
-    ):
-        r = client.request(
-            method,
-            path,
-            headers=extra_headers,
-            json={"comment": "Synthetic review note"}
-            if path.endswith("/reject")
-            else None,
-        )
-        assert r.status_code == 403, f"{path} should be COUNSELOR-only"
+def test_role_gates_screening_endpoints(client, student, counselor):
+    # Student session: the Counselor-only directory/screening lists are denied.
+    _login(client, "2026-AUTHTST", "student-pass-1")
+    for path in ("/api/v1/cor-screenings", "/api/v1/accounts/students"):
+        r = client.get(path)
+        assert r.status_code == 403, path
         assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"
     # Counselor session: allowed.
     _login(client, "auth-counselor@example.edu", "counselor-pass-1")
-    r = client.get("/api/v1/enrollment-verifications/pending")
-    assert r.status_code == 200
+    for path in ("/api/v1/cor-screenings", "/api/v1/accounts/students"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert "items" in r.json()
 
 
-def test_csrf_required_on_unsafe_protected_actions(client, student, counselor):
-    _login(client, "auth-counselor@example.edu", "counselor-pass-1")
-    # No X-CSRF-Token header on POST approve → 403, never the action.
-    r = client.post("/api/v1/enrollment-verifications/1/approve")
+def test_csrf_required_on_unsafe_protected_actions(client, student):
+    _login(client, "2026-AUTHTST", "student-pass-1")
+    # No X-CSRF-Token header on POST confirm → 403, never the action.
+    r = client.post("/api/v1/cor-screenings/confirm", json={})
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "CSRF_TOKEN_INVALID"
-
-
-def test_student_cor_upload_uses_session_identity(client, student, tmp_path):
-    login = _login(client, "2026-AUTHTST", "student-pass-1").json()
-    pdf = tmp_path / "cor.pdf"
-    pdf.write_bytes(b"%PDF-1.4\n%session-upload-test\n%%EOF")
-    r = client.post(
-        "/api/v1/enrollment-verifications/cor",
-        files={"file": ("cor.pdf", pdf.read_bytes(), "application/pdf")},
-        headers={"X-CSRF-Token": login["csrf_token"]},
-    )
-    assert r.status_code == 201
-    assert r.json()["student_user_id"] == student.user_id
 
 
 # ------------------------------------------------------------ expiry rules
@@ -377,3 +367,294 @@ def test_raw_credentials_never_stored(db_session, student):
     assert len(session.csrf_token_hash) == 32
     assert session.token_hash == hashlib.sha256(raw_credential.encode()).digest()
     assert session.csrf_token_hash == hashlib.sha256(raw_csrf.encode()).digest()
+
+
+# --------------------------------------------- one-time COR verification token
+
+
+def _seed_screening(db_session, student, *, status="AWAITING_CONFIRMATION", token=None):
+    from datetime import datetime, timezone
+
+    from app.core.security import sha256_digest
+    from app.modules.cor_screening.models import CorScreening
+
+    profile = db_session.query(StudentProfile).filter_by(user_id=student.user_id).one()
+    screening = CorScreening(
+        student_user_id=student.user_id,
+        status=status,
+        format_template_version="test",
+        submitted_at=datetime.now(timezone.utc),
+        extracted_student_number="20231234-A",
+        extracted_first_name="Ana",
+        extracted_last_name="Santos",
+        extracted_section="A",
+        extracted_campus_id=profile.campus_id,
+        extracted_program_id=profile.program_id,
+        extracted_year_level=1,
+        extracted_academic_period="2026-2027",
+    )
+    if token:
+        screening.verification_token_hash = sha256_digest(token)
+        screening.verification_token_issued_at = datetime.now(timezone.utc)
+    db_session.add(screening)
+    db_session.flush()
+    return profile, screening
+
+
+def _confirm_payload(profile) -> dict:
+    return {
+        "student_number": "20231234-A",
+        "first_name": "Ana",
+        "last_name": "Santos",
+        "campus_id": profile.campus_id,
+        "program_id": profile.program_id,
+        "year_level": 1,
+        "section": "A",
+        "academic_period": "2026-2027",
+    }
+
+
+def _good_result():
+    from app.modules.cor_screening import screening as engine
+
+    return engine.ScreeningResult(
+        fields=engine.ExtractedFields(
+            student_no="20231234-A",
+            name="Ana Santos",
+            course="Test Program",
+            year="1",
+            section="A",
+            campus="Test Campus",
+            academic_period="2026-2027",
+        ),
+        method="text",
+        format_score=1.0,
+        extraction_confidence=1.0,
+        missing=[],
+        barcode_status=engine.BARCODE_DECODED,
+        barcode_symbology="QRCode",
+        barcode_payload="20231234-A",
+        barcode_format_valid=True,
+        barcode_student_number_match=True,
+    )
+
+
+def test_token_confirm_without_session_activates(client, db_session, student):
+    token = "cor-token-confirm"
+    profile, screening = _seed_screening(db_session, student, token=token)
+    r = client.post(
+        "/api/v1/cor-screenings/confirm",
+        json=_confirm_payload(profile),
+        headers={"X-COR-Token": token},
+    )
+    assert r.status_code == 200, r.text
+    db_session.refresh(student)
+    db_session.refresh(screening)
+    assert student.account_status == "ACTIVE"
+    assert screening.status == "PASSED"
+    # The one-time token dies on activation.
+    assert screening.verification_token_hash is None
+
+
+def test_invalid_token_fails_closed_even_with_a_valid_session(client, db_session, student):
+    profile, _screening = _seed_screening(db_session, student, token="real-token")
+    login = _login(client, "auth-student@example.edu", "student-pass-1").json()
+    r = client.post(
+        "/api/v1/cor-screenings/confirm",
+        json=_confirm_payload(profile),
+        headers={"X-CSRF-Token": login["csrf_token"], "X-COR-Token": "bogus-token"},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+
+
+def test_empty_token_header_fails_closed_even_with_a_valid_session(client, db_session, student):
+    """An empty X-COR-Token is a PRESENT (invalid) token, not 'no token'."""
+    profile, screening = _seed_screening(db_session, student, token="real-token")
+    login = _login(client, "auth-student@example.edu", "student-pass-1").json()
+    r = client.post(
+        "/api/v1/cor-screenings/confirm",
+        json=_confirm_payload(profile),
+        headers={"X-CSRF-Token": login["csrf_token"], "X-COR-Token": ""},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+    # The session path must not have activated the account.
+    db_session.refresh(student)
+    assert student.account_status == "PENDING_VERIFICATION"
+
+
+def test_token_reject_marks_needs_resubmission(client, db_session, student):
+    token = "cor-token-reject"
+    _profile, screening = _seed_screening(db_session, student, token=token)
+    r = client.post("/api/v1/cor-screenings/reject", headers={"X-COR-Token": token})
+    assert r.status_code == 200, r.text
+    db_session.refresh(screening)
+    assert screening.status == "NEEDS_RESUBMISSION"
+    assert screening.failure_reason_code == "REJECTED_BY_STUDENT"
+
+
+def test_token_resubmit_rotates_the_token(client, db_session, student, monkeypatch):
+    from app.core.security import sha256_digest
+    from app.modules.cor_screening import screening as engine
+
+    monkeypatch.setattr(engine, "ensure_dependencies", lambda settings: None)
+    monkeypatch.setattr(engine, "screen_pdf", lambda path, settings: _good_result())
+
+    token = "cor-token-resubmit"
+    _profile, screening = _seed_screening(
+        db_session, student, status="NEEDS_RESUBMISSION", token=token
+    )
+    r = client.post(
+        "/api/v1/cor-screenings/resubmit",
+        files={"file": ("cor.pdf", b"%PDF-1.4 test", "application/pdf")},
+        headers={"X-COR-Token": token},
+    )
+    assert r.status_code == 201, r.text
+    rotated = r.json()["verification_token"]
+    assert rotated and rotated != token
+    db_session.refresh(screening)
+    assert screening.verification_token_hash == sha256_digest(rotated)
+
+    # The old token is dead; the rotated token authorizes the next action.
+    reject = client.post("/api/v1/cor-screenings/reject", headers={"X-COR-Token": token})
+    assert reject.status_code == 401
+    assert reject.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+
+
+# --------------------------------------------------- profile edit requests
+
+
+def test_token_request_edit_activates_and_queues(client, db_session, student):
+    token = "cor-token-edit"
+    profile, _screening = _seed_screening(db_session, student, token=token)
+    payload = _confirm_payload(profile)
+    payload["last_name"] = "Reyes"
+
+    r = client.post(
+        "/api/v1/cor-screenings/request-edit",
+        json=payload,
+        headers={"X-COR-Token": token},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["change_request"] is not None
+    assert body["change_request"]["requested_last_name"] == "Reyes"
+    db_session.refresh(student)
+    assert student.account_status == "ACTIVE"
+
+
+def test_superadmin_reviews_pending_edit(client, db_session, student, superadmin):
+    token = "cor-token-edit-review"
+    profile, _screening = _seed_screening(db_session, student, token=token)
+    payload = _confirm_payload(profile)
+    payload["last_name"] = "Reyes"
+    created = client.post(
+        "/api/v1/cor-screenings/request-edit",
+        json=payload,
+        headers={"X-COR-Token": token},
+    )
+    assert created.status_code == 200, created.text
+
+    # Activation used the COR value; the requested change is only pending.
+    db_session.refresh(student)
+    assert student.last_name == "Santos"
+
+    login = _login(client, "auth-super@example.edu", "super-pass-1").json()
+    listing = client.get("/api/v1/profile-change-requests?status=PENDING").json()
+    assert listing["total"] == 1
+    change_request_id = listing["items"][0]["change_request"]["change_request_id"]
+
+    approved = client.post(
+        f"/api/v1/profile-change-requests/{change_request_id}/approve",
+        headers={"X-CSRF-Token": login["csrf_token"]},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "APPROVED"
+    db_session.refresh(student)
+    assert student.last_name == "Reyes"
+
+
+def test_counselor_cannot_review_profile_edits(client, counselor):
+    login = _login(client, "auth-counselor@example.edu", "counselor-pass-1").json()
+    r = client.get(
+        "/api/v1/profile-change-requests",
+        headers={"X-CSRF-Token": login["csrf_token"]},
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"
+
+
+def test_counselor_cannot_approve_a_profile_edit(client, db_session, student, counselor):
+    token = "cor-token-edit-counselor"
+    profile, _screening = _seed_screening(db_session, student, token=token)
+    payload = _confirm_payload(profile)
+    payload["last_name"] = "Reyes"
+    created = client.post(
+        "/api/v1/cor-screenings/request-edit",
+        json=payload,
+        headers={"X-COR-Token": token},
+    )
+    assert created.status_code == 200, created.text
+    change_request_id = created.json()["change_request"]["change_request_id"]
+
+    login = _login(client, "auth-counselor@example.edu", "counselor-pass-1").json()
+    r = client.post(
+        f"/api/v1/profile-change-requests/{change_request_id}/approve",
+        headers={"X-CSRF-Token": login["csrf_token"]},
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"
+
+
+def test_request_edit_rejects_invalid_token(client, db_session, student):
+    _seed_screening(db_session, student, token="real-token")
+    r = client.post(
+        "/api/v1/cor-screenings/request-edit",
+        json={
+            "student_number": "20231234-A",
+            "first_name": "Ana",
+            "last_name": "Santos",
+            "campus_id": 1,
+            "program_id": 1,
+            "year_level": 1,
+            "section": "A",
+            "academic_period": "2026-2027",
+        },
+        headers={"X-COR-Token": "bogus-token"},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+
+
+def test_token_reject_account_deletes_the_account(client, db_session, student):
+    from sqlalchemy import select
+
+    token = "cor-token-reject-account"
+    _seed_screening(db_session, student, token=token)
+    user_id = student.user_id
+
+    r = client.post(
+        "/api/v1/cor-screenings/reject-account", headers={"X-COR-Token": token}
+    )
+    assert r.status_code == 204
+    assert db_session.scalars(select(User).where(User.user_id == user_id)).first() is None
+
+
+def test_reject_account_requires_a_valid_token(client, db_session, student):
+    _seed_screening(db_session, student, token="real-token")
+    r = client.post(
+        "/api/v1/cor-screenings/reject-account", headers={"X-COR-Token": "bogus"}
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "INVALID_VERIFICATION_TOKEN"
+
+
+def test_counselor_cannot_reject_an_account(client, counselor):
+    login = _login(client, "auth-counselor@example.edu", "counselor-pass-1").json()
+    r = client.post(
+        "/api/v1/cor-screenings/reject-account",
+        headers={"X-CSRF-Token": login["csrf_token"]},
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"

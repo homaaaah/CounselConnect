@@ -17,16 +17,41 @@ Web authentication uses opaque sessions in the HttpOnly `counselconnect_session`
 - Revoked, idle-expired, and absolute-expired sessions fail authentication; a new login revokes the user's other live sessions (single-session policy).
 - Logout, password reset, account restriction, and account disablement must revoke sessions (one or all for the user).
 - The table stores no IP history, device fingerprints, COR data, message content, or SOS answers.
-- Staff email lookup takes precedence over colliding student numbers; new registrations reject collisions with existing staff identifiers. Students use their student number, not their personal email, to sign in.
-- `/auth/csrf` restores both user and CSRF state before the reviewer UI mounts. CSRF is derived with domain-separated HMAC from the random session credential, so recovery does not invalidate other tabs; only its SHA-256 digest is stored. Legacy random CSRF tokens migrate on recovery. `/auth/me` and `/auth/csrf` do not renew idle activity. Auth responses use `Cache-Control: no-store`.
+- Staff email lookup takes precedence over colliding student numbers; new registrations reject collisions with existing staff identifiers. `ACTIVE` Students sign in with their student number; until confirmation an unverified Student signs in with their registration email (ADR-029).
+- `/auth/csrf` restores both user and CSRF state before protected UI mounts. CSRF is derived with domain-separated HMAC from the random session credential, so recovery does not invalidate other tabs; only its SHA-256 digest is stored. Legacy random CSRF tokens migrate on recovery. `/auth/me` and `/auth/csrf` do not renew idle activity. Auth responses use `Cache-Control: no-store`.
 - Login is allowed for `ACTIVE`, `PENDING_VERIFICATION`, and `VERIFICATION_EXPIRED` accounts (pending/expired students must still reach account/COR re-verification); feature-level authorization still requires `ACTIVE` where the feature docs say so.
 - Password-reset credentials will be hashed, single-use, 30-minute expiry, and a successful reset revokes all active sessions without revealing account existence (flow in its own task; no Remember Me in v1).
+
+## One-time COR verification token (ADR-031 — implemented)
+
+Registration no longer signs the Student in. `POST /accounts/register/student-with-cor` and `POST /cor-screenings/resubmit` return a single-use `verification_token`; the client keeps it in memory and sends it in the `X-COR-Token` header to authorize `confirm`, `reject`, and `resubmit` for that screening only.
+
+- The token is a 256-bit random value (`secrets.token_urlsafe(32)`); only its SHA-256 digest is stored (`cor_screenings.verification_token_hash BINARY(32)` plus `verification_token_issued_at`). Verification uses a constant-time digest compare. Raw tokens are never persisted, logged, or placed in URLs or error messages.
+- It shares the seven-day evidence window and is rotated on every re-upload, destroyed on activation (`PASSED`), and destroyed when the screening reaches `FAILED` at expiry (both on resolve and in the cleanup worker). An expired token also retires its screening.
+- Missing, unknown, tampered, expired, or rotated-away tokens fail closed with `401 INVALID_VERIFICATION_TOKEN` and a generic message. A present-but-invalid token never falls back to session authentication.
+- Token-authorized requests are cookie-less, so CSRF does not apply to them; session-authenticated requests keep the existing CSRF rule. Token-bearing responses are `Cache-Control: no-store`.
+- Residual: closing the registration modal before acting loses the token by design (it is memory-only); the Student recovers through the signed-in `#registration` session path.
+
+## Profile-edit approval (ADR-032 — implemented)
+
+A Student may request changes to names, `year_level`, and `section` during verification; the student number, academic period, and a mapped campus/program can never be requested (`422 FIELD_NOT_EDITABLE`). The Student's own submit activates the account with the COR-verified values; the requested change is stored `PENDING` in `profile_change_requests` and applied **only** when an active Superadmin approves it.
+
+- Only an active Superadmin may list (`GET /profile-change-requests`) or decide (`approve`/`reject`); anyone else gets `403 FORBIDDEN_ROLE`. Reject requires a reason.
+- One pending request per Student; a new screening auto-rejects any pending request as `SUPERSEDED_BY_NEW_COR`.
+- Approving applies only names/year_level/section; no other field is touched. Decisions are audited (`profile_change_requested`/`_approved`/`_rejected`); no Student notification in v1.
+
+## Registration failure isolation and cancellation (ADR-033 — implemented)
+
+A **technical** screening failure during registration (`derive_outcome == FAILED`) creates no account: the COR is discarded and the API returns `503 SCREENING_FAILED`, leaving the email/student number free. A `PENDING_VERIFICATION` Student may also cancel their own registration with `POST /cor-screenings/reject-account` (Student session or `X-COR-Token`): it deletes the user row, its screenings and private COR files, sessions, profile, and any pending profile-edit requests, frees the email/student number, and records one `account_rejected` audit event. Any other status (including a previously active account that may own counseling history) returns `409 ACCOUNT_NOT_REJECTABLE`.
 
 ## Sensitive data matrix
 
 | Data | Storage/retention | Key restriction |
 |---|---|---|
 | Login sessions | digest-only rows; deleted when expired/revoked or user deleted | no raw credentials in storage/logs/API; heartbeats never renew activity |
+| COR verification token | SHA-256 digest only on `cor_screenings`; expires with the 7-day window; destroyed on activation/TTL | returned once in the register/resubmit body; set `X-COR-Token`; never logged or in URLs; `no-store` |
+| Profile-edit request | requested names/year_level/section on `profile_change_requests`; applied only on Superadmin approval | Superadmin-only review/decision; excluded fields rejected; audited; no notification |
+| Registration cancellation | deleted on Student request (pre-active only); email/student number freed | non-active only; audited `account_rejected`; private COR bytes removed |
 | Current COR | private temporary store; decision or seven-day TTL | no MySQL blob/public URL/backups beyond need |
 | Appointments | authorized durable records | owner/Counselor scope; mode compatibility; Counselor-only campus-location mutation |
 | Messages | authorized store; bodies purged 30 days after close | no recordings/transcripts/summaries/log bodies |
@@ -47,10 +72,10 @@ Web authentication uses opaque sessions in the HttpOnly `counselconnect_session`
 
 File deletion is outside a DB rollback: persist cleanup state, detect failure, retry/alert, and never falsely report deletion. Data-minimizing architecture supports privacy compliance but does not alone prove legal compliance; deployed notices, lawful purpose, safeguards, retention, and disposal still matter.
 
-COR decisions commit before deletion. Failed deletions retain `cleanup_state=FAILED` metadata for the application cleanup worker; logs contain only outcome codes and internal record IDs. Private PDF responses use `Cache-Control: no-store`; the reviewer releases preview blob URLs after decisions and on unmount. See `REGISTRATION_VERIFICATION.md` for expiry and retry operation.
+COR confirmation/resubmission commits before deletion. Failed deletions retain `cleanup_state=FAILED` metadata for the application cleanup worker; logs contain only outcome codes and internal record IDs. Raw OCR text and raw barcode payloads are never persisted or logged (payload SHA-256 digest only). See `REGISTRATION_VERIFICATION.md` for expiry and retry operation.
 
 Validation errors return only field locations, error types, and safe messages. Submitted inputs, passwords, and validator context are excluded. Database tests require a separate explicit test URL, use a unique disposable schema, and override application database access; their file stores and SMTP settings are isolated as well.
 
 ## Priority tests
 
-Horizontal/vertical authorization; pending/expired account block; Staff assignment isolation; malicious upload/direct path; cleanup failure/TTL; appointment/message ownership; appointment mode/slot compatibility; missing campus-location denial; Counselor-only campus-location mutation; pre-start/unconfirmed/cancelled online-chat denial; participant mismatch; face-to-face conversation denial; appointment/SOS link isolation; CMS injection; SSRF/unsafe redirect; raw-media network/storage prevention; SOS independence from cue; sensitive-log review.
+Horizontal/vertical authorization; pending/expired account block; Staff assignment isolation; malicious upload/direct path; cleanup failure/TTL; appointment/message ownership; appointment mode/slot compatibility; missing campus-location denial; Counselor-only campus-location mutation; pre-start/unconfirmed/cancelled online-chat denial; participant mismatch; face-to-face conversation denial; appointment/SOS link isolation; CMS injection; SSRF/unsafe redirect; raw-media network/storage prevention; SOS independence from cue; one-time COR token fail-closed (invalid/empty/expired/rotated, no session fallback, digest-only, destroyed on activation); profile-edit approval (Superadmin-only, excluded fields rejected, one-pending, supersede); registration failure isolation (no account on technical FAILED) and self-cancellation (deletes all rows/files, frees identity, audited); sensitive-log review.

@@ -1,10 +1,12 @@
 # Scheduled Live Chat implementation plan
 
+> **Historical implementation record:** This plan documents the implemented scheduled text-chat foundation. The approved target now also includes appointment concerns, WebRTC audio/video, counseling-session records, and revised roles. Use `APPOINTMENT_SCHEDULING.md`, `AUDIO_VIDEO_CALLS.md`, `COUNSELING_SESSION_RECORDS.md`, and ADR-029–ADR-036 for new work. Do not reintroduce Guidance Staff or Wellness Resource dependencies.
+
 Date: 2026-09-16. Status: implementation proposal; no application changes made.
 
 ## 1. Authoritative scope
 
-Implement the supplied scheduled online counseling flow with the second supplied document taking precedence wherever they differ. Build appointment-linked, text-only chat for the owning Student and assigned Counselor. Guidance Staff has no access.
+Implement the supplied scheduled online counseling flow with the second supplied document taking precedence wherever they differ. Build appointment-linked, text-only chat for the owning Student and assigned Counselor. Other Counselors, Superadmin, and legacy Guidance Staff have no participant access.
 
 Exclude General Chat, SOS changes, expression processing, attachments, typing indicators, read receipts, voice/video, email/SMS, a general notification subsystem, Redis/Celery, multi-worker scaling, and a new routing library.
 
@@ -154,7 +156,7 @@ Implement in dependency order: contracts → migration → REST lifecycle/appoin
 | Area | Required evidence |
 |---|---|
 | Time boundaries | Just before/exactly at T−30, T, E+G; configurable grace; late join; clock skew; Manila display |
-| Access | Owning Student/assigned Counselor only; Guidance Staff/other users denied; pending/face-to-face/terminal denial; expired/revoked sessions; post-close Student denial and Counselor read-only |
+| Access | Owning Student/assigned Counselor only; other Counselors, Superadmin, legacy Guidance Staff, and other users denied; pending/face-to-face/terminal denial; expired/revoked sessions; post-close Student denial and Counselor read-only |
 | Concurrency | Simultaneous joins create one row; join versus unused deletion/reschedule/cancel; send versus close/timeout; unique ordered sequences under concurrent sends |
 | Durability | Same-ID safe retry, different body/sender conflict, commit failure emits nothing, crash/lost broadcast repaired by REST catch-up |
 | Scheduling | Student 24-hour boundary, Counselor exemption, entry/message activity blocks changes, lobby does not, mode-only validation, reset reminders, failed replacement preserves reservation |

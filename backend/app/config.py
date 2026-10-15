@@ -48,6 +48,20 @@ class Settings(BaseSettings):
     # --- COR upload (PDF-only limit; policy ratified by ADR-024) ---
     cor_max_mb: int = 10
 
+    # --- Automated COR screening (ADR-029) ---
+    # When disabled the registration-with-COR endpoint fails closed with
+    # REGISTRATION_DISABLED; it never auto-activates an account.
+    cor_screening_enabled: bool = True
+    cor_format_pass_score: float = Field(default=0.60, ge=0.0, le=1.0)
+    cor_extraction_pass_score: float = Field(default=0.60, ge=0.0, le=1.0)
+    cor_template_version: str = "ucc-registration-v1"
+    # External document-processing binaries. Override with absolute paths
+    # on deployments where they are not on PATH. Missing binaries make
+    # screening fail closed (never auto-activate).
+    pdftotext_path: str = "pdftotext"
+    pdftoppm_path: str = "pdftoppm"
+    tesseract_path: str = "tesseract"
+
     # --- Email notifications (Gmail SMTP; skipped silently when unset) ---
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

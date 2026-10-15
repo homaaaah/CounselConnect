@@ -24,7 +24,7 @@ def create_app(*, run_cleanup: bool = True) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        from app.modules.enrollment_verification.cleanup import cleanup_loop
+        from app.modules.cor_screening.cleanup import cleanup_loop
         from app.modules.messaging.cleanup import maintenance_loop
 
         stop = Event()

@@ -67,12 +67,16 @@ class AuthService(BaseService[User]):
     def _find_user_by_identifier(self, identifier: str) -> User | None:
         """Staff email takes precedence over any colliding student number.
 
-        Students authenticate by student number (ADR-005/019); a public
-        registration must never shadow a staff member's login identifier.
+        Staff (Counselor, Guidance Staff, Superadmin) sign in with email.
+        Students sign in with their registered email or their student number
+        (ADR-005/019, ADR-030). A public registration must never shadow a staff
+        member's login identifier.
         """
-        staff = self.accounts.find_user_by_email(identifier)
-        if staff is not None and staff.role_code in ("GUIDANCE_STAFF", "COUNSELOR"):
-            return staff
+        account = self.accounts.find_user_by_email(identifier)
+        if account is not None and account.role_code in ("GUIDANCE_STAFF", "COUNSELOR", "SUPERADMIN"):
+            return account
+        if account is not None and account.role_code == "STUDENT":
+            return account
         profile = self.accounts.find_student_profile_by_number(identifier)
         if profile is not None:
             user = self.accounts.get(profile.user_id)

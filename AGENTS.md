@@ -12,8 +12,8 @@ Do not preload all project docs. For API, schema, model, migration, or cross-sta
 ## Hard boundaries
 
 - Stack: JavaScript (React) + Vite + TailwindCSS; FastAPI; MySQL 8.4 LTS; SQLAlchemy 2.0 + PyMySQL; Alembic; CapacitorJS; modular monolith.
-- Roles: `STUDENT`, `GUIDANCE_STAFF`, `COUNSELOR`. There is no Administrator role; Counselor holds the highest authority. Guidance Staff is limited to assigned COR verification.
-- Current COR is the only enrollment evidence. Store it privately and temporarily; delete it after a decision or the seven-day pending TTL.
+- Roles: `STUDENT`, `GUIDANCE_STAFF`, `COUNSELOR`, and the narrow `SUPERADMIN` recovery role. Counselor holds the highest authority for counseling operations; Superadmin handles only account recovery/operational exceptions and never declares a COR authentic or approves a registration. Guidance Staff has no COR duty (verification is automated — ADR-029).
+- Current COR is the only enrollment evidence. Store it privately and temporarily; delete it after confirmation/resubmission or the seven-day pending TTL.
 - Facial-expression processing is optional, local-device only, session-only, non-diagnostic, and never affects SOS logic. No raw imagery, embeddings, or history.
 - Automated wellness discoveries require Counselor review and store limited metadata/canonical links, not mirrored full articles.
 - CMS data cannot alter code, permissions, secrets, configuration, or AI instructions.

@@ -292,9 +292,6 @@ export default function LandingPage({ onSignedIn }) {
               <i className="fa-solid fa-arrow-up"></i>
             </a>
           </div>
-          <p className="dev-review-link">
-            <a href="#review">Counselor review console (dev)</a>
-          </p>
         </div>
       </footer>
 

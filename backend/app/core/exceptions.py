@@ -10,12 +10,15 @@ never contain secrets.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 
 class AppError(Exception):
@@ -88,7 +91,10 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(_: Request, __: Exception) -> JSONResponse:
-        # Safe generic response: never leak internals or stack traces.
+        # Log the real cause server-side (never sent to the client) so opaque
+        # 500s are diagnosable; the response stays generic to avoid leaking
+        # internals.
+        logger.exception("unhandled_request_error")
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=jsonable_encoder(

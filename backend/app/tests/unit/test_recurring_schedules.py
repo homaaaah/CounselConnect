@@ -70,7 +70,7 @@ def test_migration_shape_and_downgrade_preserves_existing_slots(mysql_test_engin
     url = _test_url()
     schema = f"counselconnect_test_{_uuid.uuid4().hex}"
     assert _re.fullmatch(r"counselconnect_test_[0-9a-f]{32}", schema)
-    admin = create_engine(url.set(database="mysql"), poolclass=NullPool, connect_args={"connect_timeout": 5})
+    admin = create_engine(url.set(database=""), poolclass=NullPool, connect_args={"connect_timeout": 5})
     engine = None
     created = False
     try:

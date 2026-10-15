@@ -2,12 +2,13 @@
  * AppNavBar — signed-in app shell navigation (role-aware).
  *
  * Counselor (2026-09-13): fixed left sidebar — Dashboard (#home),
- *   Users (#review, the COR verification console), Library, Appointments
- *   (#appointments), Settings. Library and Settings have no routes yet,
- *   so they render as non-navigable "coming soon" placeholders. On
- *   mobile/tablet the sidebar becomes a hamburger drawer.
+ *   Users (#users), Library, Appointments (#appointments), Settings.
+ *   Library and Settings have no routes yet, so they render as
+ *   non-navigable "coming soon" placeholders. On mobile/tablet the sidebar
+ *   becomes a hamburger drawer.
  * Student / Guidance Staff: top bar as before (Home, Appointments for
- *   active students, Messages/Resources coming soon).
+ *   active students, Messages/Resources coming soon). Students whose COR is
+ *   pending or expired get a "Verify enrollment" link (#registration).
  *
  * Role visibility here is usability only; backend authorization
  * is authoritative (docs/USER_ROLES.md). Real session expiry is
@@ -22,15 +23,23 @@ import { useEffect, useState } from "react";
 const COMING_SOON = ["Messages", "Resources"];
 
 const roleLabel = (code) =>
-  code === "COUNSELOR" ? "Counselor" : code === "GUIDANCE_STAFF" ? "Guidance Staff" : "Student";
+  code === "COUNSELOR" ? "Counselor"
+    : code === "GUIDANCE_STAFF" ? "Guidance Staff"
+      : code === "SUPERADMIN" ? "Superadmin"
+        : "Student";
 
 /** Counselor sidebar items; "soon" entries have no route yet. */
 const COUNSELOR_NAV = [
   { label: "Dashboard", href: "#home", icon: "fa-gauge-high" },
-  { label: "Users", href: "#review", icon: "fa-users" },
+  { label: "Users", href: "#users", icon: "fa-users" },
   { label: "Library", icon: "fa-book-open", soon: true },
   { label: "Appointments", href: "#appointments", icon: "fa-calendar" },
   { label: "Settings", icon: "fa-gear", soon: true },
+];
+
+/** Superadmin (ADR-030): account recovery/operational exceptions only. */
+const SUPERADMIN_NAV = [
+  { label: "Users", href: "#users", icon: "fa-users" },
 ];
 
 export default function AppNavBar({ user, page, onSignOut }) {
@@ -43,15 +52,16 @@ export default function AppNavBar({ user, page, onSignOut }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  if (user.role_code === "COUNSELOR") {
-    return <CounselorShell user={user} page={page} onSignOut={onSignOut} open={menuOpen} setOpen={setMenuOpen} />;
+  if (user.role_code === "COUNSELOR" || user.role_code === "SUPERADMIN") {
+    const nav = user.role_code === "SUPERADMIN" ? SUPERADMIN_NAV : COUNSELOR_NAV;
+    return <CounselorShell user={user} page={page} onSignOut={onSignOut} open={menuOpen} setOpen={setMenuOpen} nav={nav} />;
   }
   return <TopBarNav user={user} page={page} onSignOut={onSignOut} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />;
 }
 
 /* ------------------------ Counselor sidebar ------------------------ */
 
-function SidebarContent({ user, page, onSignOut, onNavigate }) {
+function SidebarContent({ user, page, onSignOut, onNavigate, nav }) {
   return <div className="flex h-full flex-col">
     <div className="border-b border-slate-200 px-5 py-4">
       <a href="#home" className="block text-base font-semibold tracking-tight text-emerald-800">CounselConnect</a>
@@ -59,8 +69,8 @@ function SidebarContent({ user, page, onSignOut, onNavigate }) {
         {roleLabel(user.role_code)}
       </span>
     </div>
-    <nav aria-label="Counselor navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-      {COUNSELOR_NAV.map((nav) => {
+    <nav aria-label="App navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      {nav.map((nav) => {
         if (nav.soon) return <span key={nav.label} aria-disabled="true" title="Coming soon"
           className="flex cursor-default items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-300">
           <i className={"fa-solid " + nav.icon + " w-4 text-center"} aria-hidden="true"></i>
@@ -89,7 +99,7 @@ function SidebarContent({ user, page, onSignOut, onNavigate }) {
   </div>;
 }
 
-function CounselorShell({ user, page, onSignOut, open, setOpen }) {
+function CounselorShell({ user, page, onSignOut, open, setOpen, nav }) {
   return <>
     {/* Mobile/tablet top bar with the drawer toggle */}
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white lg:hidden">
@@ -112,12 +122,12 @@ function CounselorShell({ user, page, onSignOut, open, setOpen }) {
     <aside id="counselor-sidebar" aria-label="Counselor sidebar"
       className={"fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-200 lg:hidden " +
         (open ? "translate-x-0" : "-translate-x-full pointer-events-none")}>
-      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => setOpen(false)} />
+      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => setOpen(false)} nav={nav} />
     </aside>
 
     {/* Desktop sidebar */}
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-white lg:block">
-      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => {}} />
+      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => {}} nav={nav} />
     </aside>
   </>;
 }
@@ -127,7 +137,9 @@ function CounselorShell({ user, page, onSignOut, open, setOpen }) {
 function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const links = [{ label: "Home", href: "#home" }];
-  if (user.role_code === "GUIDANCE_STAFF") links.push({ label: "Verify students", href: "#review" });
+  const needsVerification = user.role_code === "STUDENT"
+    && ["PENDING_VERIFICATION", "VERIFICATION_EXPIRED"].includes(user.account_status);
+  if (needsVerification) links.push({ label: "Verify enrollment", href: "#registration" });
   const activeStudent = user.role_code === "STUDENT" && user.account_status === "ACTIVE";
   if (activeStudent) links.push({ label: "Appointments", href: "#appointments" });
   const showComingSoon = user.role_code === "STUDENT";
@@ -150,7 +162,7 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
 
   const bannerText = user.role_code !== "STUDENT" || user.account_status === "ACTIVE" ? null
     : user.account_status === "PENDING_VERIFICATION"
-      ? "Verification pending — scheduling unlocks after COR approval."
+      ? "Verification pending — confirm your COR details to unlock scheduling."
       : user.account_status === "VERIFICATION_EXPIRED"
         ? "Enrollment expired — re-verify your COR to restore scheduling."
         : "Scheduling is locked for your account status.";

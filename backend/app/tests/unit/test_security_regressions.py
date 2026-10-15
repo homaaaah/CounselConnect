@@ -49,21 +49,26 @@ def test_validation_errors_never_echo_password_or_body(client):
         ("section", 50),
     ],
 )
-def test_json_and_multipart_share_registration_limits(client, field, limit):
+def test_json_registration_enforces_field_limits(client, field, limit):
     data = {**registration_payload(), field: "x" * (limit + 1)}
-    json_response = client.post("/api/v1/accounts/register/student", json=data)
-    form_response = client.post(
+    response = client.post("/api/v1/accounts/register/student", json=data)
+    assert response.status_code == 422
+    assert data["password"] not in response.text
+    assert response.json()["error"]["details"]["fields"][0]["loc"] == [
+        "body",
+        field,
+    ]
+
+
+def test_multipart_screening_registration_validates_credentials(client):
+    secret = "synthetic-password-echo-guard"
+    response = client.post(
         "/api/v1/accounts/register/student-with-cor",
-        data=data,
+        data={"email": "not-an-email", "password": secret},
         files={"file": ("cor.pdf", b"%PDF-test", "application/pdf")},
     )
-    for response in (json_response, form_response):
-        assert response.status_code == 422
-        assert data["password"] not in response.text
-        assert response.json()["error"]["details"]["fields"][0]["loc"] == [
-            "body",
-            field,
-        ]
+    assert response.status_code == 422
+    assert secret not in response.text
 
 
 def test_plain_client_has_no_application_database(app):
@@ -116,14 +121,38 @@ def test_student_number_cannot_shadow_staff_email(role):
     service.accounts.find_student_profile_by_number.assert_not_called()
 
 
-def test_student_email_is_not_a_staff_login():
+def test_student_can_sign_in_with_registered_email():
+    """ADR-030: students may use their registered email (or student number)."""
     service = AuthService(Session())
     service.accounts = Mock()
     service.accounts.find_user_by_email.return_value = SimpleNamespace(
-        role_code="STUDENT"
+        user_id=2, role_code="STUDENT", account_status="ACTIVE"
     )
     service.accounts.find_student_profile_by_number.return_value = None
-    assert service._find_user_by_identifier("student@example.edu") is None
+    found = service._find_user_by_identifier("student@example.edu")
+    assert found is not None and found.role_code == "STUDENT"
+
+
+def test_pending_student_bootstraps_with_registration_email():
+    """ADR-029: an unverified Student has no confirmed student number yet."""
+    service = AuthService(Session())
+    service.accounts = Mock()
+    service.accounts.find_user_by_email.return_value = SimpleNamespace(
+        role_code="STUDENT", account_status="PENDING_VERIFICATION"
+    )
+    found = service._find_user_by_identifier("pending@example.edu")
+    assert found.role_code == "STUDENT"
+
+
+def test_active_student_can_use_email_login():
+    service = AuthService(Session())
+    service.accounts = Mock()
+    service.accounts.find_user_by_email.return_value = SimpleNamespace(
+        role_code="STUDENT", account_status="ACTIVE"
+    )
+    service.accounts.find_student_profile_by_number.return_value = None
+    found = service._find_user_by_identifier("active@example.edu")
+    assert found is not None and found.role_code == "STUDENT"
 
 
 def test_unknown_identifier_verifies_once_without_hashing_again(monkeypatch):

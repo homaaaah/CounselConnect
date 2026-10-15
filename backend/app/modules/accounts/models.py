@@ -57,7 +57,7 @@ class User(Base):
         UniqueConstraint("email", name="uq_users_email"),
         Index("idx_users_role_status", "role_code", "account_status"),
         CheckConstraint(
-            "role_code IN ('STUDENT', 'GUIDANCE_STAFF', 'COUNSELOR')",
+            "role_code IN ('STUDENT', 'GUIDANCE_STAFF', 'COUNSELOR', 'SUPERADMIN')",
             name="chk_users_role",
         ),
         CheckConstraint(
