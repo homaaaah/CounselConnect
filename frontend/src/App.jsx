@@ -90,9 +90,6 @@ function AppShell() {
     return <p role="status" className="p-6">Restoring your session…</p>;
   }
 
-  // Counselor shell: fixed left sidebar on desktop — page content shifts
-  // right by the sidebar width (16rem) so nothing hides underneath it.
-  const counselorShell = ["COUNSELOR", "SUPERADMIN"].includes(session.user?.role_code);
   const sessionAppointmentId = page.startsWith("session/") ? Number(page.slice("session/".length)) : null;
 
   return (
@@ -107,7 +104,7 @@ function AppShell() {
           }}
         />
       )}
-      <div className={counselorShell ? "lg:ml-64" : undefined}>
+      <div>
         {page === "login" && <LoginPage onSignedIn={session.accept} />}
         {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
         {page === "register" && <RegisterPage />}

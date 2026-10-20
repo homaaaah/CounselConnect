@@ -1,14 +1,15 @@
 /**
  * AppNavBar — signed-in app shell navigation (role-aware).
  *
- * Counselor (2026-09-13): fixed left sidebar — Dashboard (#home),
- *   Users (#users), Library, Appointments (#appointments), Settings.
- *   Library and Settings have no routes yet, so they render as
- *   non-navigable "coming soon" placeholders. On mobile/tablet the sidebar
- *   becomes a hamburger drawer.
- * Student / Guidance Staff: top bar as before (Home, Appointments for
- *   active students, Messages/Resources coming soon). Students whose COR is
- *   pending or expired get a "Verify enrollment" link (#registration).
+ * All signed-in roles share one top-bar header. Only the links and the
+ * "coming soon" entries differ by role:
+ *   - Counselor: Dashboard (#home), Appointments (#appointments); Sessions,
+ *     Schedule and History have no routes yet, so they render as
+ *     non-navigable "coming soon" placeholders.
+ *   - Superadmin (ADR-030): Users only.
+ *   - Guidance Staff: Home only.
+ *   - Student: Home (#home), Appointments (#appointments); History and
+ *     Session render as non-navigable "coming soon" placeholders.
  *
  * Role visibility here is usability only; backend authorization
  * is authoritative (docs/USER_ROLES.md). Real session expiry is
@@ -18,29 +19,42 @@
 
 import { useEffect, useState } from "react";
 
-// Roadmap entries: rendered as non-navigable "coming soon" placeholders
-// (no href, aria-disabled) until their features ship.
-const COMING_SOON = ["Messages", "Resources"];
-
 const roleLabel = (code) =>
   code === "COUNSELOR" ? "Counselor"
     : code === "GUIDANCE_STAFF" ? "Guidance Staff"
       : code === "SUPERADMIN" ? "Superadmin"
         : "Student";
 
-/** Counselor sidebar items; "soon" entries have no route yet. */
-const COUNSELOR_NAV = [
-  { label: "Dashboard", href: "#home", icon: "fa-gauge-high" },
-  { label: "Users", href: "#users", icon: "fa-users" },
-  { label: "Library", icon: "fa-book-open", soon: true },
-  { label: "Appointments", href: "#appointments", icon: "fa-calendar" },
-  { label: "Settings", icon: "fa-gear", soon: true },
-];
-
-/** Superadmin (ADR-030): account recovery/operational exceptions only. */
-const SUPERADMIN_NAV = [
-  { label: "Users", href: "#users", icon: "fa-users" },
-];
+/**
+ * Role-based navigation for the shared top bar. `links` navigate; `comingSoon`
+ * labels render as non-navigable placeholders until their features ship.
+ */
+function roleNav(user) {
+  if (user.role_code === "COUNSELOR") {
+    return {
+      links: [
+        { label: "Dashboard", href: "#home" },
+        { label: "Appointments", href: "#appointments" },
+      ],
+      // No dedicated routes yet — shown in the nav but inactive for now.
+      comingSoon: ["Sessions", "Schedule", "History"],
+    };
+  }
+  if (user.role_code === "SUPERADMIN") {
+    return { links: [{ label: "Users", href: "#users" }], comingSoon: [] };
+  }
+  if (user.role_code === "GUIDANCE_STAFF") {
+    return { links: [{ label: "Home", href: "#home" }], comingSoon: [] };
+  }
+  return {
+    links: [
+      { label: "Home", href: "#home" },
+      { label: "Appointments", href: "#appointments" },
+    ],
+    // No dedicated routes yet — shown in the nav but inactive for now.
+    comingSoon: ["History", "Session"],
+  };
+}
 
 export default function AppNavBar({ user, page, onSignOut }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -52,97 +66,14 @@ export default function AppNavBar({ user, page, onSignOut }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  if (user.role_code === "COUNSELOR" || user.role_code === "SUPERADMIN") {
-    const nav = user.role_code === "SUPERADMIN" ? SUPERADMIN_NAV : COUNSELOR_NAV;
-    return <CounselorShell user={user} page={page} onSignOut={onSignOut} open={menuOpen} setOpen={setMenuOpen} nav={nav} />;
-  }
   return <TopBarNav user={user} page={page} onSignOut={onSignOut} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />;
 }
 
-/* ------------------------ Counselor sidebar ------------------------ */
-
-function SidebarContent({ user, page, onSignOut, onNavigate, nav }) {
-  return <div className="flex h-full flex-col">
-    <div className="border-b border-slate-200 px-5 py-4">
-      <a href="#home" className="block text-base font-semibold tracking-tight text-emerald-800">CounselConnect</a>
-      <span className="mt-1.5 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        {roleLabel(user.role_code)}
-      </span>
-    </div>
-    <nav aria-label="App navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-      {nav.map((nav) => {
-        if (nav.soon) return <span key={nav.label} aria-disabled="true" title="Coming soon"
-          className="flex cursor-default items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-300">
-          <i className={"fa-solid " + nav.icon + " w-4 text-center"} aria-hidden="true"></i>
-          {nav.label}
-          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>
-        </span>;
-        const current = nav.href === "#" + page;
-        return <a key={nav.href} href={nav.href} onClick={onNavigate}
-          {...(current ? { "aria-current": "page" } : {})}
-          className={"flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors " +
-            (current
-              ? "bg-counseling-bg-tint text-counseling-active-focus"
-              : "text-zinc-900 hover:bg-slate-50 hover:text-counseling-active-focus")}>
-          <i className={"fa-solid " + nav.icon + " w-4 text-center"} aria-hidden="true"></i>
-          {nav.label}
-        </a>;
-      })}
-    </nav>
-    <div className="border-t border-slate-200 px-5 py-4">
-      <p className="text-sm text-slate-700">{user.first_name} {user.last_name}</p>
-      <button type="button" onClick={onSignOut}
-        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
-        Sign out
-      </button>
-    </div>
-  </div>;
-}
-
-function CounselorShell({ user, page, onSignOut, open, setOpen, nav }) {
-  return <>
-    {/* Mobile/tablet top bar with the drawer toggle */}
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white lg:hidden">
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <button type="button" aria-expanded={open} aria-controls="counselor-sidebar"
-          aria-label={open ? "Close menu" : "Open menu"} onClick={() => setOpen(!open)}
-          className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-600 hover:bg-slate-50">
-          <i className={open ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>
-        </button>
-        <a href="#home" className="text-base font-semibold tracking-tight text-emerald-800">CounselConnect</a>
-        <button type="button" onClick={onSignOut}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
-          Sign out
-        </button>
-      </div>
-    </header>
-
-    {/* Mobile/tablet drawer */}
-    {open && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" aria-hidden="true" onClick={() => setOpen(false)}></div>}
-    <aside id="counselor-sidebar" aria-label="Counselor sidebar"
-      className={"fixed inset-y-0 left-0 z-50 w-64 transform border-r border-slate-200 bg-white transition-transform duration-200 lg:hidden " +
-        (open ? "translate-x-0" : "-translate-x-full pointer-events-none")}>
-      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => setOpen(false)} nav={nav} />
-    </aside>
-
-    {/* Desktop sidebar */}
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-200 bg-white lg:block">
-      <SidebarContent user={user} page={page} onSignOut={onSignOut} onNavigate={() => {}} nav={nav} />
-    </aside>
-  </>;
-}
-
-/* ---------------- Top bar (Student / Guidance Staff) ---------------- */
+/* ---------------- Top bar (all signed-in roles) ---------------- */
 
 function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
-  const links = [{ label: "Home", href: "#home" }];
-  const needsVerification = user.role_code === "STUDENT"
-    && ["PENDING_VERIFICATION", "VERIFICATION_EXPIRED"].includes(user.account_status);
-  if (needsVerification) links.push({ label: "Verify enrollment", href: "#registration" });
-  const activeStudent = user.role_code === "STUDENT" && user.account_status === "ACTIVE";
-  if (activeStudent) links.push({ label: "Appointments", href: "#appointments" });
-  const showComingSoon = user.role_code === "STUDENT";
+  const { links, comingSoon } = roleNav(user);
   const isStudent = user.role_code === "STUDENT";
 
   useEffect(() => {
@@ -178,7 +109,7 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
                 {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
                 onClick={() => setMenuOpen(false)}>{link.label}</a>
             ))}
-            {showComingSoon && COMING_SOON.map((label) => (
+            {comingSoon.map((label) => (
               <span key={label} aria-disabled="true" title="Coming soon"
                 className="inline-flex cursor-default items-center gap-1 border-b-2 border-transparent px-1 py-4 text-sm text-slate-300">
                 {label}
@@ -261,7 +192,7 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
               {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
               onClick={() => setMenuOpen(false)}>{link.label}</a>
           ))}
-          {showComingSoon && COMING_SOON.map((label) => (
+          {comingSoon.map((label) => (
             <span key={label} aria-disabled="true" title="Coming soon"
               className="inline-flex cursor-default items-center gap-1 py-2.5 text-sm text-slate-300">
               {label}

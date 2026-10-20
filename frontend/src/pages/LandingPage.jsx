@@ -1,29 +1,18 @@
 import { useEffect, useState } from "react";
 import { usePublicContent } from "../features/content";
 import appointmentImg from "../assets/appointment.jpg";
-import communicationImg from "../assets/communication.jpg";
-import libraryImg from "../assets/library.jpg";
 import counselorImg from "../assets/counselor.jpg";
 import LoginPage from "./LoginPage";
 import RegisterPage from "./RegisterPage";
+import "./LandingPage.css";
 
 /**
- * Public landing page (DFD Master System Flow entry) — Capstone design
- * ported into React. Published announcements and office CMS content from
- * content_items map into the marketing layout: the hero paragraph uses the
- * CMS landing_hero block (Capstone copy as fallback), announcements render
- * as blog cards, and FAQs render in a strip below.
- *
- * LOG IN / CONNECT WITH US open the existing auth pages as modal overlays
- * (LoginPage / RegisterPage in inModal mode) instead of navigating away;
- * the full-page #login / #staff-login / #register hash routes remain.
+ * Public landing page matching design reference.
  */
 export default function LandingPage({ onSignedIn }) {
   const { cmsBlocks, faqs, announcements, loading } = usePublicContent();
   const [modal, setModal] = useState(null);
-  const [scrolled, setScrolled] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [activeSection, setActiveSection] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const hero = cmsBlocks.find((b) => b.content_key === "landing_hero");
@@ -38,37 +27,6 @@ export default function LandingPage({ onSignedIn }) {
   }, [modal]);
 
   useEffect(() => {
-    // glass nav floats over the hero first; bg-tint bar kicks in after 60px.
-    // back-to-top stays hidden while the hero is on screen.
-    const onScroll = () => {
-      setScrolled(window.scrollY > 60);
-      const features =
-        typeof document !== "undefined" ? document.getElementById("features") : null;
-      const heroBottom = features?.offsetTop ?? 700;
-      setShowBackToTop(window.scrollY > heroBottom);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible[0]) setActiveSection(visible[0].target.id);
-      },
-      { rootMargin: "-40% 0px -55% 0px" },
-    );
-    for (const id of ["features", "news", "faq"]) {
-      const section = document.getElementById(id);
-      if (section) observer.observe(section);
-    }
-    return () => observer.disconnect();
-  }, [loading]);
-
-  useEffect(() => {
     if (!mobileNavOpen) return;
     const onKey = (e) => {
       if (e.key === "Escape") setMobileNavOpen(false);
@@ -76,6 +34,18 @@ export default function LandingPage({ onSignedIn }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const features =
+        typeof document !== "undefined" ? document.getElementById("features") : null;
+      const heroBottom = features?.offsetTop ?? 600;
+      setShowBackToTop(window.scrollY > heroBottom);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const openLogin = (audience) => setModal({ kind: "login", audience });
 
@@ -87,121 +57,173 @@ export default function LandingPage({ onSignedIn }) {
 
   return (
     <div className="landing-page" id="landing">
-      {/* Header */}
-      <header className={scrolled ? "scrolled" : undefined}>
+      {/* Top Header Bar */}
+      <header className="landing-top-bar">
         <div className="container nav-container">
-          <a href="#landing" className="logo">CounselConnect</a>
-          <ul className="nav-links">
-            <li><a href="#landing" className="active">Home</a></li>
+          <a href="#landing" className="logo">
+            <span className="logo-badge">
+              <i className="fa-solid fa-hands-holding-child"></i>
+            </span>
+            CounselConnect
+          </a>
+          <nav className="landing-nav-links" aria-label="Landing sections">
             {navSections.map((section) => (
-              <li key={section.id}>
-                <a href={"#" + section.id}
-                  className={activeSection === section.id ? "active" : undefined}>{section.label}</a>
-              </li>
+              <a key={section.id} href={"#" + section.id}>{section.label}</a>
             ))}
-          </ul>
-          <button type="button" className="btn-login" onClick={() => openLogin("student")}>LOG IN</button>
-          <button type="button" className="nav-toggle" aria-expanded={mobileNavOpen}
-            aria-controls="landing-mobile-nav" aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMobileNavOpen(!mobileNavOpen)}>
-            <i className={mobileNavOpen ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>
-          </button>
+          </nav>
+          <div className="landing-header-actions">
+            <button type="button" className="btn-top-login" onClick={() => openLogin("student")}>
+              LOG IN
+            </button>
+            <button type="button" className="landing-nav-toggle" aria-expanded={mobileNavOpen}
+              aria-controls="landing-mobile-nav" aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}>
+              <i className={mobileNavOpen ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
         <div id="landing-mobile-nav" className={mobileNavOpen ? "open" : undefined} hidden={!mobileNavOpen}>
           <a href="#landing" onClick={() => setMobileNavOpen(false)}>Home</a>
           {navSections.map((section) => (
             <a key={section.id} href={"#" + section.id} onClick={() => setMobileNavOpen(false)}>{section.label}</a>
           ))}
-          <button type="button" className="btn-login" onClick={() => { setMobileNavOpen(false); openLogin("student"); }}>LOG IN</button>
+          <button type="button" className="btn-top-login"
+            onClick={() => { setMobileNavOpen(false); openLogin("student"); }}>
+            LOG IN
+          </button>
         </div>
       </header>
 
       {/* Hero Section */}
       <section className="hero">
-        <div className="container">
-          <h1><i>Gentle Support</i> for whatever today brings you.</h1>
-          <p>
-            {hero?.body ??
-              "Appoint your next session in just a few clicks, talk with a compassionate professional, and explore wellness guidance at your pace."}
-          </p>
-          <button type="button" className="btn-connect" onClick={() => setModal({ kind: "register", audience: "student" })}>
-            CONNECT WITH US
-            <i className="fa-solid fa-chevron-right" style={{ fontSize: "0.75rem" }} />
-          </button>
+        <div className="container hero-grid">
+          <div className="hero-content">
+            <h1>
+              <i>Gentle Support</i> for<br />
+              whatever today brings you.
+            </h1>
+            <p>
+              {hero?.body ??
+                "Appoint your next session in just a few clicks, talk with a compassionate professional, and explore wellness guidance at your pace."}
+            </p>
+            <div className="hero-buttons">
+              <button
+                type="button"
+                className="btn-get-started"
+                onClick={() => setModal({ kind: "register", audience: "student" })}
+              >
+                Get Started
+              </button>
+            </div>
+          </div>
+          <div className="hero-image-wrapper">
+            <img
+              src={appointmentImg}
+              alt="Counseling session placeholder"
+              className="hero-placeholder-img"
+            />
+          </div>
         </div>
       </section>
 
-      {/* Why Choose Us Section */}
-      <section className="why-section" id="features">
+      {/* Our Counselors Section */}
+      <section className="counselors-section" id="counselors">
         <div className="container">
-          <div className="why-grid">
-            <div className="why-left">
-              <h2>WHY CHOOSE US?</h2>
+          <div className="counselors-header">
+            <div>
+              <h2>Our Counselors</h2>
+              <p>Professional and qualified therapists who you can trust</p>
             </div>
-            <div className="why-cards">
-              <div className="why-card">
-                <img
-                  className="why-card-img"
-                  src={appointmentImg}
-                  alt="Student booking a real-time appointment"
-                />
-                <p className="why-card-desc">
-                  {/* TODO: replace dummy copy with real feature descriptions */}
-                  Reserve and manage your guidance sessions in real time —
-                  pick an open slot, confirm instantly, and get reminders
-                  before your schedule.
-                </p>
-                <div className="why-card-title">Real-time Appointments</div>
-              </div>
-              <div className="why-card">
-                <img
-                  className="why-card-img"
-                  src={communicationImg}
-                  alt="Live chat communication with a counselor"
-                />
-                <p className="why-card-desc">
-                  {/* TODO: replace dummy copy with real feature descriptions */}
-                  Reach your counselor through secure live messaging whenever
-                  you need someone to listen.
-                </p>
-                <div className="why-card-title">Live Communication</div>
-              </div>
-              <div className="why-card">
-                <img
-                  className="why-card-img"
-                  src={libraryImg}
-                  alt="Curated wellness library resources"
-                />
-                <p className="why-card-desc">
-                  {/* TODO: replace dummy copy with real feature descriptions */}
-                  Explore curated wellness articles and resources recommended
-                  for your personal journey.
-                </p>
-                <div className="why-card-title">Curated Wellness Library</div>
-              </div>
+            <div className="counselors-nav">
+              <button type="button" className="counselor-nav-btn" aria-label="Previous counselor">
+                &lt;
+              </button>
+              <button type="button" className="counselor-nav-btn" aria-label="Next counselor">
+                &gt;
+              </button>
+            </div>
+          </div>
+
+          <div className="counselors-grid">
+            <div className="counselor-image-card">
+              <img
+                className="counselor-photo"
+                src={counselorImg}
+                alt="Portrait of the university guidance counselor"
+              />
+            </div>
+            <div className="counselor-info-card">
+              <h2>Mr. Firstname Lastname</h2>
+              <p>
+                This is the space to introduce visitors to the business or brand. Briefly explain who's behind it, what it does, and what makes it unique. Share its core values and what this site has to offer.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Bio Section */}
-      <section className="bio-section">
+      {/* Feature Section */}
+      <section className="feature-section" id="features">
         <div className="container">
-          <div className="bio-grid">
-            <img
-              className="bio-image-placeholder"
-              src={counselorImg}
-              alt="Portrait of the university guidance counselor"
-            />
-            <div className="bio-card">
-              <h2>Ms. Firstname A. Lastname</h2>
-              <p>
-                This is the space to introduce the university's guidance
-                counselors — who they are, how they support students, and what
-                makes the Guidance and Counseling Office unique. Real counselor
-                profiles arrive with the CMS content team.
-              </p>
+          <div className="feature-section-header">
+            <span className="feature-tag">Features</span>
+            <h2>
+              Everything you need to navigate your journey—<br />
+              from direct support to self-guided resources.
+            </h2>
+          </div>
+
+          <div className="feature-cards-grid">
+            <div className="feature-card">
+              <div className="feature-card-icon">
+                <i className="fa-solid fa-video"></i>
+              </div>
+              <div className="feature-card-title">Live Communication</div>
+              <div className="feature-card-desc">
+                Enjoy interactive talks with chat and video supported conversations.
+              </div>
             </div>
+
+            <div className="feature-card">
+              <div className="feature-card-icon">
+                <i className="fa-solid fa-calendar-days"></i>
+              </div>
+              <div className="feature-card-title">Seamless Scheduling</div>
+              <div className="feature-card-desc">
+                Book your counseling sessions with ease and find a time that works for you.
+              </div>
+            </div>
+
+            <div className="feature-card">
+              <div className="feature-card-icon">
+                <i className="fa-solid fa-brain"></i>
+              </div>
+              <div className="feature-card-title">AI Assisted Counseling</div>
+              <div className="feature-card-desc">
+                Get intelligent support and personalized guidance throughout your counseling journey.
+              </div>
+            </div>
+
+            <div className="feature-card">
+              <div className="feature-card-icon">
+                <i className="fa-solid fa-mobile-screen"></i>
+              </div>
+              <div className="feature-card-title">Accessible Session Everywhere</div>
+              <div className="feature-card-desc">
+                Stay connected to counseling support through a responsive experience built for desktop and mobile.
+              </div>
+            </div>
+          </div>
+
+          <div className="feature-cta-container">
+            <h3>Convinced enough?</h3>
+            <button
+              type="button"
+              className="btn-join-now"
+              onClick={() => setModal({ kind: "register", audience: "student" })}
+            >
+              Join us now
+            </button>
           </div>
         </div>
       </section>

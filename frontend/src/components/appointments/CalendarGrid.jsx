@@ -13,9 +13,16 @@ import { secondaryClass } from "./ui.js";
  * gap until the next server refresh). Clicking a bookable day reveals
  * that day's available times; onSelect/onPickTime notify the parent
  * (used by the booking modal), selection state lives here.
+ *
+ * variant="modal" opts into the booking-modal look and week order. Every
+ * extra hook class it adds (booking-day, booking-time, …) is only styled
+ * under `.booking-calendar`, so the default rendering — used by the
+ * Counselor availability panel — is visually unchanged.
  */
-export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
+export default function CalendarGrid({ calendar, onSelect, onPickTime, note, variant }) {
+  const inModal = variant === "modal";
   const [selected, setSelected] = useState(null);
+  const [pickedTime, setPickedTime] = useState(null);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const update = () => setNow(Date.now());
@@ -38,9 +45,14 @@ export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
   const [month, setMonth] = useState(initialMonth);
   useEffect(() => { setMonth(initialMonth); }, [initialMonth]);
   const monthStart = month + "-01";
-  // Monday-based first cell of the displayed month (ISO weekday: Mon=1..Sun=7).
+  // The modal variant starts the week on Sunday (matching the design); the
+  // default keeps the existing Monday-first grid.
+  const weekdayLabels = inModal
+    ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  // First cell of the displayed month (ISO weekday: Mon=1..Sun=7).
   const firstWeekday = new Date(monthStart + "T00:00:00").getDay();
-  const leadingBlanks = (firstWeekday + 6) % 7;
+  const leadingBlanks = inModal ? firstWeekday : (firstWeekday + 6) % 7;
   const monthDays = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
   const cellDates = Array.from({ length: leadingBlanks + monthDays }, (_, i) =>
     i < leadingBlanks ? null : month + "-" + String(i - leadingBlanks + 1).padStart(2, "0"));
@@ -53,19 +65,24 @@ export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
   };
   const selectedDay = selected ? byDate.get(selected) : undefined;
   const monthTitle = new Date(monthStart + "T00:00:00").toLocaleDateString("en-PH", { month: "long", year: "numeric" });
-  return <div>
+  const navBtnClass = inModal ? "booking-nav-btn" : secondaryClass + " !px-2 !py-1";
+  const selectedDateLabel = selectedDay
+    ? new Date(selectedDay.calendar_date + "T00:00:00+08:00").toLocaleDateString("en-PH",
+        { timeZone: "Asia/Manila", weekday: "long", month: "short", day: "numeric", year: "numeric" })
+    : "";
+  return <div className={inModal ? "booking-calendar" : undefined}>
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="text-base font-medium">{monthTitle}</h3>
+      <div><h3 className={"text-base font-medium" + (inModal ? " booking-month-title" : "")}>{monthTitle}</h3>
         <p className="mt-1 text-xs text-slate-500">{calendar?.business_hours || "Availability set by counselors"} · Philippine time</p></div>
       <div className="flex items-center gap-2">
-        <button type="button" aria-label="Previous month" disabled={!hasData(month) || month <= rangeStart.slice(0, 7)} onClick={() => shiftMonth(-1)} className={secondaryClass + " !px-2 !py-1"}>‹</button>
-        <button type="button" aria-label="Next month" disabled={!hasData(month) || month >= rangeEnd.slice(0, 7)} onClick={() => shiftMonth(1)} className={secondaryClass + " !px-2 !py-1"}>›</button>
+        <button type="button" aria-label="Previous month" disabled={!hasData(month) || month <= rangeStart.slice(0, 7)} onClick={() => shiftMonth(-1)} className={navBtnClass}>‹</button>
+        <button type="button" aria-label="Next month" disabled={!hasData(month) || month >= rangeEnd.slice(0, 7)} onClick={() => shiftMonth(1)} className={navBtnClass}>›</button>
       </div>
     </div>
-    <div className="mt-3 grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-center text-xs font-medium text-slate-500">
-      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => <div key={d} className="bg-white py-2">{d}</div>)}
+    <div className="booking-weekdays mt-3 grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-center text-xs font-medium text-slate-500">
+      {weekdayLabels.map(d => <div key={d} className="booking-weekday bg-white py-2">{d}</div>)}
     </div>
-    <div className="grid grid-cols-7 gap-px overflow-hidden rounded-b-lg border border-t-0 border-slate-200 bg-slate-200">
+    <div className="booking-days grid grid-cols-7 gap-px overflow-hidden rounded-b-lg border border-t-0 border-slate-200 bg-slate-200">
       {cellDates.map((cellDate, i) => {
         if (cellDate === null) return <div key={"blank" + i} className="min-h-20 bg-slate-50/50" />;
         const day = byDate.get(cellDate);
@@ -76,9 +93,9 @@ export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
         const isSelected = cellDate === selected;
         const label = !day ? "" : day.is_past ? "Already passed" : day.is_blocked ? "Unavailable" : weekendWithoutAvailability ? "Weekend" : day.available_times.length === 0 ? "No available time slots" : `${day.available_times.length} times available`;
         return <button key={cellDate} type="button" disabled={!bookable}
-          onClick={() => { setSelected(cellDate); onSelect?.(cellDate); }}
+          onClick={() => { setSelected(cellDate); setPickedTime(null); onSelect?.(cellDate); }}
           aria-label={cellDate + " — " + label}
-          className={`group min-h-20 bg-white p-1.5 text-left transition-colors ${!bookable ? "cursor-default" : "hover:bg-emerald-50"} ${state === "past" ? "text-slate-300" : state === "blocked" ? "bg-red-50" : state === "weekend" ? "bg-slate-50 text-slate-400" : ""} ${isSelected ? "ring-2 ring-inset ring-emerald-600" : ""}`}>
+          className={`booking-day group min-h-20 bg-white p-1.5 text-left transition-colors ${!bookable ? "cursor-default" : "hover:bg-emerald-50"} ${state === "past" ? "text-slate-300" : state === "blocked" ? "bg-red-50" : state === "weekend" ? "bg-slate-50 text-slate-400" : ""} ${isSelected ? "booking-day--selected ring-2 ring-inset ring-emerald-600" : ""}`}>
           <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${isToday ? "bg-emerald-600 text-white" : ""}`}>{Number(cellDate.slice(8))}</span>
           {day && !day.is_past && !weekendWithoutAvailability && !day.is_blocked && <p className="mt-1 hidden truncate text-[10px] font-medium text-emerald-700 sm:block">
             {day.available_times.length > 0 ? day.available_times.length + " open" : "No times left"}</p>}
@@ -86,13 +103,16 @@ export default function CalendarGrid({ calendar, onSelect, onPickTime, note }) {
         </button>;
       })}
     </div>
-    {selectedDay && !selectedDay.is_blocked && !selectedDay.is_past && <div className="mt-5 rounded-lg bg-slate-50 p-4">
-      <p className="text-sm font-medium">Times for {selectedDay.calendar_date}</p>
-      <div className="mt-3 flex flex-wrap gap-2">{selectedDay.available_times.map(time =>
-        <button key={time} type="button" className={secondaryClass} onClick={() => onPickTime?.(selectedDay.calendar_date, time)}>{time}</button>)}</div>
+    {selectedDay && !selectedDay.is_blocked && !selectedDay.is_past && <div className="booking-times-panel mt-5 rounded-lg bg-slate-50 p-4">
+      <p className="booking-times-title text-sm font-medium">Available Times</p>
+      {inModal && selectedDateLabel && <p className="booking-times-date">{selectedDateLabel}</p>}
+      <div className="booking-times-list mt-3 flex flex-wrap gap-2">{selectedDay.available_times.map(time =>
+        <button key={time} type="button"
+          className={"booking-time " + secondaryClass + (pickedTime === time ? " booking-time--selected" : "")}
+          onClick={() => { setPickedTime(time); onPickTime?.(selectedDay.calendar_date, time); }}>{time}</button>)}</div>
       {selectedDay.available_times.length === 0
         ? <p className="mt-3 text-sm text-amber-700">There are no available appointment time slots for this date. Please select another date.</p>
-        : <p className="mt-3 text-xs text-slate-500">{note || "Select a time to continue."}</p>}
+        : <p className="booking-times-note mt-3 text-xs text-slate-500">{note || "Select a time to continue."}</p>}
     </div>}
   </div>;
 }
