@@ -89,7 +89,9 @@ test("counselor Users page lists students with their screening status", async (t
   assert.ok(rendered.includes("BSIT"));
 });
 
-test("counselor sidebar exposes the Users link", async (t) => {
+// The nav list no longer carries a Users link, but the counselor dashboard
+// still routes to the directory, so #users stays reachable.
+test("counselor dashboard exposes the Users link", async (t) => {
   environment(t, "#home");
   fakeApi(t, authFor(counselor));
   const root = await mount(t, React.createElement(App));

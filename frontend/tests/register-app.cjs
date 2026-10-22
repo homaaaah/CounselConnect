@@ -29,3 +29,12 @@ for (const assetExtension of [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"])
     module._compile(`module.exports = ${JSON.stringify(filename)};`, filename);
   };
 }
+
+// CSS is imported for its side effects (Vite injects it in dev builds).
+// Node has no loader for it, so stub it with an empty module to keep the
+// ESM/JSX sources importable in tests.
+for (const styleExtension of [".css"]) {
+  require.extensions[styleExtension] = (module, filename) => {
+    module._compile("module.exports = {};", filename);
+  };
+}
