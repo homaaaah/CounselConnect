@@ -10,7 +10,6 @@ function Pagination({ page, total, onChange, disabled }) {
     <button className={secondaryClass} disabled={disabled || page * 20 >= total} onClick={() => onChange(page + 1)}>Next</button>
   </div>;
 }
-
 function AppointmentCard({ appointment: a, state, onReschedule }) {
   const [cancelling, setCancelling] = useState(false);
   const action = (name, body) => state.mutate("/appointments/" + a.appointment_id + "/" + name, body);

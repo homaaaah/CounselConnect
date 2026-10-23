@@ -7,8 +7,10 @@ import {
   failureReasonText,
   editedEditableFields,
   ScreeningFields,
+  CorUpload,
 } from "../features/accounts";
 import { request } from "../services/apiClient";
+import { PasswordInput } from "../features/auth";
 
 /**
  * Student registration (automated COR screening): one card with email +
@@ -314,20 +316,14 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
         </div>
         {resubmitError && <div role="alert" className="form-message error">{resubmitError}</div>}
         <form onSubmit={handleResubmit} encType="multipart/form-data">
-          <div className="upload-box">
-            <div className="upload-title">Registration form (COR) — re-upload</div>
-            <div className="upload-desc">
-              PDF only, max 10 MB. Stored privately and deleted after your account is activated.
-            </div>
-            <input
-              id="resubmit-cor"
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(e) => setResubmitFile(e.target.files?.[0] ?? null)}
-              className="form-input"
-            />
-            {resubmitFile && <div className="form-hint">Attached: {resubmitFile.name}</div>}
-          </div>
+          <CorUpload
+            inputId="resubmit-cor"
+            title="Registration form (COR) — re-upload"
+            description="PDF only, max 10 MB. Stored privately and deleted after your account is activated."
+            file={resubmitFile}
+            onFile={setResubmitFile}
+            disabled={busy}
+          />
           <div className="form-actions">
             <button type="submit" disabled={busy || !resubmitFile} className="btn-submit btn-success">
               {busy ? "Uploading…" : "Upload COR"}
@@ -365,6 +361,9 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
               id="register-email"
               required
               type="email"
+              autoComplete="email"
+              autoFocus
+              disabled={submitting}
               className="form-input"
               value={form.email}
               onChange={(e) => set("email", e.target.value)}
@@ -374,56 +373,45 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
           <div className="form-row">
             <div className="form-group">
               <label className="form-group-label" htmlFor="register-password">Password (8+ characters)</label>
-              <input
+              <PasswordInput
                 id="register-password"
-                required
-                type="password"
+                autoComplete="new-password"
                 minLength={8}
-                className="form-input"
+                required
+                disabled={submitting}
                 value={form.password}
                 onChange={(e) => set("password", e.target.value)}
               />
             </div>
             <div className="form-group">
               <label className="form-group-label" htmlFor="register-confirm">Confirm password</label>
-              <input
+              <PasswordInput
                 id="register-confirm"
-                required
-                type="password"
+                autoComplete="new-password"
                 minLength={8}
-                className="form-input"
+                required
+                disabled={submitting}
                 value={form.confirm_password}
                 onChange={(e) => set("confirm_password", e.target.value)}
               />
             </div>
           </div>
 
-          <div className="upload-box">
-            <div className="upload-title">Registration form (COR) — required PDF</div>
-            <div className="upload-desc">
-              Your Certificate of Registration is the required proof of current enrollment.
-              PDF only, max 10 MB. Stored privately and deleted after your account is
-              activated.
-            </div>
-            <input
-              id="register-cor"
-              required
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(e) => setCorFile(e.target.files?.[0] ?? null)}
-              className="form-input"
-            />
-            {corFile && (
-              <div className="form-hint">
-                Attached: {corFile.name}
-                {typeof corFile.size === "number" ? ` (${(corFile.size / 1024 / 1024).toFixed(2)} MB)` : ""}
-              </div>
-            )}
-          </div>
+          <CorUpload
+            inputId="register-cor"
+            required
+            title="Registration form (COR) — required PDF"
+            description="Your Certificate of Registration is the required proof of current enrollment. PDF only, max 10 MB. Stored privately and deleted after your account is activated."
+            file={corFile}
+            onFile={setCorFile}
+            disabled={submitting}
+          />
 
-          <button type="submit" disabled={submitting} className="btn-submit btn-success">
-            {submitting ? "Submitting…" : "Submit registration"}
-          </button>
+          <div className="form-actions">
+            <button type="submit" disabled={submitting} className="btn-submit btn-success">
+              {submitting ? "Submitting..." : "Submit registration"}
+            </button>
+          </div>
         </form>
 
         {result && (
@@ -468,6 +456,9 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
       )}
 
       <div className="signup-header">
+        <span className="brand-logo" aria-hidden="true">
+          <i className="fa-solid fa-hands-holding-child"></i>
+        </span>
         <h1>{header.title}</h1>
         {header.subtitle && <p>{header.subtitle}</p>}
       </div>

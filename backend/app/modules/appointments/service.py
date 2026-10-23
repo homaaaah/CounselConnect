@@ -1,7 +1,7 @@
 """Atomic scheduling workflow from Flowchart V1, page 4."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends
@@ -113,15 +113,29 @@ class AppointmentsService(BaseService[Appointment]):
         if changed:
             self.repository.session.flush()
 
-    def calendar(self, actor, start_date: date, end_date: date):
+    def booking_counselors(self, actor):
+        self.authorize(actor, ("STUDENT",))
+        return [
+            {"counselor_user_id": user.user_id,
+             "counselor_name": f"{user.first_name} {user.last_name}"}
+            for user in self.repository.active_counselors()
+        ]
+
+    def calendar(self, actor, start_date: date, end_date: date, counselor_user_id=None):
         self.authorize(actor)
+        if actor.role_code == "COUNSELOR":
+            counselor_user_id = actor.user_id
+        elif counselor_user_id is not None:
+            counselor = self.accounts.scheduling_user(counselor_user_id)
+            if counselor is None or counselor.role_code != "COUNSELOR" or counselor.account_status != "ACTIVE":
+                raise AppError("COUNSELOR_NOT_FOUND", "The selected Counselor is unavailable.", status_code=404)
         if end_date < start_date or (end_date - start_date).days > 62:
             raise AppError("INVALID_CALENDAR_RANGE", "Choose a calendar range of 63 days or less.", status_code=422)
         now = utcnow()
         manila = ZoneInfo("Asia/Manila")
         today = now.replace(tzinfo=timezone.utc).astimezone(manila).date()
-        self.ensure_schedule_slots(max(start_date, today), end_date, actor.user_id if actor.role_code == "COUNSELOR" else None)
-        counselor_ids = [actor.user_id] if actor.role_code == "COUNSELOR" else self.repository.active_counselor_ids()
+        self.ensure_schedule_slots(max(start_date, today), end_date, counselor_user_id)
+        counselor_ids = [counselor_user_id] if counselor_user_id is not None else self.repository.active_counselor_ids()
         blocked_by_counselor = {
             counselor_id: self.repository.blocked_dates([counselor_id], start_date, end_date)
             for counselor_id in counselor_ids
@@ -130,11 +144,31 @@ class AppointmentsService(BaseService[Appointment]):
         range_start = db_time(datetime.combine(start_date, datetime.min.time(), tzinfo=manila))
         range_end = db_time(datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=manila))
         times_by_date = {}
+        slots_by_date = {}
         for slot in self.repository.calendar_slots(counselor_ids, now, range_start, range_end):
             local_start = slot.starts_at.replace(tzinfo=timezone.utc).astimezone(manila)
             if local_start.date() in blocked_by_counselor[slot.counselor_user_id]:
                 continue
-            times_by_date.setdefault(local_start.date(), set()).add(local_start.strftime("%H:%M"))
+            start_time = local_start.strftime("%H:%M")
+            times_by_date.setdefault(local_start.date(), set()).add(start_time)
+            slot_end = getattr(slot, "ends_at", None)
+            if slot_end is not None:
+                local_end = slot_end.replace(tzinfo=timezone.utc).astimezone(manila)
+                slots_by_date.setdefault(local_start.date(), set()).add(
+                    (start_time, local_end.strftime("%H:%M"))
+                )
+        booked_by_date = {}
+        if actor.role_code == "COUNSELOR":
+            for slot, status in self.repository.booked_calendar_slots(
+                actor.user_id, range_start, range_end
+            ):
+                local_start = slot.starts_at.replace(tzinfo=timezone.utc).astimezone(manila)
+                local_end = slot.ends_at.replace(tzinfo=timezone.utc).astimezone(manila)
+                booked_by_date.setdefault(local_start.date(), set()).add((
+                    local_start.strftime("%H:%M"),
+                    local_end.strftime("%H:%M"),
+                    status,
+                ))
         days = []
         for offset in range((end_date - start_date).days + 1):
             day = start_date + timedelta(days=offset)
@@ -145,11 +179,18 @@ class AppointmentsService(BaseService[Appointment]):
             # Sunday). `is_weekday` remains descriptive for consumers, but
             # real weekend availability must remain bookable.
             if not is_blocked and not is_past:
+                slots = sorted(slots_by_date.get(day, set()))
                 times = sorted(times_by_date.get(day, set()))
             else:
+                slots = []
                 times = []
             days.append({"calendar_date": day, "is_weekday": weekday, "is_blocked": is_blocked, "is_past": is_past,
-                "available_times": times})
+                "available_times": times,
+                "available_slots": [{"start_time": start, "end_time": end} for start, end in slots],
+                "booked_slots": [
+                    {"start_time": start, "end_time": end, "status": status}
+                    for start, end, status in sorted(booked_by_date.get(day, set()))
+                ] if actor.role_code == "COUNSELOR" else []})
         return {"timezone": "Asia/Manila", "business_hours": "Availability set by counselors", "days": days}
 
     def block_date(self, actor, blocked_date, reason=None):
@@ -188,6 +229,14 @@ class AppointmentsService(BaseService[Appointment]):
         """Store recurring university-local availability without changing appointments."""
         self.authorize(actor, ("COUNSELOR",))
         self._participants(None, actor.user_id)
+        matching = self.repository.matching_weekly_schedule(actor.user_id, data)
+        if matching is not None and (getattr(matching, "is_deleted", False) or not matching.is_active):
+            self._validate_weekly_schedule(actor, data, exclude_id=matching.weekly_schedule_id)
+            matching.is_deleted = False
+            matching.is_active = True
+            self.repository.session.flush()
+            self.audit.record(actor.user_id, "weekly_schedule_reactivated", "counselor_weekly_schedule", matching.weekly_schedule_id)
+            return matching
         self._validate_weekly_schedule(actor, data)
         schedule = self.repository.create_weekly_schedule(
             counselor_user_id=actor.user_id,
@@ -202,12 +251,42 @@ class AppointmentsService(BaseService[Appointment]):
         self.audit.record(actor.user_id, "weekly_schedule_created", "counselor_weekly_schedule", schedule.weekly_schedule_id)
         return schedule
 
+    def create_standard_weekday_schedules(self, actor, data):
+        """Create or restore the Mon-Fri 08:00-16:00 schedules as one validated batch."""
+        self.authorize(actor, ("COUNSELOR",))
+        self._participants(None, actor.user_id)
+        prepared = []
+        for day_of_week in range(1, 6):
+            schedule_data = WeeklyScheduleCreateRequest(
+                campus_id=data.campus_id,
+                day_of_week=day_of_week,
+                start_time=time(8, 0),
+                end_time=time(16, 0),
+                slot_duration_minutes=data.slot_duration_minutes,
+                delivery_mode=data.delivery_mode,
+            )
+            matching = self.repository.matching_weekly_schedule(actor.user_id, schedule_data)
+            already_active = matching is not None and matching.is_active and not getattr(matching, "is_deleted", False)
+            self._validate_weekly_schedule(
+                actor,
+                schedule_data,
+                exclude_id=matching.weekly_schedule_id if matching is not None else None,
+            )
+            prepared.append((schedule_data, matching, already_active))
+
+        # Validate the full batch before any schedule changes; a conflict on
+        # one weekday cannot leave the Counselor with a partial work week.
+        schedules = []
+        for schedule_data, matching, already_active in prepared:
+            schedules.append(matching if already_active else self.create_weekly_schedule(actor, schedule_data))
+        return schedules
+
     def replace_weekly_schedule(self, actor, weekly_schedule_id, data):
         """Atomically replace one active recurring definition without changing slots."""
         self.authorize(actor, ("COUNSELOR",))
         self._participants(None, actor.user_id)
         previous = self.repository.lock_weekly_schedule(actor.user_id, weekly_schedule_id)
-        if previous is None or not previous.is_active:
+        if previous is None or getattr(previous, "is_deleted", False) or not previous.is_active:
             raise AppError("SCHEDULE_NOT_FOUND", "Weekly schedule not found.", status_code=404)
         if self._weekly_schedule_matches(previous, data):
             return previous
@@ -226,6 +305,7 @@ class AppointmentsService(BaseService[Appointment]):
                 delivery_mode=data.delivery_mode,
             )
         else:
+            replacement.is_deleted = False
             replacement.is_active = True
         previous.is_active = False
         self.repository.session.flush()
@@ -259,10 +339,33 @@ class AppointmentsService(BaseService[Appointment]):
 
     def deactivate_weekly_schedule(self, actor, weekly_schedule_id):
         self.authorize(actor, ("COUNSELOR",))
+        self._participants(None, actor.user_id)
         schedule = self.repository.deactivate_weekly_schedule(actor.user_id, weekly_schedule_id)
-        if schedule is None:
+        if schedule is None or getattr(schedule, "is_deleted", False):
             raise AppError("SCHEDULE_NOT_FOUND", "Weekly schedule not found.", status_code=404)
         self.audit.record(actor.user_id, "weekly_schedule_deactivated", "counselor_weekly_schedule", schedule.weekly_schedule_id)
+
+    def enable_weekly_schedule(self, actor, weekly_schedule_id):
+        self.authorize(actor, ("COUNSELOR",))
+        self._participants(None, actor.user_id)
+        schedule = self.repository.lock_weekly_schedule(actor.user_id, weekly_schedule_id)
+        if schedule is None or schedule.is_deleted:
+            raise AppError("SCHEDULE_NOT_FOUND", "Weekly schedule not found.", status_code=404)
+        if schedule.is_active:
+            return schedule
+        self._validate_weekly_schedule(actor, schedule, exclude_id=weekly_schedule_id)
+        schedule.is_active = True
+        self.repository.session.flush()
+        self.audit.record(actor.user_id, "weekly_schedule_enabled", "counselor_weekly_schedule", schedule.weekly_schedule_id)
+        return schedule
+
+    def delete_weekly_schedule(self, actor, weekly_schedule_id):
+        self.authorize(actor, ("COUNSELOR",))
+        self._participants(None, actor.user_id)
+        schedule = self.repository.delete_weekly_schedule(actor.user_id, weekly_schedule_id)
+        if schedule is None:
+            raise AppError("SCHEDULE_NOT_FOUND", "Weekly schedule not found.", status_code=404)
+        self.audit.record(actor.user_id, "weekly_schedule_deleted", "counselor_weekly_schedule", schedule.weekly_schedule_id)
 
     def create_availability_block(self, actor, data):
         self.authorize(actor, ("COUNSELOR",))
@@ -424,8 +527,13 @@ class AppointmentsService(BaseService[Appointment]):
         ends_before=None,
         page=1,
         page_size=20,
+        counselor_user_id=None,
     ):
         self.authorize(actor)
+        if actor.role_code == "STUDENT" and counselor_user_id is not None:
+            counselor = self.accounts.scheduling_user(counselor_user_id)
+            if counselor is None or counselor.role_code != "COUNSELOR" or counselor.account_status != "ACTIVE":
+                raise AppError("COUNSELOR_NOT_FOUND", "The selected Counselor is unavailable.", status_code=404)
         items, total = self.repository.slots(
             actor,
             utcnow(),
@@ -435,6 +543,7 @@ class AppointmentsService(BaseService[Appointment]):
             db_time(ends_before) if ends_before else None,
             page,
             page_size,
+            counselor_user_id,
         )
         return dict(
             items=[self.slot_response(s) for s in items],
@@ -443,9 +552,13 @@ class AppointmentsService(BaseService[Appointment]):
             page_size=page_size,
         )
 
-    def list_appointments(self, actor, status=None, page=1, page_size=20):
+    def list_appointments(self, actor, status=None, page=1, page_size=20, starts_after=None, ends_before=None):
         self.authorize(actor)
-        items, total = self.repository.appointments(actor, status, page, page_size)
+        items, total = self.repository.appointments(
+            actor, status, page, page_size,
+            db_time(starts_after) if starts_after else None,
+            db_time(ends_before) if ends_before else None,
+        )
         return dict(
             items=[self.appointment_response(a, actor) for a in items],
             total=total,

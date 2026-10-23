@@ -225,6 +225,13 @@ def test_csrf_recovery_after_reload_keeps_other_tab_token_valid(client, counselo
     assert client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": login["csrf_token"]}).status_code == 204
 
 
+def test_csrf_recovery_is_null_when_anonymous(client):
+    # Anonymous startup probe: no session is a normal 200/null, not a 401.
+    response = client.get("/api/v1/auth/csrf")
+    assert response.status_code == 200
+    assert response.json() is None
+
+
 # ---------------------------------------------------- endpoint flow (cookie+CSRF)
 
 

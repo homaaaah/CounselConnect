@@ -84,6 +84,7 @@ class CounselorWeeklySchedule(Base):
     slot_duration_minutes: Mapped[int] = mapped_column(SMALLINT(unsigned=True), nullable=False)
     delivery_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"), insert_default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"), insert_default=False)
     created_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow)
     updated_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow, onupdate=utcnow)
     availability_slots: Mapped[list[AvailabilitySlot]] = relationship(back_populates="weekly_schedule")

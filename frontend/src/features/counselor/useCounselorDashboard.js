@@ -32,33 +32,21 @@ export function useCounselorDashboard(user) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // GET /appointments documents only status/page/page_size, so page through
-    // it rather than sending unsupported date filters.
+    // Query the Manila-local day through the documented UTC range filters.
     let cancelled = false;
     setLoading(true);
     setError("");
     const today = manilaToday();
 
-    const load = async () => {
-      const pageSize = 100;
-      const collected = [];
-      let page = 1;
-      let total = Infinity;
-      while (!cancelled && page <= 20) {
-        const data = await request(`/appointments?page=${page}&page_size=${pageSize}`);
-        const batch = data?.items ?? [];
-        collected.push(...batch);
-        total = typeof data?.total === "number" ? data.total : collected.length;
-        if (batch.length < pageSize || collected.length >= total) break;
-        page += 1;
-      }
-      if (cancelled) return;
-      setItems(collected
-        .filter((appointment) => manilaDay(appointment.starts_at) === today)
-        .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)));
-    };
-
-    load()
+    const startsAfter = new Date(`${today}T00:00:00+08:00`).toISOString();
+    const endsBefore = new Date(new Date(`${today}T00:00:00+08:00`).getTime() + 86400000).toISOString();
+    request(`/appointments?page=1&page_size=100&starts_after=${encodeURIComponent(startsAfter)}&ends_before=${encodeURIComponent(endsBefore)}`)
+      .then((data) => {
+        if (cancelled) return;
+        setItems((data?.items ?? [])
+          .filter((appointment) => manilaDay(appointment.starts_at) === today)
+          .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)));
+      })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load today's appointments.");
       })

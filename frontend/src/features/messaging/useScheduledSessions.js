@@ -36,6 +36,19 @@ export function useScheduledSessions(user) {
         if (event.event === "appointment_reminder" && typeof Notification !== "undefined" && Notification.permission === "granted") {
           new Notification("CounselConnect", { body: event.message });
         }
+        if (["appointment_requested", "appointment_session_changed", "appointment_confirmed", "session_closed"].includes(event.event)) {
+          window.dispatchEvent(new CustomEvent("appointment-updated", { detail: event }));
+          if (event.event === "appointment_requested" && user?.role_code === "COUNSELOR") {
+            window.dispatchEvent(new CustomEvent("counselconnect-toast", {
+              detail: { message: "A new appointment request is ready for review." },
+            }));
+          }
+          if (event.event === "appointment_confirmed" && user?.role_code === "STUDENT") {
+            window.dispatchEvent(new CustomEvent("counselconnect-toast", {
+              detail: { message: "Your appointment has been confirmed." },
+            }));
+          }
+        }
         void refresh();
       };
     }
@@ -43,7 +56,16 @@ export function useScheduledSessions(user) {
       mounted.current = false;
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
-      socket?.close();
+      // Closing a socket that is still CONNECTING logs "WebSocket is closed
+      // before the connection is established" (seen under StrictMode's
+      // setup->cleanup->setup). Defer the close until it opens instead.
+      if (socket) {
+        if (socket.readyState === WebSocket.CONNECTING && typeof socket.addEventListener === "function") {
+          socket.addEventListener("open", () => socket.close(), { once: true });
+        } else {
+          socket.close();
+        }
+      }
     };
   }, [refresh, user?.user_id, user?.account_status]);
 

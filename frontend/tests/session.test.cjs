@@ -90,7 +90,7 @@ test("student login link opens the staff email form and switches back", async (t
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number or email");
   const staffLink = root.root.findByProps({ href: "#staff-login" });
   await act(async () => { window.location.hash = staffLink.props.href; });
-  assert.equal(root.root.findByType("h1").children.join(""), "Counselor / Staff sign in");
+  assert.equal(root.root.findByType("h1").children.join(""), "Guidance sign in");
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Email");
   assert.equal(root.root.findByProps({ id: "identifier" }).props.type, "email");
   await act(async () => { window.location.hash = "#login"; });
@@ -157,6 +157,62 @@ test("sign out uses recovered CSRF and clears the protected screening page", asy
   assert.equal(calls.find((call) => call.path.endsWith("/logout")).headers["X-CSRF-Token"], auth.csrf_token);
   assert.equal(getCsrfToken(), null);
   assert.doesNotMatch(JSON.stringify(root.toJSON()), /Review your details/);
+});
+
+test("the staff sign-in form rejects a Student account and revokes the session", async (t) => {
+  environment(t, "#staff-login");
+  const calls = fakeApi(t, () => failure(401), studentAuth);
+  const root = await mount(t);
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "student@example.edu" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => { await root.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  assert.equal(window.location.hash, "#staff-login", "no navigation on a mismatched role");
+  assert.equal(getCsrfToken(), null);
+  assert.ok(calls.some((call) => call.path.endsWith("/auth/logout")), "the fresh session is revoked");
+  const message = root.root.findByProps({ className: "form-message error" }).children.join("");
+  assert.match(message, /Incorrect identifier or password/);
+  assert.doesNotMatch(message, /Guidance|Student/, "the message never reveals the account's role");
+});
+
+test("the Student sign-in form rejects a staff account and revokes the session", async (t) => {
+  environment(t, "#login");
+  const calls = fakeApi(t, () => failure(401), auth);
+  const root = await mount(t);
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "20231234-A" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => { await root.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  assert.equal(window.location.hash, "#login", "no navigation on a mismatched role");
+  assert.equal(getCsrfToken(), null);
+  assert.ok(calls.some((call) => call.path.endsWith("/auth/logout")), "the fresh session is revoked");
+  const message = root.root.findByProps({ className: "form-message error" }).children.join("");
+  assert.match(message, /Incorrect identifier or password/);
+  assert.doesNotMatch(message, /Guidance|Student/, "the message never reveals the account's role");
+});
+
+test("the password reveal toggle switches the field between hidden and visible", async (t) => {
+  environment(t, "#login");
+  fakeApi(t, () => failure(401));
+  const root = await mount(t);
+  const passwordInput = () =>
+    root.root.findAllByProps({ id: "password" }).find((node) => typeof node.type === "string");
+  assert.equal(passwordInput().props.type, "password");
+  const toggle = root.root.findByProps({ "aria-label": "Show password" });
+  await act(async () => { toggle.props.onClick(); });
+  assert.equal(passwordInput().props.type, "text");
+  assert.ok(root.root.findByProps({ "aria-label": "Hide password" }), "the toggle flips its label");
+});
+
+test("anonymous /auth/csrf (200 null) leaves the app signed out without an error", async (t) => {
+  environment(t, "#home");
+  fakeApi(t, () => json(null));
+  const root = await mount(t);
+  await waitFor(() => !JSON.stringify(root.toJSON()).includes("Restoring your session"));
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Could not restore your session/);
+  assert.equal(getCsrfToken(), null);
 });
 
 test("a late unauthenticated response cannot erase a newer login token", async (t) => {

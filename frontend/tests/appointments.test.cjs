@@ -37,7 +37,12 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
       return json(appointment, 201);
     }
     if (path.endsWith("/accounts/campuses")) return json(envelope([{ campus_id: 1, campus_name: "Main", guidance_office_location: "Room 201" }]));
-    if (path.endsWith("/availability-slots")) return json(slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]));
+    if (path.endsWith("/booking-counselors")) return json([{ counselor_user_id: 1, counselor_name: "Cora Test" }]);
+    if (path.endsWith("/availability-slots")) {
+      const response = slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]);
+      // The API echoes the requested page size, including selected-date reads.
+      return json({ ...response, page_size: Number(parsed.searchParams.get("page_size") || 20) });
+    }
     if (path.endsWith("/appointments")) return json(envelope(
       typeof appointments === "function" ? appointments(parsed.searchParams) : appointments
     ));
@@ -71,9 +76,23 @@ async function mount(t, component) {
   t.after(async () => { await act(async () => root.unmount()); setCsrfToken(null); });
   return root;
 }
-const buttonText = (b) => b.children.filter(c => typeof c === "string").join("").trim();
+const buttonText = (b) => {
+  const collect = value => typeof value === "string" ? value
+    : Array.isArray(value) ? value.map(collect).join("")
+      : value && typeof value === "object" ? collect(value.children) : "";
+  return collect(b.children).trim();
+};
 const button = (root, label) => root.root.findAllByType("button").find(b => buttonText(b) === label || buttonText(b).includes(label));
 const formFor = (root, label) => root.root.findAllByType("form").find(f => f.findAllByType("button").some(b => buttonText(b).includes(label)));
+const chooseCounselor = async root => act(async () => {
+  const option = root.root.findAllByType("button").find(item =>
+    item.findAllByType("span").some(span => span.children.join("") === "Cora Test"));
+  option.props.onClick();
+});
+const showBookingMonth = async root => act(async () => {
+  const month = root.root.findAllByProps({ type: "month" })[0];
+  if (month && month.props.value !== "2099-01") month.props.onChange({ target: { value: "2099-01" } });
+});
 const calendar = () => ({ days: [{ calendar_date: "2099-01-01", is_weekday: true, is_blocked: false, is_past: false, available_times: ["09:00"] }] });
 
 test("student opens the home booking modal, picks a slot, and requests the appointment", async t => {
@@ -83,19 +102,27 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
   const schedule = button(root, "Start Booking");
   assert.ok(schedule);
   await act(async () => schedule.props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
   const dayCell = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01"));
   await act(async () => dayCell.props.onClick());
-  const timeButton = button(root, "09:00");
+  const timeButton = button(root, "9:00 AM");
   await act(async () => timeButton.props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-  const form = formFor(root, "Confirm booking");
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  const form = formFor(root, "Submit request");
   const sent = calls.find(c => c.method === "POST");
   await act(async () => form.props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(c => c.method === "POST").at(-1);
   assert.equal(post.path, "/api/v1/appointments");
   assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 10, appointment_mode: "ONLINE" });
   assert.equal(post.headers["X-CSRF-Token"], "synthetic-csrf");
-  assert.ok(JSON.stringify(root.toJSON()).includes("Request submitted. Awaiting counselor review."));
+  assert.ok(calls.some(call => call.path.endsWith("/calendar") && call.query.counselor_user_id === "1"),
+    "calendar availability is scoped to the selected Counselor");
+  assert.ok(calls.some(call => call.path.endsWith("/availability-slots") && call.query.counselor_user_id === "1"),
+    "slot search is scoped to the selected Counselor");
+  assert.ok(JSON.stringify(root.toJSON()).includes("Awaiting counselor review."));
   // Scheduling data is fetched only when the modal opens.
   assert.ok(calls.slice(requestsBefore).some(c => c.path.endsWith("/calendar")), "calendar loads when the modal opens");
 });
@@ -104,14 +131,32 @@ test("booking modal shows the revealed campus/time details before requesting", a
   setup(t, { calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
   await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
-  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
   const rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("Additional information"));
-  assert.ok(rendered.includes("Main"), "campus is revealed");
+  assert.ok(rendered.includes("Review your appointment"));
+  assert.ok(rendered.includes("Main"), "campus is included in review");
   assert.ok(rendered.includes("Cora Test"), "counselor is revealed");
   assert.ok(rendered.includes("9:00 AM"), "slot time is revealed");
+});
+
+test("session mode choices match the selected slot's supported delivery mode", async t => {
+  setup(t, { calendar: calendar(), slotsResponse: () => envelope([{ ...slot, delivery_mode: "ONLINE" }]) });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
+  await act(async () => root.root.findAllByType("button").find(item => item.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => button(root, "Continue").props.onClick());
+  const options = root.root.findByType("select").findAllByType("option").map(option => option.props.value);
+  assert.deepEqual(options, ["ONLINE"]);
 });
 
 test("booking loads every selected-date slot page and lets the student choose a matching counselor", async t => {
@@ -133,14 +178,18 @@ test("booking loads every selected-date slot page and lets the student choose a 
   });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
   await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
-  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
   assert.ok(calls.some(call => call.path.endsWith("/availability-slots") && call.query.page === "2" && call.query.page_size === "100"));
-  const option = root.root.findAllByType("button").find(b => b.props["aria-label"] === "Choose Counselor 101 at Campus 101");
+  const option = root.root.findAllByType("button").find(b => b.props["aria-label"] === "Choose Campus 101 at Counselor 101");
   assert.ok(option, "the second API page is offered as a booking choice");
   await act(async () => option.props.onClick());
-  await act(async () => formFor(root, "Confirm booking").props.onSubmit({ preventDefault() {} }));
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => formFor(root, "Submit request").props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(call => call.method === "POST").at(-1);
   assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 110, appointment_mode: "ONLINE" });
 });
@@ -148,6 +197,8 @@ test("booking loads every selected-date slot page and lets the student choose a 
 test("a background slot refresh preserves a selected compatible appointment mode", async t => {
   global.window = { addEventListener() {}, removeEventListener() {} };
   const modalState = (slots) => ({
+    bookingCounselors: [{ counselor_user_id: 1, counselor_name: "Cora Test" }], bookingCounselorsError: "",
+    counselorUserId: "", setCounselorUserId() {}, bookingCounselorsLoading: false,
     calendar: calendar(), date: "", setDate() {}, slotPage: 1, setSlotPage() {},
     loading: false, slots: { items: slots, total: slots.length, page: 1, page_size: 20 },
     busy: false, error: "", mutate: async () => true,
@@ -155,27 +206,41 @@ test("a background slot refresh preserves a selected compatible appointment mode
   let root;
   await act(async () => { root = create(React.createElement(BookingModal, { open: true, state: modalState([slot]) })); });
   t.after(async () => { await act(async () => root.unmount()); });
+  await chooseCounselor(root);
+  await showBookingMonth(root);
   await act(async () => root.root.findByType(CalendarGrid).props.onPickTime("2099-01-01", "09:00"));
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => button(root, "Continue").props.onClick());
   let mode = root.root.findByType("select");
   await act(async () => mode.props.onChange({ target: { value: "FACE_TO_FACE" } }));
   assert.equal(root.root.findByType("select").props.value, "FACE_TO_FACE");
   await act(async () => root.update(React.createElement(BookingModal, { open: true, state: modalState([{ ...slot }]) })));
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
   assert.equal(root.root.findByType("select").props.value, "FACE_TO_FACE");
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => button(root, "Back").props.onClick());
+  assert.equal(root.root.findByType("select").props.value, "FACE_TO_FACE", "back navigation retains the compatible mode");
+  await act(async () => root.update(React.createElement(BookingModal, { open: true, state: modalState([]) })));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.ok(JSON.stringify(root.toJSON()).includes("This selected slot is no longer available."),
+    "a refreshed slot that disappeared is reported without silently switching campuses");
 });
 
 test("server booking conflict keeps the modal open and shows the slot-unavailable error", async t => {
   setup(t, { failure: true, calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
   await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
-  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-  await act(async () => formFor(root, "Confirm booking").props.onSubmit({ preventDefault() {} }));
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => formFor(root, "Submit request").props.onSubmit({ preventDefault() {} }));
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("The selected slot is no longer available."));
-  assert.ok(rendered.includes("Confirm booking"), "form stays available for another try");
+  assert.ok(rendered.includes("Submit request"), "form stays available for another try");
 });
 
 test("confirmed student record opens the reschedule modal and sends reschedule", async t => {
@@ -183,10 +248,14 @@ test("confirmed student record opens the reschedule modal and sends reschedule",
   const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
   const requestsBefore = calls.length;
   await act(async () => button(root, "Reschedule").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
-  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-  await act(async () => formFor(root, "Confirm reschedule").props.onSubmit({ preventDefault() {} }));
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => formFor(root, "Submit reschedule").props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(c => c.method === "POST").at(-1);
   assert.equal(post.path, "/api/v1/appointments/5/reschedule");
   assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled. Awaiting counselor review."));
@@ -360,18 +429,18 @@ test("calendar permits a weekend date when it has counselor availability", async
   setup(t);
   const picks = [];
   const cal = { business_hours: "Availability set by counselors", days: [{
-    calendar_date: "2026-09-19", is_weekday: false, is_blocked: false, is_past: false,
+    calendar_date: "2099-01-03", is_weekday: false, is_blocked: false, is_past: false,
     available_times: ["09:00"],
   }] };
   const root = await mount(t, React.createElement(CalendarGrid, {
     calendar: cal, onPickTime: (...args) => picks.push(args),
   }));
-  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2026-09-19"));
+  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-03"));
   assert.equal(saturday.props.disabled, false);
   assert.match(saturday.props["aria-label"], /1 times available/);
   await act(async () => saturday.props.onClick());
-  await act(async () => button(root, "09:00").props.onClick());
-  assert.deepEqual(picks, [["2026-09-19", "09:00"]]);
+  await act(async () => button(root, "9:00 AM").props.onClick());
+  assert.deepEqual(picks, [["2099-01-03", "09:00"]]);
 });
 
 test("calendar month navigation stays within loaded data", async t => {
@@ -389,28 +458,28 @@ test("calendar month navigation stays within loaded data", async t => {
 
 for (const user of [student, counselor]) {
   test(user.role_code + " calendar count and selected times expire without a network refresh", async t => {
-    let now = Date.parse("2026-09-11T05:30:00Z"); // 1:30 PM Manila
+    let now = Date.parse("2099-01-01T05:30:00Z"); // 1:30 PM Manila
     t.mock.method(Date, "now", () => now);
     const timers = [];
     t.mock.method(global, "setInterval", (callback, delay) => { timers.push({ callback, delay }); return 1; });
     t.mock.method(global, "clearInterval", () => {});
-    const cal = { days: [{ calendar_date: "2026-09-11",
+    const cal = { days: [{ calendar_date: "2099-01-01",
       is_weekday: true, is_blocked: false, is_past: false,
       available_times: ["08:00", "13:30", "14:00", "14:30"] }] };
     const root = await mount(t, React.createElement(CalendarGrid, { calendar: cal }));
-    const cell = () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2026-09-11"));
+    const cell = () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01"));
     assert.match(cell().props["aria-label"], /2 times available/);
     await act(async () => cell().props.onClick());
-    assert.ok(button(root, "14:00"));
-    now = Date.parse("2026-09-11T06:00:00Z");
+    assert.ok(button(root, "2:00 PM"));
+    now = Date.parse("2099-01-01T06:00:00Z");
     await act(async () => timers.find(timer => timer.delay === 1000).callback());
     assert.match(cell().props["aria-label"], /1 times available/);
-    assert.equal(button(root, "14:00"), undefined);
-    assert.ok(button(root, "14:30"));
-    now = Date.parse("2026-09-11T06:30:00Z");
+    assert.equal(button(root, "2:00 PM"), undefined);
+    assert.ok(button(root, "2:30 PM"));
+    now = Date.parse("2099-01-01T06:30:00Z");
     await act(async () => timers.find(timer => timer.delay === 1000).callback());
     assert.match(cell().props["aria-label"], /No available time slots/);
-    assert.ok(JSON.stringify(root.toJSON()).includes("No times left"));
+    assert.ok(JSON.stringify(root.toJSON()).includes("There are no available appointment time slots"));
   });
 }
 

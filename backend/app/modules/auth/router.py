@@ -7,6 +7,7 @@ Opaque session cookie flow:
                         current user + fresh CSRF + expiry timestamps.
 - POST /auth/logout   → revokes the session (CSRF required), clears cookie.
 - GET  /auth/me       → current authenticated user (safe method, no CSRF).
+- GET  /auth/csrf     → recover CSRF for a live session; `null` when anonymous.
 
 Route names follow NAMING_CONVENTIONS.md auth exceptions.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response
 
+from app.core.exceptions import AppError
 from app.modules.auth.schemas import AuthResponse, LoginRequest, SessionUser
 from app.modules.auth.service import SESSION_COOKIE, AuthService, get_auth_service
 
@@ -107,7 +109,7 @@ def me(
 
 @router.get(
     "/csrf",
-    response_model=AuthResponse,
+    response_model=AuthResponse | None,
     summary="Recover the CSRF token for a live session without renewing idle activity",
 )
 def recover_csrf(
@@ -120,10 +122,18 @@ def recover_csrf(
     Safe because the caller must already hold the session cookie (proof
     of the credential); CSRF tokens are not secrets from their own
     session — they only guard cross-site forgery of unsafe requests.
+
+    Returns `null` (200) when there is no live session, so the anonymous
+    startup probe is not reported as an error.
     """
     response.headers["Cache-Control"] = "no-store"
-    user, session = service.authenticate_request(
-        session_cookie, None, is_safe_method=True, record_activity=False
-    )
+    try:
+        user, session = service.authenticate_request(
+            session_cookie, None, is_safe_method=True, record_activity=False
+        )
+    except AppError as exc:
+        if exc.status_code == 401:
+            return None
+        raise
     raw_csrf = service.recover_csrf_token(session, session_cookie)
     return _auth_response(user, session, raw_csrf)

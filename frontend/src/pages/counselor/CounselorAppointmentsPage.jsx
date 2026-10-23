@@ -91,7 +91,7 @@ function WeeklyScheduleEditor({ state }) {
   const [campusId, setCampusId] = useState("");
   const [day, setDay] = useState("1");
   const [start, setStart] = useState("08:00");
-  const [end, setEnd] = useState("10:00");
+  const [end, setEnd] = useState("16:00");
   const [duration, setDuration] = useState("30");
   const [mode, setMode] = useState("ONLINE");
   const minutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
@@ -117,13 +117,31 @@ function WeeklyScheduleEditor({ state }) {
       campus_id: Number(campusId), day_of_week: Number(day), start_time: start + ":00", end_time: end + ":00",
       slot_duration_minutes: Number(duration), delivery_mode: mode,
     }, "POST", replacingId ? "Availability updated." : "Weekly schedule saved.");
-    if (saved) { setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("10:00"); setDuration("30"); setMode("ONLINE"); }
+    if (saved) { setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("16:00"); setDuration("30"); setMode("ONLINE"); }
+  };
+
+  const resetEditor = () => {
+    setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("16:00"); setDuration("30"); setMode("ONLINE");
+  };
+
+  const deleteSchedule = async (schedule) => {
+    const confirmed = window.confirm(
+      "Delete this weekly schedule? It will stop creating future availability. Existing appointments will stay unchanged."
+    );
+    if (!confirmed) return;
+    const deleted = await state.mutate(
+      "/weekly-schedules/" + schedule.weekly_schedule_id + "/remove",
+      undefined,
+      "DELETE",
+      "Weekly schedule deleted. Existing appointments were preserved."
+    );
+    if (deleted && editingId === schedule.weekly_schedule_id) resetEditor();
   };
 
   const activeSchedules = Array.isArray(state.weeklySchedules) ? state.weeklySchedules : (state.weeklySchedules?.items ?? []);
   return <section className="rounded-xl border border-slate-200 bg-white p-6">
     <h2 className="text-lg font-semibold">Your weekly availability</h2>
-    <p className="mt-1 text-sm text-slate-500">Edit the days, times, and campus you are available. Existing appointments are not changed. Philippine local times.</p>
+    <p className="mt-1 text-sm text-slate-500">Manage your recurring days and times in Philippine time. Use the weekday action to set Monday–Friday to 8:00 AM–4:00 PM, or add a custom schedule for one day. Only saved, enabled availability is shown to students. Enable restores a disabled schedule; Delete removes it from future availability. Existing appointments stay unchanged.</p>
 
     <form className="mt-4 grid gap-3 sm:grid-cols-3" onSubmit={(e) => submit(e, editingId)}>
       <label className="text-sm">Campus<select className={inputClass} required disabled={state.busy} value={campusId} onChange={e => setCampusId(e.target.value)}>
@@ -147,7 +165,14 @@ function WeeklyScheduleEditor({ state }) {
           <button className={buttonClass} disabled={state.busy || !campusId || !wholeSlots}>
             {editingId ? "Save changes" : "Add availability"}
           </button>
-          {editingId && <button type="button" className={secondaryClass} disabled={state.busy} onClick={() => { setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("10:00"); setDuration("30"); setMode("ONLINE"); }}>Cancel edit</button>}
+          {!editingId && <button type="button" className={secondaryClass}
+            disabled={state.busy || !campusId || !wholeSlots}
+            onClick={() => void state.mutate("/weekly-schedules/standard-weekdays", {
+              campus_id: Number(campusId), slot_duration_minutes: Number(duration), delivery_mode: mode,
+            }, "POST", "Standard weekday availability saved for Monday–Friday, 8:00 AM–4:00 PM.")}>
+            Set weekdays to 8:00 AM–4:00 PM
+          </button>}
+          {editingId && <button type="button" className={secondaryClass} disabled={state.busy} onClick={resetEditor}>Cancel edit</button>}
         </div>
       </div>
     </form>
@@ -164,11 +189,15 @@ function WeeklyScheduleEditor({ state }) {
               {" · "}{timeLabel(s.start_time)}–{timeLabel(s.end_time)}
               {" · "}{s.slot_duration_minutes}-minute slots
               {" · "}{modeLabel(s.delivery_mode)}
-              {!s.is_active && " · disabled"}
+              <span className={"ml-2 rounded-full px-2 py-0.5 text-xs font-medium " + (s.is_active ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600")}>
+                {s.is_active ? "Enabled" : "Disabled"}
+              </span>
             </span>
             <span className="flex gap-2">
               {s.is_active && !editing && <button className={secondaryClass} disabled={state.busy} onClick={() => startEdit(s)}>Edit</button>}
               {s.is_active && <button className={secondaryClass} disabled={state.busy} onClick={() => void state.mutate("/weekly-schedules/" + s.weekly_schedule_id, undefined, "DELETE", "Weekly schedule disabled.")}>Disable</button>}
+              {!s.is_active && <button className={secondaryClass} disabled={state.busy} onClick={() => void state.mutate("/weekly-schedules/" + s.weekly_schedule_id + "/enable", {}, "POST", "Weekly schedule enabled.")}>Enable</button>}
+              <button type="button" className={secondaryClass} disabled={state.busy} onClick={() => void deleteSchedule(s)}>Delete</button>
             </span>
           </li>;
         })}
@@ -221,7 +250,7 @@ function AvailabilityBlocksSection({ state }) {
 }
 
 export default function CounselorAppointmentsPage({ user }) {
-  const state = useAppointments(user.role_code, "CONFIRMED");
+  const state = useAppointments(user.role_code, "PENDING");
   const [rescheduleId, setRescheduleId] = useState(null);
   return <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-800 sm:px-6">
     <div className="mx-auto max-w-5xl space-y-6">
@@ -253,8 +282,9 @@ export default function CounselorAppointmentsPage({ user }) {
 
       <section className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="text-lg font-semibold">Your availability calendar</h2>
-        <p className="mt-1 text-sm text-slate-500">Live dates · click a date to reveal its remaining times. The student side sees the same open dates.</p>
-        <div className="mt-4"><CalendarGrid calendar={state.calendar} /></div>
+        <p className="mt-1 text-sm text-slate-500">An amber dot marks dates with pending or confirmed appointments. Select a date to see its booked times below the calendar; manage availability and blocks in the sections below.</p>
+        <div className="mt-4"><CalendarGrid counselorView calendar={state.calendar} month={state.calendarMonth}
+          loading={state.loading} onRetry={state.refresh} onMonthChange={state.setCalendarMonth} /></div>
         <BlockDateForm state={state} />
       </section>
 

@@ -6,3 +6,4 @@ export { useCorScreening, confirmedFieldsFrom, EMPTY_CONFIRM } from "./useCorScr
 export { useUserDirectory, useStudentCount } from "./useUserDirectory";
 export { useProfileChangeRequests } from "./useProfileChangeRequests";
 export { default as ScreeningFields, YEAR_LEVELS } from "./ScreeningFields";
+export { default as CorUpload } from "./CorUpload";

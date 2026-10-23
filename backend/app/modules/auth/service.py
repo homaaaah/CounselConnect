@@ -69,7 +69,7 @@ class AuthService(BaseService[User]):
 
         Staff (Counselor, Guidance Staff, Superadmin) sign in with email.
         Students sign in with their registered email or their student number
-        (ADR-005/019, ADR-030). A public registration must never shadow a staff
+        (ADR-030). A public registration must never shadow a staff
         member's login identifier.
         """
         account = self.accounts.find_user_by_email(identifier)
