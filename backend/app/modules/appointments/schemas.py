@@ -20,6 +20,11 @@ AppointmentStatus = Literal[
 ]
 
 
+class CounselorBookingOption(BaseModel):
+    counselor_user_id: int
+    counselor_name: str
+
+
 class AvailabilitySlotCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     campus_id: int = Field(gt=0)
@@ -158,12 +163,25 @@ class CalendarBlockRequest(BaseModel):
     reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
 
 
+class CalendarAvailabilityResponse(BaseModel):
+    start_time: time
+    end_time: time
+
+
+class CalendarBookedSlotResponse(BaseModel):
+    start_time: time
+    end_time: time
+    status: Literal["PENDING", "CONFIRMED"]
+
+
 class CalendarDayResponse(BaseModel):
     calendar_date: date
     is_weekday: bool
     is_blocked: bool
     is_past: bool
     available_times: list[str]
+    available_slots: list[CalendarAvailabilityResponse] = Field(default_factory=list)
+    booked_slots: list[CalendarBookedSlotResponse] = Field(default_factory=list)
 
 
 class CalendarResponse(BaseModel):
@@ -189,6 +207,19 @@ class WeeklyScheduleCreateRequest(BaseModel):
         end = self.end_time.hour * 60 + self.end_time.minute
         if (end - start) % self.slot_duration_minutes:
             raise ValueError("The selected time range must contain whole appointment slots.")
+        return self
+
+
+class StandardWeekdayScheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    campus_id: int = Field(gt=0)
+    slot_duration_minutes: int = Field(ge=15, le=240)
+    delivery_mode: DeliveryMode
+
+    @model_validator(mode="after")
+    def validate_standard_weekday_slots(self):
+        if (16 - 8) * 60 % self.slot_duration_minutes:
+            raise ValueError("The selected duration must divide the 8:00 AM–4:00 PM weekday schedule into whole slots.")
         return self
 
 

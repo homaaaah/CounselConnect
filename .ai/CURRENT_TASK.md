@@ -1,50 +1,34 @@
-# CounselConnect - Current Task
+﻿# CounselConnect - Current Task
 
 **Status:** COMPLETED
-**Task:** Port the CCFrontend visual design into `frontend/` (plan `.kilo/plans/1792748017338-merge-counselconnectmerge-snapshot.md`).
-**Route:** `ui-refactor` + `appointments`/`accounts` page components.
+**Task:** Implement the counselor-first six-stage Student appointment booking flow.
+**Route:** `appointments` + `ui-refactor` + `api-or-schema`.
+
+## Contracts to preserve
+
+| Invariant / capability | Owning contract and code | Regression coverage |
+|---|---|---|
+| Booking still submits the selected concrete slot ID and supported mode to the existing create/reschedule mutation | `BookingModal`, `AppointmentsService.book/reschedule` | Appointment frontend and API tests |
+| Calendar/slot counselor filters only narrow active availability; server booking validation remains authoritative | appointment router/service/repository | Appointment integration tests |
+| Counselor calendar and booked-date indicator remain unchanged | `CalendarGrid`, `AppointmentsService.calendar` | Appointment frontend/API tests |
+
+- Compatible booking mutation path and payload: `POST /appointments` or `POST /appointments/{appointment_id}/reschedule` with `availability_slot_id` and `appointment_mode`.
+- Navigation: counselor → date → time/campus → mode → review → submit; back navigation preserves valid later choices and upstream changes clear dependents.
+- Intentional behavior change: Student booking is counselor-first; new authenticated read filters scope calendar and slot results.
+- Voice/video calls and file sharing remain out of scope under project rules.
 
 ## Result
 
-The frontend now uses CCFrontend's forest-green design and page layouts while keeping the repo's hooks, API behavior, registration validation messaging, and safety tests.
-
-## Changes
-
-### Design assets and wiring
-- `frontend/src/index.css` — CCFrontend green-token stylesheet; explicit `--primary: #4A6B5B`; green success-button hover.
-- `frontend/src/modal.css` (new) — auth/booking modal styles; green logo placeholder.
-- `frontend/src/pages/LandingPage.css` (new) — landing page styles.
-- `frontend/src/main.jsx` — imports `modal.css` after `index.css`.
-- `frontend/index.html` — adds the Merriweather font CCFrontend requires.
-- `frontend/src/pages/LandingPage.jsx` — CCFrontend markup + CSS import.
-
-### Page layouts / navigation
-- `frontend/src/App.jsx` — top-bar shell, landing hash handling, no sidebar offset; removed the inert `counselconnect-toast` listener.
-- `frontend/src/components/layout/AppNavBar.jsx` — CCFrontend top bar; retained `Users` for Counselors, `Verify enrollment` for non-active students (with `aria-current`), and hid Appointments for non-active students.
-- `frontend/src/pages/student/student_homepage.jsx` — green bento home; status-aware notification copy.
-- `frontend/src/pages/counselor/counselor_dashboard.jsx` — green dashboard; fixed the `key` spread warning.
-- `frontend/src/features/counselor/useCounselorDashboard.js` (new) — pages the documented `GET /appointments?page&page_size` endpoint instead of unsupported date filters.
-- `frontend/src/features/counselor/index.js` — exports the hook.
-- `frontend/src/components/appointments/BookingModal.jsx` — two-panel dialog; reschedule title restored.
-- `frontend/src/components/appointments/CalendarGrid.jsx` — modal calendar variant.
-- `frontend/src/pages/student/StudentAppointmentsPage.jsx` — CCFrontend records layout.
-
-### Tests updated for intentional design changes
-- `frontend/tests/register-app.cjs` — stub `.css` imports.
-- `frontend/tests/appointments.test.cjs` — `ToastProvider` mounts, `Start Booking`, `My Appointments`.
-- `frontend/tests/navbar.test.cjs` — top-bar labels/expectations.
-
-### Preserved current behavior
-- `RegisterPage.jsx`, `useRegistration.js`, `useAppointments.js`, notifications, `apiClient`, and all backend/docs/OpenAPI files were not changed by this task.
+- Added an active-Counselor booking selector and counselor-scoped calendar/slot reads.
+- Implemented counselor → date → time/campus → mode → review → submit with progress, backward navigation, and dependency resets.
+- Added visible loading, empty, retry, stale-slot, and server-conflict states. A stale selected campus is not silently replaced by another slot.
+- Kept the existing create/reschedule API payloads and server-side booking validation intact.
+- Kept Counselor calendar booked-time indicators scoped to the Counselor dashboard.
+- Updated API, appointment, OpenAPI, and current-task documentation.
 
 ## Verification
 
-- `npm test`: **75 passed, 1 failed** — only the pre-existing calendar date-rot test; the same failure existed before this task.
-- `npm run build`: succeeded (74 modules).
-- `git diff --check`: clean.
-- Review follow-ups fixed: documented appointment pagination, reschedule heading, `aria-current`, Merriweather font, green hover/logo, Counselor Users link, status copy, dead listener.
-
-## Remaining limitations
-
-- Known pre-existing calendar test failure remains.
-- `CCFrontend/` and `CounselConnectMerge/` remain untracked and untouched.
+- `node --test frontend/tests/*.test.cjs`: passed (77 tests).
+- `npm.cmd --prefix frontend run build`: passed (74 modules).
+- Python compile check and `git diff --check`: passed.
+- Appointment integration tests were invoked but skipped (62 tests) because `COUNSELCONNECT_TEST_DATABASE_URL` is not configured in this checkout. Database-backed filter/auth behavior still needs that isolated MySQL test database.

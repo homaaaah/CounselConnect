@@ -1,4 +1,4 @@
-# CounselConnect — API Contract
+﻿# CounselConnect â€” API Contract
 
 ## Purpose
 
@@ -177,18 +177,22 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 
 | Method/path | Allowed caller and behavior |
 |---|---|
-| `GET /availability-slots` | Student: future available slots; Counselor: own future slots. Optional `campus_id`, `appointment_mode`, aware `starts_after`/`ends_before`; `page=1`, `page_size=20` (max 100). |
+| `GET /availability-slots` | Student: future available slots; Counselor: own future slots. Optional `campus_id`, `appointment_mode`, aware `starts_after`/`ends_before`; Students may also scope by active `counselor_user_id`; `page=1`, `page_size=20` (max 100). |
 | `GET /weekly-schedules` | Counselor: own weekly schedule definitions. |
-| `POST /weekly-schedules` | Counselor; `campus_id`, `day_of_week` (1–7 ISO), `start_time`/`end_time` (local times), `slot_duration_minutes` (15–240, whole slots), `delivery_mode`; 201 schedule. |
+| `POST /weekly-schedules` | Counselor; `campus_id`, `day_of_week` (1â€“7 ISO), `start_time`/`end_time` (local times), `slot_duration_minutes` (15â€“240, whole slots), `delivery_mode`; 201 schedule. |
+| `POST /weekly-schedules/standard-weekdays` | Counselor; `campus_id`, `slot_duration_minutes`, `delivery_mode`; creates/restores Mondayâ€“Friday 08:00â€“16:00 schedules after validating the full batch for overlaps and campus location; 201 list. Existing appointments are unchanged. |
 | `POST /weekly-schedules/{weekly_schedule_id}/replace` | Counselor; atomically deactivates that active definition and creates or reactivates the replacement after overlap/location validation; 200 schedule. Existing concrete slots and appointments are unchanged. |
 | `DELETE /weekly-schedules/{weekly_schedule_id}` | Counselor; deactivates one of their schedules; 204. |
+| `POST /weekly-schedules/{weekly_schedule_id}/enable` | Counselor; reactivates one of their disabled schedules after overlap and campus-location validation; 200 schedule. |
+| `DELETE /weekly-schedules/{weekly_schedule_id}/remove` | Counselor; soft-deletes one of their schedules, hiding it from schedule lists and future availability while preserving referenced slots and appointments; 204. |
 | `GET /availability-blocks` | Counselor: own temporary unavailable time ranges. |
 | `POST /availability-blocks` | Counselor; aware `starts_at`/`ends_at`, `is_all_day`, optional `reason` (max 255); 201 block. Rejected with `BLOCK_CONFLICT` when it would overlap a `PENDING`/`CONFIRMED` appointment. |
 | `DELETE /availability-blocks/{availability_block_id}` | Counselor; removes one of their blocks; 204. |
-| `GET /calendar` | Active Student/Counselor; `start_date`/`end_date` (max 63 days); calendar days with `is_past`, blocked dates, and `available_times`: sorted distinct future, unreserved slot start times in `Asia/Manila`, excluding owner blocks (no default hourly times). |
+| `GET /booking-counselors` | Active Student; returns only active Counselor `counselor_user_id` and display name fields for the booking selector (no email or profile data). |
+| `GET /calendar` | Active Student/Counselor; `start_date`/`end_date` (max 63 days); Students may filter by active `counselor_user_id`; calendar days with `is_past`, blocked dates, `available_times` (sorted distinct future slot starts), and `available_slots` (sorted distinct `{start_time, end_time}` intervals), all in `Asia/Manila` and excluding whole-date and owner time blocks. Counselor responses include only their own `PENDING`/`CONFIRMED` `booked_slots` with interval and status; Students receive none. |
 | `POST /calendar/blocks` | Counselor; whole-day blocked date with optional `reason` (max 255); 201. |
 | `DELETE /calendar/blocks/{blocked_date}` | Counselor; removes a whole-day blocked date; 204. |
-| `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1–200 concrete slots. |
+| `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1â€“200 concrete slots. |
 | `PATCH /campuses/{campus_id}/guidance-office-location` | Counselor; nonblank `guidance_office_location` (max 255); 200 campus response. |
 | `GET /appointments` | Own appointments; optional `status`; `page=1`, `page_size=20` (max 100). |
 | `POST /appointments` | Student; `availability_slot_id`, `appointment_mode`; 201 `PENDING` appointment. |
@@ -309,6 +313,6 @@ Never make an undocumented response-field or enum change solely to satisfy one s
 - `ADR-P03` (content half; technical half resolved by ADR-023): final SOS question wording, thresholds, availability/fallback rule, and retention.
 - `ADR-P09`: Capacitor session-credential transport and production password-reset email delivery/fallback.
 
-Resolved: ADR-P02 → ADR-022 (WebSocket transport), ADR-P04 → ADR-021 (appointment policies), ADR-P05 → ADR-024 (COR limits/audit), ADR-P07 → ADR-026 (manual-resource rules).
+Resolved: ADR-P02 â†’ ADR-022 (WebSocket transport), ADR-P04 â†’ ADR-021 (appointment policies), ADR-P05 â†’ ADR-024 (COR limits/audit), ADR-P07 â†’ ADR-026 (manual-resource rules).
 
 Until approved, these items must remain absent, optional, or explicitly marked `PLANNED` in endpoint work.

@@ -393,6 +393,29 @@ def test_calendar_counts_real_future_unreserved_times(db_session, actors, monkey
     assert svc.calendar(users[0], today, today)["days"][0]["available_times"] == []
 
 
+def test_student_booking_reads_can_be_scoped_to_selected_counselor(db_session, actors):
+    from zoneinfo import ZoneInfo
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    # Use dates in the future and preserve a shared display time across both counselors.
+    start = datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(days=3)
+    for counselor in users[:2]:
+        db_session.add(AvailabilitySlot(counselor_user_id=counselor.user_id,
+            campus_id=campus.campus_id, delivery_mode="BOTH", status="AVAILABLE",
+            starts_at=start, ends_at=start + timedelta(minutes=30)))
+    db_session.flush()
+    manila_start = start.astimezone(ZoneInfo("Asia/Manila"))
+
+    directory = svc.booking_counselors(users[2])
+    assert [item["counselor_user_id"] for item in directory] == [users[0].user_id, users[1].user_id]
+    assert all("email" not in item for item in directory)
+    calendar = svc.calendar(users[2], manila_start.date(), manila_start.date(), users[1].user_id)
+    assert calendar["days"][0]["available_times"] == [manila_start.strftime("%H:%M")]
+    slots = svc.list_slots(users[2], counselor_user_id=users[1].user_id)
+    assert {item.counselor_user_id for item in slots["items"]} == {users[1].user_id}
+
+
 def test_location_required_at_creation_and_booking(db_session, actors):
     users, campus = actors
     svc = AppointmentsService(db_session)

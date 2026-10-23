@@ -1678,6 +1678,117 @@
         }
       }
     },
+    "/api/v1/weekly-schedules/standard-weekdays": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Create Standard Weekday Schedules",
+        "operationId": "create_standard_weekday_schedules_api_v1_weekly_schedules_standard_weekdays_post",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardWeekdayScheduleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WeeklyScheduleResponse"
+                  },
+                  "title": "Response Create Standard Weekday Schedules Api V1 Weekly Schedules Standard Weekdays Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Create Standard Weekday Schedules Api V1 Weekly Schedules Standard Weekdays Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/weekly-schedules/{weekly_schedule_id}/replace": {
       "post": {
         "tags": [
@@ -1846,6 +1957,211 @@
                     }
                   ],
                   "title": "Response 422 Deactivate Weekly Schedule Api V1 Weekly Schedules  Weekly Schedule Id  Delete"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/weekly-schedules/{weekly_schedule_id}/enable": {
+      "post": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Enable Weekly Schedule",
+        "operationId": "enable_weekly_schedule_api_v1_weekly_schedules__weekly_schedule_id__enable_post",
+        "parameters": [
+          {
+            "name": "weekly_schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Weekly Schedule Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyScheduleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Enable Weekly Schedule Api V1 Weekly Schedules  Weekly Schedule Id  Enable Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/weekly-schedules/{weekly_schedule_id}/remove": {
+      "delete": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Delete Weekly Schedule",
+        "operationId": "delete_weekly_schedule_api_v1_weekly_schedules__weekly_schedule_id__remove_delete",
+        "parameters": [
+          {
+            "name": "weekly_schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Weekly Schedule Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Delete Weekly Schedule Api V1 Weekly Schedules  Weekly Schedule Id  Remove Delete"
                 }
               }
             }
@@ -2198,6 +2514,107 @@
         }
       }
     },
+    "/api/v1/booking-counselors": {
+      "get": {
+        "tags": [
+          "appointments"
+        ],
+        "summary": "Booking Counselors",
+        "operationId": "booking_counselors_api_v1_booking_counselors_get",
+        "parameters": [
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CounselorBookingOption"
+                  },
+                  "title": "Response Booking Counselors Api V1 Booking Counselors Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Booking Counselors Api V1 Booking Counselors Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role, active-account, or CSRF denial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found in caller scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Unavailable slot, schedule conflict, incompatible mode, or invalid transition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/calendar": {
       "get": {
         "tags": [
@@ -2224,6 +2641,23 @@
               "type": "string",
               "format": "date",
               "title": "End Date"
+            }
+          },
+          {
+            "name": "counselor_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselor User Id"
             }
           },
           {
@@ -2597,6 +3031,23 @@
                 }
               ],
               "title": "Ends Before"
+            }
+          },
+          {
+            "name": "counselor_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselor User Id"
             }
           },
           {
@@ -5525,6 +5976,26 @@
         ],
         "title": "Body_resubmit_cor_api_v1_cor_screenings_resubmit_post"
       },
+      "CalendarAvailabilityResponse": {
+        "properties": {
+          "start_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "time",
+            "title": "End Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_time",
+          "end_time"
+        ],
+        "title": "CalendarAvailabilityResponse"
+      },
       "CalendarBlockRequest": {
         "properties": {
           "blocked_date": {
@@ -5552,6 +6023,35 @@
         ],
         "title": "CalendarBlockRequest"
       },
+      "CalendarBookedSlotResponse": {
+        "properties": {
+          "start_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "time",
+            "title": "End Time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CONFIRMED"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_time",
+          "end_time",
+          "status"
+        ],
+        "title": "CalendarBookedSlotResponse"
+      },
       "CalendarDayResponse": {
         "properties": {
           "calendar_date": {
@@ -5577,6 +6077,20 @@
             },
             "type": "array",
             "title": "Available Times"
+          },
+          "available_slots": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarAvailabilityResponse"
+            },
+            "type": "array",
+            "title": "Available Slots"
+          },
+          "booked_slots": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarBookedSlotResponse"
+            },
+            "type": "array",
+            "title": "Booked Slots"
           }
         },
         "type": "object",
@@ -6285,6 +6799,24 @@
         ],
         "title": "CorScreeningResponse",
         "description": "Screening result plus the extracted (unconfirmed) academic fields."
+      },
+      "CounselorBookingOption": {
+        "properties": {
+          "counselor_user_id": {
+            "type": "integer",
+            "title": "Counselor User Id"
+          },
+          "counselor_name": {
+            "type": "string",
+            "title": "Counselor Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counselor_user_id",
+          "counselor_name"
+        ],
+        "title": "CounselorBookingOption"
       },
       "CounselorScreeningItem": {
         "properties": {
@@ -7343,6 +7875,38 @@
           "last_name"
         ],
         "title": "SessionUser"
+      },
+      "StandardWeekdayScheduleRequest": {
+        "properties": {
+          "campus_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Campus Id"
+          },
+          "slot_duration_minutes": {
+            "type": "integer",
+            "maximum": 240.0,
+            "minimum": 15.0,
+            "title": "Slot Duration Minutes"
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": [
+              "ONLINE",
+              "FACE_TO_FACE",
+              "BOTH"
+            ],
+            "title": "Delivery Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "campus_id",
+          "slot_duration_minutes",
+          "delivery_mode"
+        ],
+        "title": "StandardWeekdayScheduleRequest"
       },
       "StudentDirectoryItem": {
         "properties": {

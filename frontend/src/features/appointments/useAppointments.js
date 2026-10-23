@@ -25,9 +25,13 @@ const SELECTED_DATE_SLOT_PAGE_SIZE = 100;
  */
 export function useAppointments(role = "", initialStatus = "") {
   const [campuses, setCampuses] = useState([]);
+  const [bookingCounselors, setBookingCounselors] = useState([]);
+  const [bookingCounselorsError, setBookingCounselorsError] = useState("");
+  const [counselorUserId, setCounselorUserId] = useState("");
   const [slots, setSlots] = useState({ items: [], page: 1, page_size: 20, total: 0 });
   const [appointments, setAppointments] = useState({ items: [], page: 1, page_size: 20, total: 0 });
   const [calendar, setCalendar] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => manilaToday().slice(0, 7));
   const [weeklySchedules, setWeeklySchedules] = useState([]);
   const [availabilityBlocks, setAvailabilityBlocks] = useState([]);
   const [campusId, setCampusId] = useState("");
@@ -69,26 +73,31 @@ export function useAppointments(role = "", initialStatus = "") {
     });
     if (campusId) params.set("campus_id", campusId);
     if (mode) params.set("appointment_mode", mode);
+    if (role === "STUDENT" && counselorUserId) params.set("counselor_user_id", counselorUserId);
     if (effectiveDate) {
       params.set("starts_after", new Date(effectiveDate + "T00:00:00+08:00").toISOString());
       params.set("ends_before", new Date(new Date(effectiveDate + "T00:00:00+08:00").getTime() + 86400000).toISOString());
     }
     const appParams = new URLSearchParams({ page: String(appointmentPage), page_size: "20" });
     if (status) appParams.set("status", status);
-    const today = new Date();
-    const manilaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(today);
-    const end = new Date(today); end.setDate(end.getDate() + 30);
-    const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(end);
-    const calendarParams = new URLSearchParams({ start_date: manilaDate, end_date: endDate });
+    const [calendarYear, calendarMonthNumber] = calendarMonth.split("-").map(Number);
+    const calendarStart = `${calendarMonth}-01`;
+    const calendarEndDate = new Date(0);
+    calendarEndDate.setUTCHours(0, 0, 0, 0);
+    calendarEndDate.setUTCFullYear(calendarYear, calendarMonthNumber, 0);
+    const calendarEnd = calendarEndDate.toISOString().slice(0, 10);
+    const calendarParams = new URLSearchParams({ start_date: calendarStart, end_date: calendarEnd });
+    if (role === "STUDENT" && counselorUserId) calendarParams.set("counselor_user_id", counselorUserId);
     const headers = background ? { "X-Background-Refresh": "1" } : undefined;
     try {
-      const [calendarResult, campusResult, firstSlotResult, appointmentsResult, schedulesResult, blocksResult] = await Promise.allSettled([
+      const [calendarResult, campusResult, firstSlotResult, appointmentsResult, schedulesResult, blocksResult, counselorsResult] = await Promise.allSettled([
         request("/calendar?" + calendarParams, { headers }),
         request("/accounts/campuses", { headers }),
         request("/availability-slots?" + params, { headers }),
         request("/appointments?" + appParams, { headers }),
         isCounselor ? request("/weekly-schedules", { headers }) : Promise.resolve([]),
         isCounselor ? request("/availability-blocks", { headers }) : Promise.resolve([]),
+        role === "STUDENT" ? request("/booking-counselors", { headers }) : Promise.resolve([]),
       ]);
       let slotData = null;
       let availabilityError = "";
@@ -120,6 +129,13 @@ export function useAppointments(role = "", initialStatus = "") {
       else availabilityError ||= "Could not load the availability calendar.";
       if (campusResult.status === "fulfilled") setCampuses(campusResult.value.items);
       else availabilityError ||= "Could not load campus information.";
+      if (counselorsResult.status === "fulfilled") {
+        setBookingCounselors(counselorsResult.value);
+        setBookingCounselorsError("");
+      } else if (role === "STUDENT") {
+        setBookingCounselorsError(counselorsResult.reason instanceof Error
+          ? counselorsResult.reason.message : "Could not load Counselors.");
+      }
       if (slotData) {
         // A slot becomes unbookable the moment its start passes; the backend
         // already excludes past slots, this covers the gap until refresh.
@@ -154,7 +170,7 @@ export function useAppointments(role = "", initialStatus = "") {
         if (isCounselor) setAvailabilityBlocksLoading(false);
       }
     }
-  }, [role, campusId, mode, date, status, slotPage, appointmentPage]);
+  }, [role, campusId, mode, date, status, slotPage, appointmentPage, calendarMonth, counselorUserId]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     const timer = setInterval(() => { void refresh(true); }, 60_000);
@@ -176,7 +192,7 @@ export function useAppointments(role = "", initialStatus = "") {
       if (mounted.current) setBusy(false);
     }
   }
-  return { campuses, slots, appointments, calendar, weeklySchedules, availabilityBlocks, loading, recordsLoading, availabilityBlocksLoading, busy, error, recordsError, availabilityBlocksError, message, refresh, mutate,
+  return { campuses, bookingCounselors, bookingCounselorsError, counselorUserId, setCounselorUserId, slots, appointments, calendar, calendarMonth, setCalendarMonth, weeklySchedules, availabilityBlocks, loading, recordsLoading, availabilityBlocksLoading, busy, error, recordsError, availabilityBlocksError, message, refresh, mutate,
     campusId, setCampusId, mode, setMode, date, setDate, status, setStatus,
     slotPage, setSlotPage, appointmentPage, setAppointmentPage };
 }
