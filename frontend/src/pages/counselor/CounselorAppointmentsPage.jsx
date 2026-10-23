@@ -166,7 +166,7 @@ function WeeklyScheduleEditor({ state }) {
             {editingId ? "Save changes" : "Add availability"}
           </button>
           {!editingId && <button type="button" className={secondaryClass}
-            disabled={state.busy || !campusId || !wholeSlots}
+            disabled={state.busy || !campusId}
             onClick={() => void state.mutate("/weekly-schedules/standard-weekdays", {
               campus_id: Number(campusId), slot_duration_minutes: Number(duration), delivery_mode: mode,
             }, "POST", "Standard weekday availability saved for Monday–Friday, 8:00 AM–4:00 PM.")}>
@@ -276,7 +276,8 @@ export default function CounselorAppointmentsPage({ user }) {
         <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.recordsLoading} />
       </section>
 
-      <BookingModal open={rescheduleId !== null} onClose={() => setRescheduleId(null)} state={state} rescheduleId={rescheduleId} />
+      <BookingModal open={rescheduleId !== null} onClose={() => setRescheduleId(null)} state={state} rescheduleId={rescheduleId}
+        selfCounselorId={user.user_id} selfCounselorName={`${user.first_name} ${user.last_name}`} />
 
       <WeeklyScheduleEditor state={state} />
 

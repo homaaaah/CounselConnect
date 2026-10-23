@@ -6,7 +6,8 @@ import CalendarGrid from "./CalendarGrid.jsx";
 const STEP_LABELS = ["Counselor", "Date", "Time", "Session mode", "Review", "Submit"];
 
 /** Guided counselor-first booking flow. The existing appointment mutation remains authoritative. */
-export default function BookingModal({ open, onClose, state, rescheduleId = null }) {
+export default function BookingModal({ open, onClose, state, rescheduleId = null,
+  selfCounselorId = null, selfCounselorName = "" }) {
   const [step, setStep] = useState(1);
   const [selectedCounselorId, setSelectedCounselorId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -31,6 +32,14 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+  // A Counselor can only reschedule against their own availability, and the
+  // Student counselor directory is intentionally empty for them. Start those
+  // flows on the calendar step so the modal never dead-ends at step 1.
+  useEffect(() => {
+    if (!open || selfCounselorId == null) return;
+    setSelectedCounselorId(selfCounselorId);
+    setStep(current => (current < 2 ? 2 : current));
+  }, [open, selfCounselorId]);
   useEffect(() => {
     if (!open || !selectedDate) return;
     if (state.date !== selectedDate) state.setDate(selectedDate);
@@ -82,6 +91,7 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
     else if (step === 4) setStep(3);
     else if (step === 3) setStep(2);
     else if (step === 2) {
+      if (selfCounselorId != null) return;
       state.setCounselorUserId?.(""); setSelectedCounselorId(null); state.setDate("");
       setSelectedDate(null); setPickedTime(null); setSlotCandidates([]);
       setSelectedSlotId(null); setSlotSelectionInitialized(false); setSlotDetails(null); setMode("ONLINE"); setStep(1);
@@ -150,7 +160,7 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
                   </button>)}</div>}
           </section> : step >= 2 && step <= 3 ? <div className="booking-layout">
             <section className="booking-panel booking-panel--calendar" aria-label="Availability calendar">
-              <p className="booking-hint">Counselor: {state.bookingCounselors.find(item => item.counselor_user_id === selectedCounselorId)?.counselor_name}</p>
+              <p className="booking-hint">Counselor: {state.bookingCounselors.find(item => item.counselor_user_id === selectedCounselorId)?.counselor_name ?? selfCounselorName}</p>
               <CalendarGrid variant="modal" calendar={state.calendar} month={state.calendarMonth}
                 loading={state.loading} onRetry={state.refresh} onMonthChange={onCalendarMonthChange}
                 onSelect={onCalendarSelect} onPickTime={onCalendarPickTime} />

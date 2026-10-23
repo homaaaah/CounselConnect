@@ -330,15 +330,23 @@ def test_socket_rejects_unauthorized_origin_and_non_participants(
     committed_client, app, call_data, mysql_test_engine, socket_engine
 ):
     appointment_id = _appointment(mysql_test_engine, call_data)
-    _login(committed_client, call_data["emails"]["other_student"])
+    # An authorized participant must still be rejected for a foreign Origin.
+    _login(committed_client, call_data["emails"]["student"])
     with pytest.raises(WebSocketDisconnect):
         with committed_client.websocket_connect(
             f"/api/v1/appointments/{appointment_id}/call/ws",
             headers={"origin": "http://evil.example"},
         ):
             pass
+    # The same participant connects with the allowed Origin, proving the
+    # previous rejection came from the Origin check and not from authorization.
+    with _ready(appointment_id, committed_client) as socket:
+        assert socket.receive_json()["type"] == "room-state"
+    # A non-participant is rejected even with the allowed Origin.
+    other = TestClient(app)
+    _login(other, call_data["emails"]["other_student"])
     with pytest.raises(WebSocketDisconnect):
-        with committed_client.websocket_connect(
+        with other.websocket_connect(
             f"/api/v1/appointments/{appointment_id}/call/ws",
             headers={"origin": ORIGIN},
         ):

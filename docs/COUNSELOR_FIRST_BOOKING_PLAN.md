@@ -117,7 +117,7 @@ The implementation delivered and integrated these safeguards:
 ## Phase 1–3 implementation sequence
 
 1. **Contract and product acceptance:** confirm the six step labels/order, search horizon, campus presentation, empty-state wording, Counselor display fields, and behavior for Student versus Counselor rescheduling. Update the planned API proposal to AGREED before parallel frontend/backend implementation.
-2. **Backend discovery/filtering:** add and test the paginated eligible-Counselor query; add counselor filtering to calendar and slot reads; enforce role, active status, schedule/block/slot eligibility, range limits, count correctness, and self-only Counselor scope. Keep booking writes unchanged.
+2. **Backend discovery/filtering:** add and test the active-Counselor directory query (v1 intentionally has no availability-eligibility filter or pagination there); add counselor filtering to calendar and slot reads; enforce role, active status, schedule/block/slot eligibility, range limits, count correctness, and self-only Counselor scope. Keep booking writes unchanged.
 3. **Frontend wizard:** update `BookingModal` and `useAppointments` to use counselor-first discovery and filtered calendar/slot reads. Preserve selected slot identity and actor-aware rescheduling. Do not change appointment list/dashboard data fetching.
 4. **Contract artifacts:** update `docs/API_CONTRACT.md`, `contracts/openapi.json`, and `docs/APPOINTMENT_SCHEDULING.md` from the verified implementation.
 
@@ -125,8 +125,8 @@ The implementation delivered and integrated these safeguards:
 
 ### Backend/API
 
-- Active Student sees only Counselors with eligible future availability in the requested range; inactive, empty, blocked, past, reserved, or conflicting availability does not create a false eligible result.
-- Counselor discovery is paginated with a correct total and stable order; invalid or overlong ranges return the documented validation error.
+- Active Student sees the complete active Counselor directory; availability eligibility is decided by the calendar and slot reads for the selected Counselor, so a Counselor with no eligible slots shows the normal empty-availability state.
+- Counselor discovery returns the full active directory in a stable order without pagination; calendar range limits (63 days) and record pagination keep their documented validation.
 - Student calendar and slot results are scoped to the selected Counselor; same-time slots across campuses remain distinct concrete choices.
 - Student slot queries exclude inactive Counselors before totals and pagination; booking still rejects an account disabled after discovery.
 - Counselor reads remain self-scoped even if another `counselor_user_id` is supplied; pending Students and Guidance Staff remain denied.

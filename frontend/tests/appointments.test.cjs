@@ -7,6 +7,7 @@ const AppointmentsPage = require("../src/pages/AppointmentsPage.jsx").default;
 const HomePage = require("../src/pages/HomePage.jsx").default;
 const CalendarGrid = require("../src/components/appointments/CalendarGrid.jsx").default;
 const BookingModal = require("../src/components/appointments/BookingModal.jsx").default;
+const CounselorAppointmentsPage = require("../src/pages/counselor/CounselorAppointmentsPage.jsx").default;
 const App = require("../src/App.jsx").default;
 const { manilaInputToUTC, formatSchedule } = require("../src/features/appointments");
 const { ToastProvider } = require("../src/components/feedback");
@@ -258,6 +259,27 @@ test("confirmed student record opens the reschedule modal and sends reschedule",
   await act(async () => formFor(root, "Submit reschedule").props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(c => c.method === "POST").at(-1);
   assert.equal(post.path, "/api/v1/appointments/5/reschedule");
+  assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled. Awaiting counselor review."));
+});
+
+test("Counselor reschedule starts on their own calendar and never needs the student directory", async t => {
+  const calls = setup(t, { user: counselor, appointments: [appointment], calendar: calendar() });
+  const root = await mount(t, React.createElement(CounselorAppointmentsPage, { user: counselor }));
+  await act(async () => button(root, "Reschedule").props.onClick());
+  const opened = JSON.stringify(root.toJSON());
+  assert.ok(opened.includes("Step 2 of 6: Date"), "Counselor starts at the calendar step");
+  assert.ok(!opened.includes("No active Counselors are available right now."));
+  await showBookingMonth(root);
+  await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => formFor(root, "Submit reschedule").props.onSubmit({ preventDefault() {} }));
+  const post = calls.filter(c => c.method === "POST").at(-1);
+  assert.equal(post.path, "/api/v1/appointments/5/reschedule");
+  assert.ok(!calls.some(call => call.path.endsWith("/booking-counselors")),
+    "the Counselor flow never requests the Student-only directory");
   assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled. Awaiting counselor review."));
 });
 

@@ -40,13 +40,30 @@ export function useCounselorDashboard(user) {
 
     const startsAfter = new Date(`${today}T00:00:00+08:00`).toISOString();
     const endsBefore = new Date(new Date(`${today}T00:00:00+08:00`).getTime() + 86400000).toISOString();
-    request(`/appointments?page=1&page_size=100&starts_after=${encodeURIComponent(startsAfter)}&ends_before=${encodeURIComponent(endsBefore)}`)
-      .then((data) => {
-        if (cancelled) return;
-        setItems((data?.items ?? [])
-          .filter((appointment) => manilaDay(appointment.starts_at) === today)
-          .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)));
-      })
+    const range = `starts_after=${encodeURIComponent(startsAfter)}&ends_before=${encodeURIComponent(endsBefore)}`;
+
+    // The range filters shrink the result set, but the documented maximum is
+    // 100 per page. Page through the whole day so "today" is never truncated.
+    const load = async () => {
+      const pageSize = 100;
+      const collected = [];
+      let page = 1;
+      let total = Infinity;
+      while (!cancelled && page <= 20) {
+        const data = await request(`/appointments?page=${page}&page_size=${pageSize}&${range}`);
+        const batch = data?.items ?? [];
+        collected.push(...batch);
+        total = typeof data?.total === "number" ? data.total : collected.length;
+        if (batch.length < pageSize || collected.length >= total) break;
+        page += 1;
+      }
+      if (cancelled) return;
+      setItems(collected
+        .filter((appointment) => manilaDay(appointment.starts_at) === today)
+        .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)));
+    };
+
+    load()
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load today's appointments.");
       })

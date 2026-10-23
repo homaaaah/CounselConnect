@@ -24,6 +24,7 @@ from app.modules.appointments.schemas import (
     AppointmentResponse,
     AppointmentSessionResponse,
     AvailabilitySlotResponse,
+    WeeklyScheduleCreateRequest,
 )
 
 
@@ -732,6 +733,13 @@ class AppointmentsService(BaseService[Appointment]):
 
     def _validate_slot(self, slot, mode, student_id, exclude_id=None):
         if slot is None or slot.status != "AVAILABLE":
+            raise AppError(
+                "SLOT_UNAVAILABLE", "The selected slot is no longer available."
+            )
+        # A slot generated from a weekly schedule disappears from calendar and
+        # slot reads once that definition is disabled or deleted. Reject the
+        # same stale slot here so a remembered ID cannot reserve it.
+        if not self.repository.slot_schedule_is_active(slot):
             raise AppError(
                 "SLOT_UNAVAILABLE", "The selected slot is no longer available."
             )
