@@ -8,6 +8,7 @@ const HomePage = require("../src/pages/HomePage.jsx").default;
 const CalendarGrid = require("../src/components/appointments/CalendarGrid.jsx").default;
 const BookingModal = require("../src/components/appointments/BookingModal.jsx").default;
 const App = require("../src/App.jsx").default;
+const { ToastProvider } = require("../src/components/feedback");
 const { manilaInputToUTC, formatSchedule } = require("../src/features/appointments");
 const { setCsrfToken } = require("../src/services/apiClient");
 
@@ -36,7 +37,15 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
       return json(appointment, 201);
     }
     if (path.endsWith("/accounts/campuses")) return json(envelope([{ campus_id: 1, campus_name: "Main", guidance_office_location: "Room 201" }]));
-    if (path.endsWith("/availability-slots")) return json(slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]));
+    if (path.endsWith("/availability-slots")) {
+      const response = slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]);
+      if (response instanceof Response) return response;
+      if (!slotsResponse) {
+        response.page = Number(parsed.searchParams.get("page") || "1");
+        response.page_size = Number(parsed.searchParams.get("page_size") || "20");
+      }
+      return json(response);
+    }
     if (path.endsWith("/appointments")) return json(envelope(
       typeof appointments === "function" ? appointments(parsed.searchParams) : appointments
     ));
@@ -66,7 +75,7 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
 }
 async function mount(t, component) {
   let root;
-  await act(async () => { root = create(component); });
+  await act(async () => { root = create(React.createElement(ToastProvider, null, component)); });
   t.after(async () => { await act(async () => root.unmount()); setCsrfToken(null); });
   return root;
 }
@@ -79,7 +88,7 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
   const calls = setup(t, { calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
   const requestsBefore = calls.length;
-  const schedule = button(root, "Schedule");
+  const schedule = button(root, "Start Booking");
   assert.ok(schedule);
   await act(async () => schedule.props.onClick());
   const dayCell = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01"));
@@ -102,7 +111,7 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
 test("booking modal shows the revealed campus/time details before requesting", async t => {
   setup(t, { calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -116,7 +125,7 @@ test("booking modal shows the revealed campus/time details before requesting", a
 test("booking modal exposes the counselor choice even when only one counselor matches", async t => {
   setup(t, { calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -143,7 +152,7 @@ test("booking loads every selected-date slot page and lets the student choose a 
     },
   });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -154,6 +163,47 @@ test("booking loads every selected-date slot page and lets the student choose a 
   await act(async () => formFor(root, "Confirm booking").props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(call => call.method === "POST").at(-1);
   assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 110, appointment_mode: "ONLINE" });
+});
+
+test("failed selected-date pagination clears partial choices and can recover on retry", async t => {
+  const matchingSlots = Array.from({ length: 101 }, (_, index) => ({
+    ...slot, slot_id: index + 10, counselor_name: `Counselor ${index + 1}`,
+  }));
+  let failSecondPage = true;
+  const calls = setup(t, {
+    calendar: calendar(),
+    slotsResponse: (query) => {
+      const page = Number(query.get("page") || "1");
+      const pageSize = Number(query.get("page_size") || "20");
+      if (!query.has("starts_after")) return { ...envelope([slot]), page, page_size: pageSize };
+      if (page === 2 && failSecondPage) {
+        failSecondPage = false;
+        return json({ error: { code: "TEMPORARY_ERROR", message: "Temporary page failure." } }, 503);
+      }
+      return {
+        items: matchingSlots.slice((page - 1) * pageSize, page * pageSize),
+        total: matchingSlots.length, page, page_size: pageSize,
+      };
+    },
+  });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Start Booking").props.onClick());
+  await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+  assert.ok(JSON.stringify(root.toJSON()).includes("Could not load a complete availability list"));
+  const confirm = button(root, "Confirm booking");
+  assert.equal(confirm.props.disabled, true, "partial slot results cannot be submitted");
+  assert.equal(root.root.findAllByProps({ "aria-label": "Choose Counselor 100 at Main" }).length, 0,
+    "partial candidate list is cleared");
+
+  await act(async () => button(root, "Retry availability").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  assert.ok(root.root.findAllByProps({ "aria-label": "Choose Counselor 101 at Main" }).length,
+    "complete result returns after retry");
+  assert.equal(button(root, "Confirm booking").props.disabled, false);
+  assert.ok(calls.filter(call => call.path.endsWith("/availability-slots") && call.query.starts_after).length >= 4);
 });
 
 test("a background slot refresh preserves a selected compatible appointment mode", async t => {
@@ -179,7 +229,7 @@ test("a background slot refresh preserves a selected compatible appointment mode
 test("server booking conflict keeps the modal open and shows the slot-unavailable error", async t => {
   setup(t, { failure: true, calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -207,7 +257,7 @@ test("records view keeps every appointment outcome accessible by status", async 
   setup(t, { appointments: [appointment] });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
   const rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("My appointments"), "records heading for students");
+  assert.ok(rendered.includes("My Appointments"), "records heading for students");
   const labels = ["Confirmed", "Pending", "Completed", "No-show", "Cancelled", "Rejected"];
   const tabs = root.root.findAllByType("button").filter(b => labels.includes(buttonText(b)));
   assert.equal(tabs.length, labels.length, "every appointment status has a record tab");
@@ -372,18 +422,25 @@ test("calendar permits a weekend date when it has counselor availability", async
   setup(t);
   const picks = [];
   const cal = { business_hours: "Availability set by counselors", days: [{
-    calendar_date: "2026-09-19", is_weekday: false, is_blocked: false, is_past: false,
+    calendar_date: (() => {
+      const date = new Date();
+      const manilaToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(date);
+      const manilaDate = new Date(manilaToday + "T00:00:00Z");
+      manilaDate.setUTCDate(manilaDate.getUTCDate() + ((6 - manilaDate.getUTCDay() + 7) % 7 || 7));
+      return manilaDate.toISOString().slice(0, 10);
+    })(), is_weekday: false, is_blocked: false, is_past: false,
     available_times: ["09:00"],
   }] };
   const root = await mount(t, React.createElement(CalendarGrid, {
     calendar: cal, onPickTime: (...args) => picks.push(args),
   }));
-  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2026-09-19"));
+  const saturdayDate = cal.days[0].calendar_date;
+  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith(saturdayDate));
   assert.equal(saturday.props.disabled, false);
   assert.match(saturday.props["aria-label"], /1 times available/);
   await act(async () => saturday.props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
-  assert.deepEqual(picks, [["2026-09-19", "09:00"]]);
+  assert.deepEqual(picks, [[saturdayDate, "09:00"]]);
 });
 
 test("calendar month navigation stays within loaded data", async t => {

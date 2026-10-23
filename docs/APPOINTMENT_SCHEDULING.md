@@ -1,5 +1,7 @@
 # CounselConnect — Appointment Scheduling
 
+> The planned counselor-first booking flow, API additions, compatibility rules, and implementation acceptance criteria are documented in [COUNSELOR_FIRST_BOOKING_PLAN.md](COUNSELOR_FIRST_BOOKING_PLAN.md). That plan is not yet implemented; existing API behavior remains authoritative until the proposed contract is agreed and delivered.
+
 ## Contract
 
 Scheduling follows the approved **CounselConnect Appointment Scheduling Process Flow** (2026-09-10), reference Flowchart V1 page 4. Availability comes from Counselor weekly schedules plus temporary blocks, Students request slots, and Counselors review requests and record outcomes.

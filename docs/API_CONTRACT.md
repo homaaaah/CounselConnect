@@ -158,6 +158,10 @@ Exact error codes belong to each agreed endpoint contract and must appear in tes
 - Student-selected `appointment_mode` is `ONLINE` or `FACE_TO_FACE` and must be compatible with the slot.
 - A face-to-face booking returns the appointment's `meeting_location` snapshot. It does not depend on later campus-location edits.
 - Only Counselor may mutate `guidance_office_location`.
+
+#### Planned: counselor-first booking (not implemented)
+
+The proposed flow requires a paginated `GET /availability-counselors` discovery operation and optional `counselor_user_id` filters on `GET /calendar` and `GET /availability-slots`. The active proposal, query semantics, authorization rules, and acceptance criteria are maintained in [COUNSELOR_FIRST_BOOKING_PLAN.md](COUNSELOR_FIRST_BOOKING_PLAN.md). These routes and fields are PLANNED only and must not be consumed by frontend work until their exact contract is agreed and present in OpenAPI. Booking and rescheduling writes continue to identify the chosen counselor through `availability_slot_id`; no separate counselor field is planned.
 - A confirmed online appointment may obtain exactly one `APPOINTMENT` conversation when the approved start-time rule allows it.
 
 ### Implemented scheduling endpoints

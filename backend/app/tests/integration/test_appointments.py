@@ -891,3 +891,28 @@ def test_slot_date_blocks_are_owner_scoped_and_use_manila_date(db_session, actor
     assert [s.slot_id for s in svc.list_slots(users[2], campus_id=campus.campus_id, page=2, page_size=1)["items"]] == [slots[2].slot_id]
     # Counselor scope remains private even when another counselor is unblocked.
     assert [s.slot_id for s in svc.list_slots(users[0])["items"]] == [slots[0].slot_id]
+
+
+def test_student_slot_listing_excludes_inactive_counselors_before_pagination(db_session, actors):
+    users, campus = actors
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=5)
+    active_slot = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start, ends_at=start + timedelta(minutes=30),
+    )
+    inactive_slot = AvailabilitySlot(
+        counselor_user_id=users[1].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start + timedelta(hours=1), ends_at=start + timedelta(hours=1, minutes=30),
+    )
+    users[1].account_status = "VERIFICATION_EXPIRED"
+    db_session.add_all([active_slot, inactive_slot])
+    db_session.flush()
+
+    result = AppointmentsService(db_session).list_slots(
+        users[2], campus_id=campus.campus_id, page_size=1
+    )
+
+    assert result["total"] == 1
+    assert [item.slot_id for item in result["items"]] == [active_slot.slot_id]

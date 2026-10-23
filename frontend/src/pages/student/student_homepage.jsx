@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatSchedule } from "../../features/appointments";
+import { formatSchedule, useAppointments } from "../../features/appointments";
 import { request } from "../../services/apiClient";
 import BookingModal from "../../components/appointments/BookingModal.jsx";
 import { useToast } from "../../components/feedback";

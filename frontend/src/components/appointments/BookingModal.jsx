@@ -156,7 +156,13 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
                 </section>
 
                 <section className="booking-panel booking-panel--details" aria-label="Appointment details">
-                  {state.error && <p role="alert" className="booking-alert booking-alert--error">{state.error}</p>}
+                  {state.error && <div role="alert" className="booking-alert booking-alert--error">
+                    <p>{state.error}</p>
+                    <button type="button" className="booking-btn-text" disabled={state.loading}
+                      onClick={() => void state.refresh?.()}>
+                      {state.loading ? "Retrying availability…" : "Retry availability"}
+                    </button>
+                  </div>}
 
                   {!pickedTime && <p className="booking-hint">Click a date to see available times, then pick one to reveal campus and mode details. Philippine time.</p>}
                   {selectedDate && !pickedTime && <p className="booking-hint">Pick a time on your selected date to continue.</p>}

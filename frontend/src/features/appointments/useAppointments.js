@@ -97,8 +97,20 @@ export function useAppointments(role = "", initialStatus = "") {
       } else {
         availabilityError = "Could not load available appointment times.";
       }
+      if (effectiveDate && slotData) {
+        const validFirstPage = Array.isArray(slotData.items)
+          && Number.isInteger(slotData.total) && slotData.total >= 0
+          && slotData.page === 1 && slotData.page_size === selectedDatePageSize
+          && slotData.items.length === Math.min(slotData.total, selectedDatePageSize)
+          && new Set(slotData.items.map((item) => item.slot_id)).size === slotData.items.length;
+        if (!validFirstPage) {
+          availabilityError = "The availability response was incomplete. Retry loading this date.";
+          slotData = null;
+        }
+      }
       if (slotData && effectiveDate && slotData.total > slotData.items.length) {
-        const extraPages = Math.ceil(slotData.total / slotData.page_size) - 1;
+        const firstPage = slotData;
+        const extraPages = Math.ceil(slotData.total / selectedDatePageSize) - 1;
         const extraSlots = await Promise.allSettled(
           Array.from({ length: extraPages }, (_, index) => {
             const pageParams = new URLSearchParams(params);
@@ -106,13 +118,25 @@ export function useAppointments(role = "", initialStatus = "") {
             return request("/availability-slots?" + pageParams, { headers });
           })
         );
-        if (extraSlots.every((result) => result.status === "fulfilled")) {
-          slotData = {
-            ...slotData,
-            items: slotData.items.concat(...extraSlots.map((result) => result.value.items)),
-          };
+        const pagesAreComplete = extraSlots.every((result, index) => {
+          if (result.status !== "fulfilled") return false;
+          const page = result.value;
+          return Array.isArray(page.items)
+            && page.page === index + 2
+            && page.page_size === selectedDatePageSize
+            && page.total === firstPage.total
+            && page.items.length <= selectedDatePageSize;
+        });
+        const allItems = pagesAreComplete
+          ? firstPage.items.concat(...extraSlots.map((result) => result.value.items))
+          : [];
+        const uniqueSlotIds = new Set(allItems.map((item) => item.slot_id));
+        if (pagesAreComplete && allItems.length === firstPage.total
+            && uniqueSlotIds.size === allItems.length) {
+          slotData = { ...firstPage, items: allItems };
         } else {
-          availabilityError = "Could not load every available appointment time for that date.";
+          availabilityError = "Could not load a complete availability list for that date. Retry before choosing a slot.";
+          slotData = null;
         }
       }
       if (current !== sequence.current || !mounted.current) return;
@@ -125,6 +149,10 @@ export function useAppointments(role = "", initialStatus = "") {
         // already excludes past slots, this covers the gap until refresh.
         const stillFuture = slotData.items.filter(slot => new Date(slot.starts_at).getTime() > Date.now());
         setSlots({ ...slotData, items: stillFuture, total: slotData.total });
+      } else if (effectiveDate) {
+        // Never leave a previous or partial date result selectable after a
+        // failed selected-date read. Appointment records remain independent.
+        setSlots({ items: [], page: 1, page_size: SELECTED_DATE_SLOT_PAGE_SIZE, total: 0 });
       }
       if (appointmentsResult.status === "fulfilled") {
         setAppointments(appointmentsResult.value);

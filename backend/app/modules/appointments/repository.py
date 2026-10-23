@@ -5,6 +5,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 
 from app.modules.bases import BaseRepository
+from app.modules.accounts.models import User
 from app.modules.appointments.models import (
     Appointment,
     AvailabilitySlot,
@@ -298,7 +299,15 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         if actor.role_code == "COUNSELOR":
             stmt = stmt.where(AvailabilitySlot.counselor_user_id == actor.user_id)
         else:
-            stmt = stmt.where(AvailabilitySlot.status == "AVAILABLE")
+            active_counselor = select(User.user_id).where(
+                User.user_id == AvailabilitySlot.counselor_user_id,
+                User.role_code == "COUNSELOR",
+                User.account_status == "ACTIVE",
+            ).exists()
+            stmt = stmt.where(
+                AvailabilitySlot.status == "AVAILABLE",
+                active_counselor,
+            )
         if campus_id is not None:
             stmt = stmt.where(AvailabilitySlot.campus_id == campus_id)
         if appointment_mode:
