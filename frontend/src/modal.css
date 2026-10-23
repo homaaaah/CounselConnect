@@ -24,6 +24,20 @@
   max-width: 640px;
 }
 
+.signup-card .signup-header {
+  padding-right: 1.5rem;
+}
+
+.signup-card .form-group {
+  min-width: 0;
+}
+
+.signup-card .form-input:focus-visible,
+.signup-card .form-select:focus-visible {
+  outline: 2px solid var(--counseling-active-focus);
+  outline-offset: 2px;
+}
+
 /* Auth modal overlay */
 .modal-overlay {
   position: fixed;
@@ -214,6 +228,22 @@
   .modal-card,
   .signup-card {
     padding: 1.75rem 1.25rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .signup-card {
+    padding: 2rem 1.25rem 1.5rem;
+  }
+
+  .signup-card .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .signup-card .form-input,
+  .signup-card .form-select {
+    font-size: 1rem;
   }
 }
 
