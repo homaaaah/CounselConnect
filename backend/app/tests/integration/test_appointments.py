@@ -628,6 +628,18 @@ def test_http_contract_csrf_and_no_store(db_client, db_session, actors):
     assert response.json()["starts_at"].endswith("Z")
     result = db_client.get("/api/v1/appointments?page=1&page_size=1")
     assert result.status_code == 200 and result.json()["total"] == 1
+    starts_at = response.json()["starts_at"]
+    slot_start = datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
+    included = db_client.get(
+        "/api/v1/appointments",
+        params={"starts_after": starts_at, "ends_before": (slot_start + timedelta(hours=1)).isoformat()},
+    )
+    excluded = db_client.get(
+        "/api/v1/appointments",
+        params={"starts_after": (slot_start + timedelta(seconds=1)).isoformat()},
+    )
+    assert included.status_code == 200 and included.json()["total"] == 1
+    assert excluded.status_code == 200 and excluded.json()["total"] == 0
     assert db_client.get("/api/v1/availability-slots?page_size=101").status_code == 422
     assert (
         db_client.post(

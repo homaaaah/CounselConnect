@@ -53,7 +53,7 @@ async function mount(t, component) {
   return root;
 }
 
-test("counselor sidebar shows greeting, role chip, active Dashboard, Users, and Appointments links", async (t) => {
+test("counselor header shows Dashboard + Appointments and inactive Sessions/Schedule/History", async (t) => {
   environment(t);
   fakeApi(t, authFor(baseUser));
   const root = await mount(t, React.createElement(App));
@@ -62,10 +62,7 @@ test("counselor sidebar shows greeting, role chip, active Dashboard, Users, and 
   assert.ok(rendered.includes("Reyes"));
   assert.ok(rendered.includes("Counselor"));
   assert.ok(rendered.includes("Dashboard"));
-  assert.ok(rendered.includes("Users"));
-  assert.ok(rendered.includes("Library"));
-  assert.ok(rendered.includes("Settings"));
-  // Dashboard (#home) is the current page with the sidebar role label.
+  // Dashboard (#home) is the current page with the top-bar role label.
   const active = root.root.findAllByProps({ "aria-current": "page" });
   assert.ok(active.length >= 1);
   for (const node of active) {
@@ -73,30 +70,31 @@ test("counselor sidebar shows greeting, role chip, active Dashboard, Users, and 
     assert.equal(text, "Dashboard");
   }
   assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
-  assert.ok(root.root.findAllByProps({ href: "#review" }).length >= 1);
+  assert.equal(root.root.findAllByProps({ href: "#review" }).length, 0, "the reviewer console route is gone");
   assert.ok(root.root.findAllByType("button").some((b) => b.children.includes("Sign out")));
-  // Library and Settings have no routes yet — disabled placeholders.
+  // Sessions/Schedule/History have no routes yet — disabled placeholders.
   const soon = root.root.findAllByProps({ "aria-disabled": "true" })
     .filter((node) => node.props.title === "Coming soon");
   const soonLabels = soon.map((node) => node.children.map((c) => (typeof c === "string" ? c : "")).join("").trim());
-  assert.ok(soonLabels.some((label) => label.includes("Library")), "Library is a coming-soon entry");
-  assert.ok(soonLabels.some((label) => label.includes("Settings")), "Settings is a coming-soon entry");
+  for (const label of ["Sessions", "Schedule", "History"]) {
+    assert.ok(soonLabels.some((text) => text.includes(label)), label + " is a coming-soon entry");
+  }
   for (const node of soon) assert.equal(node.props.href, undefined);
 });
 
-test("active student sees Appointments link; Messages/Resources render unclickable, SOS/Assistant gone", async (t) => {
+test("student header shows Home + Appointments and inactive History/Session; SOS/Assistant gone", async (t) => {
   environment(t);
   const student = { ...baseUser, user_id: 2, role_code: "STUDENT",
     first_name: "Ana", last_name: "Santos" };
   fakeApi(t, authFor(student));
   const root = await mount(t, React.createElement(App));
   assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
-  // Messages/Resources are visible "coming soon" entries: disabled spans
-  // without href (2026-09-13); SOS/Assistant remain removed.
+  assert.equal(root.root.findAllByProps({ href: "#registration" }).length, 0, "the verification nav link is gone");
+  // History/Session have no routes yet: disabled spans without href.
   const soon = root.root.findAllByProps({ "aria-disabled": "true" })
     .filter((node) => node.props.title === "Coming soon");
   const labels = soon.map((node) => node.children[0]);
-  for (const label of ["Messages", "Resources"]) {
+  for (const label of ["History", "Session"]) {
     assert.ok(labels.includes(label), label + " should render as coming soon");
   }
   for (const node of soon) {
@@ -108,19 +106,31 @@ test("active student sees Appointments link; Messages/Resources render unclickab
   }
 });
 
-test("pending student gets no Appointments link, Verification pending chip, and the banner", async (t) => {
+test("pending student shows the standard nav, verification chip, and the banner", async (t) => {
   environment(t);
   const pending = { ...baseUser, user_id: 2, role_code: "STUDENT",
     account_status: "PENDING_VERIFICATION", first_name: "Ana", last_name: "Santos" };
   fakeApi(t, authFor(pending));
   const root = await mount(t, React.createElement(App));
-  assert.equal(root.root.findAllByProps({ href: "#appointments" }).length, 0);
+  // The nav list is fixed per role; pending students still see Appointments.
+  assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("Verification pending"));
-  assert.ok(rendered.includes("Verification pending — scheduling unlocks after COR approval."));
+  assert.ok(rendered.includes("Verification pending — confirm your COR details to unlock scheduling."));
 });
 
-test("guidance staff sees Home and verification review, with no coming-soon entries or banner", async (t) => {
+test("expired student shows the standard nav and the enrollment-expired banner", async (t) => {
+  environment(t);
+  const expired = { ...baseUser, user_id: 2, role_code: "STUDENT",
+    account_status: "VERIFICATION_EXPIRED", first_name: "Ana", last_name: "Santos" };
+  fakeApi(t, authFor(expired));
+  const root = await mount(t, React.createElement(App));
+  assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
+  assert.equal(root.root.findAllByProps({ href: "#registration" }).length, 0, "the verification nav link is gone");
+  assert.ok(JSON.stringify(root.toJSON()).includes("Enrollment expired"));
+});
+
+test("guidance staff sees Home only, with no review console, coming-soon entries, or banner", async (t) => {
   environment(t);
   const staff = { ...baseUser, user_id: 3, role_code: "GUIDANCE_STAFF",
     first_name: "Guida", last_name: "Staff" };
@@ -128,12 +138,14 @@ test("guidance staff sees Home and verification review, with no coming-soon entr
   const root = await mount(t, React.createElement(App));
   assert.ok(root.root.findAllByProps({ href: "#home" }).length >= 1);
   assert.equal(root.root.findAllByProps({ href: "#appointments" }).length, 0);
-  assert.ok(root.root.findAllByProps({ href: "#review" }).length >= 1);
+  assert.equal(root.root.findAllByProps({ href: "#review" }).length, 0, "the reviewer console route is gone");
+  assert.equal(root.root.findAllByProps({ href: "#registration" }).length, 0);
   assert.equal(root.root.findAllByProps({ "aria-disabled": "true" }).filter(
     (node) => node.props.title === "Coming soon").length, 0);
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("Guidance Staff"));
-  assert.ok(!rendered.includes("scheduling unlocks after COR approval"));
+  assert.ok(!rendered.includes("Verify students"));
+  assert.ok(!rendered.includes("confirm your COR details"));
 });
 
 test("mobile toggle flips aria-expanded and drawer link click closes it", async (t) => {
@@ -199,9 +211,22 @@ test("landing renders FAQ link and LOG IN still opens the student login modal", 
   const root = await mount(t, React.createElement(LandingPage, { onSignedIn: () => {} }));
   assert.ok(root.root.findAllByProps({ href: "#faq" }).length >= 2); // desktop + drawer
   assert.ok(root.root.findAllByProps({ id: "faq" }).length >= 1); // section anchor
+  const landing = JSON.stringify(root.toJSON());
+  for (const placeholder of ["Firstname Lastname", "info@mysite.com", "123-456-7890", "500 Terry Francois Street", "AI Assisted Counseling", "video supported conversations"]) {
+    assert.ok(!landing.includes(placeholder), `landing page should not contain ${placeholder}`);
+  }
+  assert.ok(landing.includes("Emergency support contacts"));
   const login = root.root.findAllByType("button").filter((b) => b.children.includes("LOG IN"));
   assert.ok(login.length >= 1);
   await act(async () => { login[0].props.onClick(); });
   assert.ok(root.root.findAllByProps({ htmlFor: "identifier" }).length >= 1);
   assert.ok(root.root.findAllByProps({ role: "dialog" }).length >= 1);
+});
+
+test("landing section hashes stay on the landing page route", async (t) => {
+  environment(t, "#features");
+  fakeApi(t, authFor(baseUser));
+  const root = await mount(t, React.createElement(App));
+  assert.ok(root.root.findAllByProps({ id: "features" }).length >= 1);
+  assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
 });

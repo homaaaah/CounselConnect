@@ -179,7 +179,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `DELETE /calendar/blocks/{blocked_date}` | Counselor; removes a whole-day blocked date; 204. |
 | `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1–200 concrete slots. |
 | `PATCH /campuses/{campus_id}/guidance-office-location` | Counselor; nonblank `guidance_office_location` (max 255); 200 campus response. |
-| `GET /appointments` | Own appointments; optional `status`; `page=1`, `page_size=20` (max 100). |
+| `GET /appointments` | Own appointments; optional `status`, aware `starts_after` (inclusive), and `ends_before` (exclusive) filters on appointment start time; `page=1`, `page_size=20` (max 100). |
 | `POST /appointments` | Student; `availability_slot_id`, `appointment_mode`; 201 `PENDING` appointment. |
 | `GET /appointments/{appointment_id}` | Owner Student/assigned Counselor; 200 appointment. |
 | `GET /appointments/scheduled-sessions` | Owner Student/assigned Counselor; confirmed online sessions and server-derived capabilities/timing. |

@@ -157,6 +157,11 @@ export function useAppointments(role = "", initialStatus = "") {
   }, [role, campusId, mode, date, status, slotPage, appointmentPage]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    const onAppointmentUpdated = () => { void refresh(true); };
+    window.addEventListener("appointment-updated", onAppointmentUpdated);
+    return () => window.removeEventListener("appointment-updated", onAppointmentUpdated);
+  }, [refresh]);
+  useEffect(() => {
     const timer = setInterval(() => { void refresh(true); }, 60_000);
     return () => clearInterval(timer);
   }, [refresh]);

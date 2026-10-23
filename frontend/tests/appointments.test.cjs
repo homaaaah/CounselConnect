@@ -113,6 +113,18 @@ test("booking modal shows the revealed campus/time details before requesting", a
   assert.ok(rendered.includes("9:00 AM"), "slot time is revealed");
 });
 
+test("booking modal exposes the counselor choice even when only one counselor matches", async t => {
+  setup(t, { calendar: calendar() });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "09:00").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  const rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("Choose an available counselor and campus"));
+  assert.ok(rendered.includes("Choose Cora Test at Main"));
+});
+
 test("booking loads every selected-date slot page and lets the student choose a matching counselor", async t => {
   const matchingSlots = Array.from({ length: 101 }, (_, index) => ({
     ...slot,
@@ -314,13 +326,14 @@ test("counselor edit mode seeds the form and replaces a weekly schedule", async 
 });
 
 test("counselor page shows student records and availability sections distinctly from the student page", async t => {
-  setup(t, { user: counselor, appointments: [appointment] });
+  const calls = setup(t, { user: counselor, appointments: [appointment] });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("Student appointments"), "counselor heading");
   assert.ok(rendered.includes("Student records"), "counselor records section");
   assert.ok(rendered.includes("Your weekly availability"), "counselor edit mode");
   assert.ok(!rendered.includes("My appointments"), "student heading must not appear for counselor");
+  assert.ok(calls.some(call => call.path.endsWith("/appointments") && call.query.status === "PENDING"), "counselor opens on pending requests");
 });
 
 for (const [role, status] of [["GUIDANCE_STAFF", "ACTIVE"], ["STUDENT", "PENDING_VERIFICATION"], ["STUDENT", "VERIFICATION_EXPIRED"]]) {

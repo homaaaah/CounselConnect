@@ -221,7 +221,7 @@ function AvailabilityBlocksSection({ state }) {
 }
 
 export default function CounselorAppointmentsPage({ user }) {
-  const state = useAppointments(user.role_code, "CONFIRMED");
+  const state = useAppointments(user.role_code, "PENDING");
   const [rescheduleId, setRescheduleId] = useState(null);
   return <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-800 sm:px-6">
     <div className="mx-auto max-w-5xl space-y-6">

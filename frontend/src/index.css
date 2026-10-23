@@ -27,747 +27,26 @@ html {
   --counseling-subtle-fill: #dbeafe;
   --counseling-light-accent: #bfdbfe;
   --counseling-muted-text: #93c5fd;
-  --counseling-primary: #60a5fa;
+  --counseling-primary: #1C6B1B;
   --counseling-active-focus: #2563eb;
   --counseling-hover-primary: #3b82f6;
   --counseling-high-contrast: #1d4ed8;
   --counseling-deep-contrast: #1e3a8a;
-}
-
-/* ============================================
-   Landing page (Capstone design) — scoped
-   ============================================ */
-
-.landing-page {
-  background-color: #ececf3;
-  color: #18181b;
-  line-height: 1.5;
-}
-
-.landing-page .container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
-
-/* Navbar — fixed glass bar: transparent over the hero (bg.jpg shows through),
-   solid --counseling-bg-tint once the page scrolls. Still pinned at the top. */
-.landing-page header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 30;
-  background: transparent;
-  border-bottom: 1px solid transparent;
-  padding: 1.25rem 0;
-  transition:
-    background 0.2s,
-    border-color 0.2s,
-    box-shadow 0.2s,
-    padding 0.2s;
-}
-
-/* Glass pill on the nav (LiquidGlass config: blur 4, transparent background,
-   white 1px border @ 0.4 opacity, radius 30, saturate 113, brightness 95) */
-.landing-page .nav-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.6rem 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 10px;
-  background: transparent;
-  backdrop-filter: blur(4px) saturate(113%) brightness(95%);
-  -webkit-backdrop-filter: blur(4px) saturate(113%) brightness(95%);
-  transition:
-    background 0.2s,
-    border-color 0.2s;
-}
-
-.landing-page header.scrolled {
-  height: 70px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  background: var(--counseling-bg-tint);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-}
-
-/* Solid tinted bar once scrolled — glass blur has nothing left to blur */
-.landing-page header.scrolled .nav-container {
-  border-color: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-/* Nav links — uniform colors in both states (solid, no alpha), with an
-   animated underline line in --counseling-hover-primary on hover */
-.landing-page header.scrolled .nav-links a {
-  color: var(--text-dark);
-}
-
-.landing-page header.scrolled .nav-links a.active {
-  color: #000000;
-}
-
-.landing-page header.scrolled .nav-links a:hover {
-  color: var(--counseling-hover-primary);
-}
-
-/* White nav text while floating over the hero photo — solid white so every
-   link (Home, Features, News, FAQ) reads identically over the glass */
-.landing-page header:not(.scrolled) .logo,
-.landing-page header:not(.scrolled) .nav-toggle {
-  color: #ffffff;
-}
-
-.landing-page header:not(.scrolled) .nav-links a {
-  color: #ffffff;
-}
-
-.landing-page header:not(.scrolled) .nav-links a.active {
-  color: #ffffff;
-}
-
-.landing-page header:not(.scrolled) .nav-links a:hover {
-  color: var(--counseling-hover-primary);
-}
-
-.landing-page .logo {
-  font-weight: 600;
-  font-size: 1.1rem;
-  letter-spacing: -0.5px;
-  color: var(--text-dark);
-  text-decoration: none;
-}
-
-.landing-page .nav-links {
-  display: flex;
-  gap: 2.5rem;
-  list-style: none;
-  font-size: 0.95rem;
-  color: var(--counseling-muted-text);
-}
-
-.landing-page .nav-links a {
-  text-decoration: none;
-  color: var(--text-dark);
-  position: relative;
-  padding-bottom: 3px;
-  transition: color 0.15s;
-}
-
-/* Hover line — slides in under the link in --counseling-hover-primary */
-.landing-page .nav-links a::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--counseling-hover-primary);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.2s;
-}
-
-.landing-page .nav-links a:hover::after {
-  transform: scaleX(1);
-}
-
-/* Hover text aligns with the hover line color (both nav states) */
-.landing-page .nav-links a:hover {
-  color: var(--counseling-hover-primary);
-}
-
-.landing-page .btn-login {
-  background: var(--counseling-deep-contrast);
-  color: #ffffff;
-  padding: 0.5rem 1.5rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-  letter-spacing: 0.5px;
-  transition:
-    background 0.12s,
-    color 0.12s;
-}
-
-.landing-page .btn-login:hover {
-  background: var(--counseling-hover-primary);
-}
-
-/* Mobile nav toggle (hidden on desktop) */
-.landing-page .nav-toggle {
-  display: none;
-  background: transparent;
-  border: none;
-  font-size: 1.15rem;
-  color: var(--text-dark);
-  cursor: pointer;
-  padding: 4px;
-}
-
-/* Mobile drawer (below 768px) — tinted so links stay readable over the hero */
-.landing-page #landing-mobile-nav {
-  display: none;
-  background: var(--counseling-bg-tint);
-  border-radius: 0 0 12px 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-}
-
-@media (max-width: 767px) {
-  .landing-page .nav-links,
-  .landing-page header .nav-container > .btn-login {
-    display: none;
-  }
-
-  .landing-page .nav-toggle {
-    display: inline-flex;
-  }
-
-  /* stacked layout on small screens — the 70px bar grows when the drawer opens */
-  .landing-page header.scrolled {
-    height: auto;
-    min-height: 70px;
-    flex-direction: column;
-    align-items: center;
-    padding: 0.5rem 0;
-  }
-
-  .landing-page #landing-mobile-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 2rem 1rem;
-  }
-
-  .landing-page #landing-mobile-nav[hidden] {
-    display: none;
-  }
-
-  .landing-page #landing-mobile-nav a {
-    text-decoration: none;
-    color: var(--text-dark);
-    font-size: 0.95rem;
-    padding: 0.65rem 0.25rem;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .landing-page #landing-mobile-nav a:hover,
-  .landing-page #landing-mobile-nav a.active {
-    color: var(--primary);
-  }
-
-  .landing-page #landing-mobile-nav .btn-login {
-    align-self: flex-start;
-    margin-top: 0.75rem;
-    border: none;
-    cursor: pointer;
-  }
-}
-
-/* Hero Section */
-.landing-page .hero {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.356) 100%,
-      rgba(255, 255, 255, 0.99) 40%,
-      rgba(255, 255, 255, 0) 10%
-    ),
-    linear-gradient(
-      to top,
-      var(--counseling-deep-contrast) 1%,
-      transparent 40%
-    ),
-    url("./assets/bg.jpg") center / cover no-repeat;
-  /* top padding clears the fixed glass navbar (~68px tall) */
-  min-height: 700px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 148px 0 100px;
-  text-align: center;
-  /* bg-tint drop shadow spilling from the hero's bottom edge; z-index keeps
-     it visible above the next section's background. Deepened toward
-     --counseling-subtle-fill so the glow actually reads against white. */
-  position: relative;
-  z-index: 1;
-  box-shadow:
-    0 12px 28px -10px var(--counseling-subtle-fill),
-    0 32px 64px -24px var(--counseling-subtle-fill);
-}
-
-/* keep anchor targets clear of the fixed navbar for #features/#news/#faq */
-.landing-page #features,
-.landing-page #news,
-.landing-page #faq {
-  scroll-margin-top: 84px;
-}
-
-.landing-page .hero h1 {
-  font-family: Georgia, serif;
-  font-size: clamp(2.75rem, 4vw, 4.25rem);
-  font-weight: 400;
-  line-height: 1.15;
-  margin-bottom: 1.5rem;
-  color: var(--counseling-bg-tint);
-}
-
-.landing-page .hero h1 span {
-  font-style: italic;
-}
-
-/* "Gentle Support" — accent headline phrase: weight + color, not size */
-.landing-page .hero h1 i {
-  color: var(--counseling-high-contrast);
-  font-weight: 600;
-  font-style: italic;
-}
-
-.landing-page .hero p {
-  color: var(--counseling-bg-tint);
-  font-size: 1.125rem;
-  line-height: 1.6;
-  max-width: 650px;
-  margin: 0 auto 2.25rem;
-}
-
-.landing-page .btn-connect {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--counseling-deep-contrast);
-  color: #ffffff;
-  padding: 0.85rem 2rem;
-  border-radius: 30px;
-  text-decoration: none;
-  font-weight: 500;
-  font-size: 0.95rem;
-  transition:
-    background 0.12s,
-    color 0.12s;
-}
-
-.landing-page .btn-connect:hover {
-  background: var(--counseling-hover-primary);
-}
-
-/* Why Choose Us Section — generous whitespace, white background */
-.landing-page .why-section {
-  padding: 120px 0 140px;
-  background: #ffffff;
-}
-
-.landing-page .why-grid {
-  display: grid;
-  grid-template-columns: 1fr 3fr;
-  gap: 64px;
-  align-items: start;
-}
-
-/* Left column lines up with the container edge — same left alignment as the
-   glass navbar and the hero content above it */
-.landing-page .why-left {
-  align-self: center;
-}
-
-.landing-page .why-left h2 {
-  font-size: 2.75rem;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-bottom: 1rem;
-  color: var(--counseling-high-contrast);
-  text-align: left;
-}
-
-.landing-page .why-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-
-.landing-page .why-card {
-  position: relative;
-  height: 320px;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-/* photo fills the entire card */
-.landing-page .why-card-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  background: #e4e4e7;
-}
-
-/* Bottom overlay only — same fade mechanism as the hero's bottom overlay,
-   using bg-tint so the high-contrast title stays readable on the band */
-.landing-page .why-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    var(--counseling-subtle-fill) 0%,
-    var(--counseling-subtle-fill) 3%,
-    transparent 62%
-  );
-  pointer-events: none;
-}
-
-/* Hover veil — fades in behind the description text */
-.landing-page .why-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--counseling-bg-tint);
-  opacity: 0;
-  transition: opacity 0.25s;
-  pointer-events: none;
-}
-
-.landing-page .why-card:hover::before {
-  opacity: 0.55;
-}
-
-/* title floats above the overlays */
-.landing-page .why-card-title {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
-  padding: 20px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-dark);
-}
-
-/* description appears on hover, above the title */
-.landing-page .why-card-desc {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 76px;
-  z-index: 1;
-  margin: 0;
-  padding: 0 20px;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: var(--text-dark);
-  opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity 0.25s,
-    transform 0.25s;
-  pointer-events: none;
-}
-
-.landing-page .why-card:hover .why-card-desc {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Bio Section — bg-tint band framed by subtle-fill borders (no top shadow) */
-.landing-page .bio-section {
-  padding: 100px 0;
-  background: var(--counseling-bg-tint);
-  border-top: 1px solid var(--counseling-subtle-fill);
-  border-bottom: 1px solid var(--counseling-subtle-fill);
-}
-
-.landing-page .bio-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  gap: 40px;
-  align-items: center;
-}
-
-.landing-page .bio-image-placeholder {
-  width: 100%;
-  height: 400px;
-  object-fit: cover;
-  /* portrait photo (1600×2399) has ~400px of empty backdrop above the
-     subject; anchoring at 40% trims most of that dead upper space while
-     keeping headroom and the face inside the 400px-tall crop window */
-  object-position: center 40%;
-  display: block;
-  background: #e4e4e7;
-  border-radius: 4px;
-}
-
-.landing-page .bio-card {
-  background: var(--counseling-subtle-fill);
-  padding: 50px;
-  border-radius: 4px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-}
-
-.landing-page .bio-card h2 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  margin-bottom: 1.5rem;
-  color: var(--counseling-high-contrast);
-}
-
-.landing-page .bio-card p {
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  line-height: 1.7;
-  margin-bottom: 1rem;
-}
-
-/* Blog / Announcements Section */
-.landing-page .blog-section {
-  padding: 60px 0;
-  background: #ffffff;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.landing-page .section-title-center {
-  text-align: center;
-  max-width: 700px;
-  margin: 0 auto 60px;
-}
-
-.landing-page .section-tag {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #2563eb;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-  display: block;
-}
-
-.landing-page .section-title-center h2 {
-  font-size: 2.25rem;
-  font-weight: 600;
-  line-height: 1.3;
-  color: #18181b;
-}
-
-/* FAQ headline — tag removed, heading carries the high-contrast accent */
-.landing-page .section-title-center .faq-heading {
-  color: var(--counseling-high-contrast);
-}
-
-.landing-page .blog-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-.landing-page .blog-card {
-  background: #ffffff;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.landing-page .blog-img {
-  background: #e4e4e7;
-  height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #a1a1aa;
-  font-size: 2rem;
-}
-
-.landing-page .blog-content {
-  background: var(--counseling-subtle-fill);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-}
-
-.landing-page .blog-category {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.landing-page .blog-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 10px;
-  color: #18181b;
-}
-
-.landing-page .blog-snippet {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-bottom: 20px;
-  line-height: 1.5;
-  flex-grow: 1;
-}
-
-.landing-page .blog-empty {
-  grid-column: 1 / -1;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  padding: 40px 0;
-}
-
-/* FAQ Section (CMS-driven) */
-.landing-page .faq-section {
-  padding: 50px 0 100px;
-}
-
-.landing-page .faq-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-}
-
-.landing-page .faq-card {
-  background: var(--counseling-subtle-fill);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 24px;
-}
-
-.landing-page .faq-card h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #18181b;
-}
-
-.landing-page .faq-card p {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-/* Footer — white band */
-.landing-page footer {
-  background: #ffffff;
-  padding: 30px 0;
-  border-top: 1px solid #d4d4d8;
-  color: #3f3f46;
-}
-
-.landing-page .footer-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 40px;
-  margin-bottom: 30px;
-}
-
-.landing-page .footer-col h3 {
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 16px;
-  color: #18181b;
-}
-
-.landing-page .footer-col p {
-  font-size: 0.9rem;
-  color: #52525b;
-  margin-bottom: 6px;
-}
-
-.landing-page .social-icons {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.landing-page .social-icon {
-  width: 32px;
-  height: 32px;
-  background: #27272a;
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  text-decoration: none;
-}
-
-.landing-page .footer-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid #d4d4d8;
-  padding-top: 30px;
-  font-size: 0.85rem;
-  color: #71717a;
-}
-
-/* Floating back-to-top — fixed to the viewport; hidden while the hero is
-   on screen (the .show class is added once the page scrolls past the hero) */
-.landing-page .back-to-top {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 40;
-  width: 44px;
-  height: 44px;
-  background: var(--counseling-deep-contrast);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(8px);
-  transition:
-    background 0.12s,
-    transform 0.2s,
-    opacity 0.2s,
-    visibility 0.2s;
-}
-
-.landing-page .back-to-top.show {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-.landing-page .back-to-top:hover {
-  background: var(--counseling-hover-primary);
-  transform: translateY(-2px);
-}
-
-.landing-page .dev-review-link {
-  margin-top: 20px;
-  text-align: center;
-}
 
-.landing-page .dev-review-link a {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-decoration: underline;
+  /* Auth/landing surface tokens — referenced by `.signup-card`, form inputs,
+     and landing cards. Previously undefined, which made the register card's
+     background transparent (invisible over the dark modal overlay). Darker
+     muted/border values keep text at WCAG AA contrast on the light surfaces. */
+  --card-bg: #ffffff;
+  --text-dark: #18181b;
+  --text-muted: #4b5563;
+  --border-color: #d1d5db;
+}
+
+/* Visible keyboard focus on every interactive element (WCAG 2.4.7). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--counseling-active-focus);
+  outline-offset: 2px;
 }
 
 /* ============================================
@@ -776,51 +55,9 @@ html {
    styled LoginPage / RegisterPage shells.
    ============================================ */
 
-.modal-card {
-  position: relative;
-  background: var(--counseling-subtle-fill);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 420px;
-  padding: 2.5rem 2rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  margin: 0 auto;
-}
 
-.signup-card {
-  position: relative;
-  background: var(--card-bg);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 640px;
-  max-height: none;
-  padding: 2.5rem 2rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  margin: 0 auto;
-}
 
-.login-header,
-.signup-header {
-  margin-bottom: 1.5rem;
-}
 
-.login-header h1,
-.signup-header h1 {
-  font-size: 1.4rem;
-  font-weight: 600;
-  color: var(--text-dark);
-  margin-bottom: 0.4rem;
-}
-
-.login-header p,
-.signup-header p {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.signup-header p {
-  line-height: 1.55;
-}
 
 .form-row {
   display: flex;
@@ -914,23 +151,8 @@ html {
   text-decoration: underline;
 }
 
-.btn-submit {
-  width: 100%;
-  background: #18181b;
-  color: #ffffff;
-  border: none;
-  border-radius: 20px;
-  padding: 0.7rem 1.5rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-submit:hover {
-  background: #000000;
-}
-
+/* Base .btn-submit lives in modal.css (imported after index.css); keep only
+   the variants here so the global class is defined once. */
 .btn-submit.btn-success {
   background: var(--primary);
 }
@@ -941,6 +163,78 @@ html {
 
 .btn-submit:disabled {
   opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-submit.btn-secondary {
+  background: #ffffff;
+  color: var(--text-dark);
+  border: 1px solid var(--border-color);
+}
+
+.btn-submit.btn-secondary:hover {
+  background: #f4f4f5;
+}
+
+.btn-submit.btn-danger {
+  background: #ffffff;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.btn-submit.btn-danger:hover {
+  background: #fef2f2;
+}
+
+/* Group the review/resubmit actions so stacked buttons are spaced. */
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 1rem;
+}
+
+/* Editable vs read-only affordances on the screening review fields. */
+.field-legend {
+  display: block;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0.25rem 0 0.85rem;
+}
+
+.field-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.field-chip i {
+  font-size: 0.62rem;
+}
+
+.field-chip--locked {
+  background: #e4e4e7;
+  color: #52525b;
+}
+
+.field-chip--editable {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.input-locked {
+  background: #f4f4f5;
+  color: #71717a;
+  border-style: dashed;
   cursor: not-allowed;
 }
 
@@ -969,13 +263,7 @@ html {
   background: #f4f4f5;
 }
 
-.signup-text {
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-top: 1.25rem;
-}
-
+/* Base .signup-text lives in modal.css (imported after index.css). */
 .signup-text a {
   color: #2563eb;
   text-decoration: none;
@@ -1046,64 +334,9 @@ html {
   background: #fafafa;
 }
 
-/* Auth modal overlay (landing LOG IN / CONNECT WITH US) */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  z-index: 50;
-}
 
-.modal-overlay .modal-card,
-.modal-overlay .signup-card {
-  max-height: 85vh;
-  overflow-y: auto;
-}
 
-/* Booking modal — wider than the auth card; white content surfaces
-   inside for the calendar grid and the revealed slot details */
-.modal-overlay .booking-modal-card {
-  max-width: 680px;
-  padding: 2rem;
-  background: #ffffff;
-}
-
-.modal-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  cursor: pointer;
-  padding: 4px;
-  transition: color 0.2s;
-}
-
-.modal-close:hover {
-  color: var(--text-dark);
-}
-
-/* In-modal text links rendered as buttons */
-.linklike {
-  background: transparent;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: #2563eb;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.linklike:hover {
-  text-decoration: underline;
-}
+/* Base .linklike lives in modal.css (imported after index.css). */
 
 /* ============================================
    Home page (homescreen design) — scoped
@@ -1247,10 +480,4 @@ html {
   }
 }
 
-/* Booking modal — fit small screens; calendar scrolls inside the card */
-@media (max-width: 640px) {
-  .modal-overlay .booking-modal-card {
-    padding: 1.25rem;
-    margin: 0;
-  }
-}
+

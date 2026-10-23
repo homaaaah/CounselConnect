@@ -95,6 +95,8 @@ The scheduling UI is at `#appointments`, available from the signed-in navigation
 
 **UI boundary:** weekly-schedule and availability-block management forms are implemented on the counselor appointments screen, with backend audit events. The scheduled-session page provides lobby, explicit join, durable text messaging, reconnection catch-up, and Counselor outcome controls. Closed history is Counselor-only until retention cleanup.
 
+Appointment records may be filtered by aware `starts_after` (inclusive) and `ends_before` (exclusive) query parameters on `GET /appointments`. The Counselor dashboard uses a Manila-local day converted to UTC boundaries, so its “today” list does not depend on the first page of all appointment history.
+
 ## Pending policy and integration
 
 Slot duration/buffer defaults, booking horizon for slot materialization (currently the requested calendar/slot-search range), automatic slot-generation jobs, and detailed no-show policy.

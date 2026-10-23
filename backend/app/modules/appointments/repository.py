@@ -315,7 +315,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             page_size,
         )
 
-    def appointments(self, actor, status, page, page_size):
+    def appointments(self, actor, status, page, page_size, starts_after=None, ends_before=None):
         scope = (
             Appointment.student_user_id
             if actor.role_code == "STUDENT"
@@ -324,6 +324,12 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         stmt = select(Appointment).where(scope == actor.user_id)
         if status:
             stmt = stmt.where(Appointment.status == status)
+        if starts_after is not None or ends_before is not None:
+            stmt = stmt.join(AvailabilitySlot, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            if starts_after is not None:
+                stmt = stmt.where(AvailabilitySlot.starts_at >= starts_after)
+            if ends_before is not None:
+                stmt = stmt.where(AvailabilitySlot.starts_at < ends_before)
         return self.page(
             stmt.order_by(
                 Appointment.created_at.desc(), Appointment.appointment_id.desc()
