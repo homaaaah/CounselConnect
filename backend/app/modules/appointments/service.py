@@ -445,7 +445,9 @@ class AppointmentsService(BaseService[Appointment]):
         details = self.slot_response(slot)
         student = self.accounts.scheduling_user(appointment.student_user_id)
         moment = utcnow()
-        student_window = self._student_change_window_open(actor, slot.starts_at, moment)
+        starts_at = db_time(slot.starts_at)
+        ends_at = db_time(slot.ends_at)
+        student_window = self._student_change_window_open(actor, starts_at, moment)
         has_activity = self._has_chat_activity(appointment)
         return AppointmentResponse(
             **{
@@ -468,11 +470,11 @@ class AppointmentsService(BaseService[Appointment]):
             counselor_name=details.counselor_name,
             campus_id=slot.campus_id,
             campus_name=details.campus_name,
-            starts_at=slot.starts_at,
-            ends_at=slot.ends_at,
+            starts_at=starts_at,
+            ends_at=ends_at,
             can_cancel=appointment.status in ("PENDING", "CONFIRMED") and student_window,
             can_reschedule=appointment.status == "CONFIRMED" and student_window and not has_activity,
-            can_change_mode=actor.role_code == "COUNSELOR" and appointment.status == "CONFIRMED" and moment < slot.starts_at and not has_activity and slot.delivery_mode == "BOTH" and (appointment.appointment_mode == "FACE_TO_FACE" or bool((details.guidance_office_location or "").strip())),
+            can_change_mode=actor.role_code == "COUNSELOR" and appointment.status == "CONFIRMED" and moment < starts_at and not has_activity and slot.delivery_mode == "BOTH" and (appointment.appointment_mode == "FACE_TO_FACE" or bool((details.guidance_office_location or "").strip())),
         )
 
     def create_slots(self, actor, data):

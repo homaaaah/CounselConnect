@@ -393,6 +393,43 @@ def test_calendar_counts_real_future_unreserved_times(db_session, actors, monkey
     assert svc.calendar(users[0], today, today)["days"][0]["available_times"] == []
 
 
+def test_calendar_booked_slots_are_counselor_only(db_session, actors, monkeypatch):
+    from datetime import date
+    from app.modules.appointments import service as module
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    monkeypatch.setattr(module, "utcnow", lambda: datetime(2026, 9, 11, 5, 30))
+    today = date(2026, 9, 11)
+    available = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=datetime(2026, 9, 11, 6, 0), ends_at=datetime(2026, 9, 11, 6, 30),
+    )
+    reserved = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="RESERVED",
+        starts_at=datetime(2026, 9, 11, 7, 0), ends_at=datetime(2026, 9, 11, 7, 30),
+    )
+    db_session.add_all([available, reserved])
+    db_session.flush()
+    db_session.add(Appointment(
+        student_user_id=users[2].user_id, counselor_user_id=users[0].user_id,
+        availability_slot_id=reserved.slot_id, appointment_mode="ONLINE", status="CONFIRMED",
+    ))
+    db_session.flush()
+
+    counselor_day = svc.calendar(users[0], today, today)["days"][0]
+    assert counselor_day["available_slots"] == [{"start_time": "14:00", "end_time": "14:30"}]
+    assert counselor_day["booked_slots"] == [
+        {"start_time": "15:00", "end_time": "15:30", "status": "CONFIRMED"}
+    ]
+
+    student_day = svc.calendar(users[2], today, today)["days"][0]
+    assert student_day["available_slots"] == [{"start_time": "14:00", "end_time": "14:30"}]
+    assert student_day["booked_slots"] == []
+
+
 def test_student_booking_reads_can_be_scoped_to_selected_counselor(db_session, actors):
     from zoneinfo import ZoneInfo
 

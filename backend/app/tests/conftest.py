@@ -59,6 +59,9 @@ COR_TOKEN_MIGRATION_FILE = (
 PROFILE_CHANGE_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20261002_profile_change_requests.py"
 )
+WEEKLY_SCHED_SOFTDEL_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261024_weekly_sched_softdel.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -169,6 +172,16 @@ def load_profile_change_migration_module():
     return module
 
 
+def load_weekly_sched_softdel_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "weekly_sched_softdel_migration", WEEKLY_SCHED_SOFTDEL_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture(scope="session")
 def mysql_test_engine():
     """Create, own, and remove a randomly named disposable MySQL schema."""
@@ -245,6 +258,7 @@ def mysql_test_engine():
                 load_superadmin_migration_module().upgrade()
                 load_cor_token_migration_module().upgrade()
                 load_profile_change_migration_module().upgrade()
+                load_weekly_sched_softdel_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

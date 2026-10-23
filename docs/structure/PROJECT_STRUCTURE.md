@@ -14,6 +14,8 @@ This document describes the repository layout and intended home for new files. E
 
 Avoid feature code at repository root.
 
+`CounselConnect-test-Registration_Fix/` is a historical reference snapshot of an earlier branch's registration and appointment work. It is untracked, excluded from builds, tests, and imports, and must not be edited or used as a source tree; the merged changes now live in `backend/` and `frontend/`.
+
 ## Backend
 
 Request flow remains router → schema → service → repository → model. Business rules belong in services and authorization stays server-side.

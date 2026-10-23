@@ -22,6 +22,7 @@
 - `campuses.guidance_office_location`: Counselor-managed campus-level onsite location; may be null until configured.
 - `availability_slots.delivery_mode`: `ONLINE`, `FACE_TO_FACE`, or `BOTH`.
 - `counselor_weekly_schedules`: active, university-local recurring schedule definitions. `day_of_week` uses ISO values 1 (Monday) through 7 (Sunday); `start_time` and `end_time` are local schedule times, while generated slot timestamps remain UTC.
+- `counselor_weekly_schedules.is_deleted`: soft-delete marker (default `FALSE`, migration `20261024_weekly_sched_softdel`). Deleting a schedule hides it from schedule lists and future slot generation while preserving the row and existing slot/appointment references; recreating the same definition restores the row.
 - `counselor_availability_blocks`: temporary UTC intervals during which the Counselor is unavailable. They retain no appointment changes and may not overlap an active appointment when created through the service layer.
 - `counselor_blocked_dates`: Counselor-owned whole-day calendar overrides; these dates are excluded from the Counselor's bookable calendar.
 - `availability_slots.weekly_schedule_id`: nullable provenance link for slots generated from a weekly schedule. Legacy and concrete one-off slots remain valid with `NULL`.

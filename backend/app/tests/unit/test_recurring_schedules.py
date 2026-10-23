@@ -143,6 +143,103 @@ def test_migration_shape_and_downgrade_preserves_existing_slots(mysql_test_engin
         admin.dispose()
 
 
+def test_weekly_sched_soft_delete_migration_round_trip(mysql_test_engine):
+    """The additive column round-trips in a private schema without losing schedule rows."""
+    from ..conftest import (
+        BASELINE_SQL,
+        _test_url,
+        load_blocked_dates_migration_module,
+        load_cor_screening_migration_module,
+        load_cor_token_migration_module,
+        load_extracted_validity_migration_module,
+        load_migration_module,
+        load_profile_change_migration_module,
+        load_recurring_schedules_migration_module,
+        load_scheduled_chat_migration_module,
+        load_superadmin_migration_module,
+        load_weekly_sched_softdel_migration_module,
+    )
+    import re as _re
+    import uuid as _uuid
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+    from pymysql.constants import CLIENT
+
+    migration = load_weekly_sched_softdel_migration_module()
+    url = _test_url()
+    schema = f"counselconnect_test_{_uuid.uuid4().hex}"
+    assert _re.fullmatch(r"counselconnect_test_[0-9a-f]{32}", schema)
+    admin = create_engine(url.set(database=""), poolclass=NullPool, connect_args={"connect_timeout": 5})
+    engine = None
+    created = False
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f"CREATE DATABASE `{schema}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"))
+            created = True
+        engine = create_engine(
+            url.set(database=schema),
+            poolclass=NullPool,
+            connect_args={"client_flag": CLIENT.MULTI_STATEMENTS, "init_command": "SET time_zone = '+00:00'"},
+        )
+        sql = BASELINE_SQL.read_text(encoding="utf-8")
+        sql = sql.replace("CREATE DATABASE IF NOT EXISTS counselconnect", f"CREATE DATABASE IF NOT EXISTS `{schema}`")
+        sql = sql.replace("USE counselconnect;", f"USE `{schema}`;")
+        raw = engine.raw_connection()
+        try:
+            with raw.cursor() as cursor:
+                cursor.execute(sql)
+                while cursor.nextset():
+                    pass
+            raw.commit()
+        finally:
+            raw.close()
+        with engine.begin() as conn:
+            ctx = MigrationContext.configure(conn)
+            with Operations.context(ctx):
+                load_migration_module().upgrade()
+                load_blocked_dates_migration_module().upgrade()
+                load_recurring_schedules_migration_module().upgrade()
+                load_scheduled_chat_migration_module().upgrade()
+                load_cor_screening_migration_module().upgrade()
+                load_extracted_validity_migration_module().upgrade()
+                load_superadmin_migration_module().upgrade()
+                load_cor_token_migration_module().upgrade()
+                load_profile_change_migration_module().upgrade()
+                migration.upgrade()
+        with engine.connect() as conn:
+            columns = {column["name"] for column in inspect(conn).get_columns("counselor_weekly_schedules")}
+            assert "is_deleted" in columns
+            conn.execute(text("INSERT INTO campuses (campus_name, guidance_office_location, is_active) VALUES ('Soft Delete Campus', 'Office 7', TRUE)"))
+            conn.execute(text("INSERT INTO users (email, password_hash, role_code, account_status, first_name, last_name) VALUES ('softdel-counselor@example.edu', 'placeholder', 'COUNSELOR', 'ACTIVE', 'Cora', 'Counselor')"))
+            campus_id = conn.execute(text("SELECT campus_id FROM campuses WHERE campus_name = 'Soft Delete Campus'")).scalar()
+            counselor_id = conn.execute(text("SELECT user_id FROM users WHERE email = 'softdel-counselor@example.edu'")).scalar()
+            conn.execute(text(
+                "INSERT INTO counselor_weekly_schedules "
+                "(counselor_user_id, campus_id, day_of_week, start_time, end_time, slot_duration_minutes, delivery_mode, is_active) "
+                f"VALUES ({counselor_id}, {campus_id}, 1, '08:00:00', '10:00:00', 30, 'BOTH', TRUE)"
+            ))
+            conn.commit()
+            assert conn.scalar(text("SELECT is_deleted FROM counselor_weekly_schedules")) == 0
+            ctx = MigrationContext.configure(conn)
+            with Operations.context(ctx):
+                migration.downgrade()
+            assert "is_deleted" not in {column["name"] for column in inspect(conn).get_columns("counselor_weekly_schedules")}
+            assert conn.scalar(text("SELECT COUNT(*) FROM counselor_weekly_schedules")) == 1
+            with Operations.context(ctx):
+                migration.upgrade()
+            columns = {column["name"] for column in inspect(conn).get_columns("counselor_weekly_schedules")}
+            assert "is_deleted" in columns
+            assert conn.scalar(text("SELECT COUNT(*) FROM counselor_weekly_schedules")) == 1
+            assert conn.scalar(text("SELECT is_deleted FROM counselor_weekly_schedules")) == 0
+    finally:
+        if engine is not None:
+            engine.dispose()
+        if created:
+            with admin.connect() as conn:
+                conn.execute(text(f"DROP DATABASE `{schema}`"))
+        admin.dispose()
+
+
 def test_weekly_schedule_constraints_and_optional_slot_reference(db_session, counselor_and_campus):
     counselor, campus = counselor_and_campus
     schedule = CounselorWeeklySchedule(**schedule_values(counselor, campus))

@@ -18,6 +18,7 @@ def calendar_service(monkeypatch):
     service.repository.active_counselor_ids.return_value = [1, 2]
     service.repository.blocked_dates.return_value = set()
     service.repository.calendar_slots.return_value = []
+    service.repository.booked_calendar_slots.return_value = []
     return service
 
 
