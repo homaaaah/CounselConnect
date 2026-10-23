@@ -31,3 +31,6 @@ graphify-out/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local COR screening binaries (machine-specific)
+/backend/.local-tools/

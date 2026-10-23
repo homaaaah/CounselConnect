@@ -182,6 +182,20 @@ test("registration blocks a password mismatch before calling the API", async (t)
   assert.match(JSON.stringify(root.toJSON()), /Passwords do not match/);
 });
 
+test("the COR dropzone attaches a dropped PDF and ignores other files", async (t) => {
+  setCsrfToken(null);
+  t.mock.method(global, "fetch", async () => json({ items: [] }));
+  const root = await mount(t);
+  const dropzone = root.root.findByProps({ id: "register-cor" }).parent;
+  const drop = (file) => act(async () => {
+    dropzone.props.onDrop({ preventDefault() {}, dataTransfer: { files: [file] } });
+  });
+  await drop({ name: "notes.txt", type: "text/plain" });
+  assert.match(JSON.stringify(root.toJSON()), /Click to choose a PDF/, "a non-PDF drop is ignored");
+  await drop({ name: "cor.pdf", type: "application/pdf", size: 2048 });
+  assert.match(JSON.stringify(root.toJSON()), /cor\.pdf/, "the dropped PDF is attached");
+});
+
 test("registration maps EMAIL_ALREADY_REGISTERED to a friendly message", async (t) => {
   setCsrfToken(null);
   t.mock.method(global, "fetch", async () => json({

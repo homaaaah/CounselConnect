@@ -12,6 +12,7 @@ from app.modules.appointments.models import (
     CounselorBlockedDate,
     CounselorWeeklySchedule,
 )
+from app.modules.accounts.models import User
 
 
 class AppointmentsRepository(BaseRepository[Appointment]):
@@ -26,7 +27,8 @@ class AppointmentsRepository(BaseRepository[Appointment]):
 
     def weekly_schedules(self, counselor_id, *, active_only=False):
         stmt = select(CounselorWeeklySchedule).where(
-            CounselorWeeklySchedule.counselor_user_id == counselor_id
+            CounselorWeeklySchedule.counselor_user_id == counselor_id,
+            CounselorWeeklySchedule.is_deleted.is_(False),
         )
         if active_only:
             stmt = stmt.where(CounselorWeeklySchedule.is_active.is_(True))
@@ -37,15 +39,31 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         )))
 
     def active_weekly_schedules(self, counselor_id=None):
-        stmt = select(CounselorWeeklySchedule).where(CounselorWeeklySchedule.is_active.is_(True))
+        stmt = select(CounselorWeeklySchedule).where(
+            CounselorWeeklySchedule.is_active.is_(True),
+            CounselorWeeklySchedule.is_deleted.is_(False),
+        )
         if counselor_id is not None:
             stmt = stmt.where(CounselorWeeklySchedule.counselor_user_id == counselor_id)
         return list(self.session.scalars(stmt))
 
     def deactivate_weekly_schedule(self, counselor_id, weekly_schedule_id):
         schedule = self.lock_weekly_schedule(counselor_id, weekly_schedule_id)
-        if schedule:
+        if schedule and not schedule.is_deleted:
             schedule.is_active = False
+        elif schedule:
+            return None
+        return schedule
+
+    def delete_weekly_schedule(self, counselor_id, weekly_schedule_id):
+        schedule = self.lock_weekly_schedule(counselor_id, weekly_schedule_id)
+        if schedule is None or schedule.is_deleted:
+            return None
+        # Keep the row for availability slots and appointment history that
+        # still reference it. Deleted definitions are excluded from all
+        # schedule listings and future slot materialization.
+        schedule.is_active = False
+        schedule.is_deleted = True
         return schedule
 
     def lock_weekly_schedule(self, counselor_id, weekly_schedule_id):
@@ -77,6 +95,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             CounselorWeeklySchedule.counselor_user_id == counselor_id,
             CounselorWeeklySchedule.day_of_week == day_of_week,
             CounselorWeeklySchedule.is_active.is_(True),
+            CounselorWeeklySchedule.is_deleted.is_(False),
             CounselorWeeklySchedule.start_time < end_time,
             CounselorWeeklySchedule.end_time > start_time,
         )
@@ -149,6 +168,15 @@ class AppointmentsRepository(BaseRepository[Appointment]):
     def active_counselor_ids(self):
         from app.modules.accounts.models import User
         return list(self.session.scalars(select(User.user_id).where(User.role_code == "COUNSELOR", User.account_status == "ACTIVE")))
+
+    def active_counselors(self):
+        from app.modules.accounts.models import User
+        return list(self.session.scalars(
+            select(User).where(
+                User.role_code == "COUNSELOR",
+                User.account_status == "ACTIVE",
+            ).order_by(User.last_name, User.first_name, User.user_id)
+        ))
 
     def add_blocked_date(self, counselor_id, blocked_date, reason=None):
         block = CounselorBlockedDate(counselor_user_id=counselor_id, blocked_date=blocked_date, reason=reason)
@@ -236,12 +264,13 @@ class AppointmentsRepository(BaseRepository[Appointment]):
 
     def calendar_slots(self, counselor_ids, now, starts_after, ends_before):
         """All unreserved calendar starts, without the slot list's pagination."""
-        # A replaced weekly schedule is retained for audit/history, but its
-        # leftover AVAILABLE slots must no longer appear. Concrete one-off
-        # slots have no weekly_schedule_id and remain available as created.
+        # Replaced, disabled, and deleted schedules remain for audit/history,
+        # but their leftover AVAILABLE slots must no longer appear. Concrete
+        # one-off slots have no weekly_schedule_id and remain as created.
         active_weekly_schedule = select(CounselorWeeklySchedule.weekly_schedule_id).where(
             CounselorWeeklySchedule.weekly_schedule_id == AvailabilitySlot.weekly_schedule_id,
             CounselorWeeklySchedule.is_active.is_(True),
+            CounselorWeeklySchedule.is_deleted.is_(False),
         ).exists()
         blocked_by_time = select(CounselorAvailabilityBlock.availability_block_id).where(
             CounselorAvailabilityBlock.counselor_user_id == AvailabilitySlot.counselor_user_id,
@@ -260,6 +289,20 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             ).order_by(AvailabilitySlot.starts_at)
         ))
 
+    def booked_calendar_slots(self, counselor_id, starts_after, ends_before):
+        """Return only reserved interval and status data for the owning Counselor calendar."""
+        return list(self.session.execute(
+            select(AvailabilitySlot, Appointment.status)
+            .join(Appointment, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            .where(
+                Appointment.counselor_user_id == counselor_id,
+                Appointment.status.in_(["PENDING", "CONFIRMED"]),
+                AvailabilitySlot.starts_at >= starts_after,
+                AvailabilitySlot.starts_at < ends_before,
+            )
+            .order_by(AvailabilitySlot.starts_at, Appointment.appointment_id)
+        ))
+
     def slots(
         self,
         actor,
@@ -270,6 +313,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         ends_before,
         page,
         page_size,
+        counselor_user_id=None,
     ):
         # Filter before count/offset/limit so every page and its total describe
         # the same visible slots. Fixed offsets avoid requiring MySQL timezone
@@ -277,6 +321,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         active_weekly_schedule = select(CounselorWeeklySchedule.weekly_schedule_id).where(
             CounselorWeeklySchedule.weekly_schedule_id == AvailabilitySlot.weekly_schedule_id,
             CounselorWeeklySchedule.is_active.is_(True),
+            CounselorWeeklySchedule.is_deleted.is_(False),
         ).exists()
         blocked_by_date = select(CounselorBlockedDate.blocked_date_id).where(
             CounselorBlockedDate.counselor_user_id == AvailabilitySlot.counselor_user_id,
@@ -298,7 +343,17 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         if actor.role_code == "COUNSELOR":
             stmt = stmt.where(AvailabilitySlot.counselor_user_id == actor.user_id)
         else:
-            stmt = stmt.where(AvailabilitySlot.status == "AVAILABLE")
+            active_counselor = select(User.user_id).where(
+                User.user_id == AvailabilitySlot.counselor_user_id,
+                User.role_code == "COUNSELOR",
+                User.account_status == "ACTIVE",
+            ).exists()
+            stmt = stmt.where(
+                AvailabilitySlot.status == "AVAILABLE",
+                active_counselor,
+            )
+            if counselor_user_id is not None:
+                stmt = stmt.where(AvailabilitySlot.counselor_user_id == counselor_user_id)
         if campus_id is not None:
             stmt = stmt.where(AvailabilitySlot.campus_id == campus_id)
         if appointment_mode:
@@ -315,7 +370,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             page_size,
         )
 
-    def appointments(self, actor, status, page, page_size):
+    def appointments(self, actor, status, page, page_size, starts_after=None, ends_before=None):
         scope = (
             Appointment.student_user_id
             if actor.role_code == "STUDENT"
@@ -324,6 +379,14 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         stmt = select(Appointment).where(scope == actor.user_id)
         if status:
             stmt = stmt.where(Appointment.status == status)
+        # Appointment start time lives on the joined slot; range filters use the
+        # documented inclusive starts_after / exclusive ends_before semantics.
+        if starts_after is not None or ends_before is not None:
+            stmt = stmt.join(AvailabilitySlot, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            if starts_after is not None:
+                stmt = stmt.where(AvailabilitySlot.starts_at >= starts_after)
+            if ends_before is not None:
+                stmt = stmt.where(AvailabilitySlot.starts_at < ends_before)
         return self.page(
             stmt.order_by(
                 Appointment.created_at.desc(), Appointment.appointment_id.desc()

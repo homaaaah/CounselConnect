@@ -393,6 +393,58 @@ def test_calendar_counts_real_future_unreserved_times(db_session, actors, monkey
     assert svc.calendar(users[0], today, today)["days"][0]["available_times"] == []
 
 
+def test_student_booking_reads_can_be_scoped_to_selected_counselor(db_session, actors):
+    from zoneinfo import ZoneInfo
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    # Use dates in the future and preserve a shared display time across both counselors.
+    start = datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(days=3)
+    for counselor in users[:2]:
+        db_session.add(AvailabilitySlot(counselor_user_id=counselor.user_id,
+            campus_id=campus.campus_id, delivery_mode="BOTH", status="AVAILABLE",
+            starts_at=start, ends_at=start + timedelta(minutes=30)))
+    db_session.flush()
+    manila_start = start.astimezone(ZoneInfo("Asia/Manila"))
+
+    directory = svc.booking_counselors(users[2])
+    assert [item["counselor_user_id"] for item in directory] == [users[0].user_id, users[1].user_id]
+    assert all("email" not in item for item in directory)
+    calendar = svc.calendar(users[2], manila_start.date(), manila_start.date(), users[1].user_id)
+    assert calendar["days"][0]["available_times"] == [manila_start.strftime("%H:%M")]
+    slots = svc.list_slots(users[2], counselor_user_id=users[1].user_id)
+    assert {item.counselor_user_id for item in slots["items"]} == {users[1].user_id}
+
+
+def test_appointments_range_filter_uses_slot_start_time(db_session, actors):
+    from zoneinfo import ZoneInfo
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    day = datetime(2026, 9, 12, 6, 0, tzinfo=timezone.utc)
+    inside = AvailabilitySlot(counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="RESERVED", starts_at=day,
+        ends_at=day + timedelta(minutes=30))
+    outside = AvailabilitySlot(counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="RESERVED", starts_at=day + timedelta(days=2),
+        ends_at=day + timedelta(days=2, minutes=30))
+    db_session.add_all([inside, outside])
+    db_session.flush()
+    for slot in (inside, outside):
+        db_session.add(Appointment(student_user_id=users[2].user_id,
+            counselor_user_id=users[0].user_id, availability_slot_id=slot.slot_id,
+            appointment_mode="ONLINE", status="CONFIRMED"))
+    db_session.flush()
+
+    manila = day.astimezone(ZoneInfo("Asia/Manila"))
+    window_start = manila.replace(hour=0, minute=0, second=0, microsecond=0)
+    window_end = window_start + timedelta(days=1)
+    scoped = svc.list_appointments(users[2], starts_after=window_start, ends_before=window_end)
+    assert [item.availability_slot_id for item in scoped["items"]] == [inside.slot_id]
+    assert scoped["total"] == 1
+    assert svc.list_appointments(users[2])["total"] == 2
+
+
 def test_location_required_at_creation_and_booking(db_session, actors):
     users, campus = actors
     svc = AppointmentsService(db_session)
@@ -628,6 +680,18 @@ def test_http_contract_csrf_and_no_store(db_client, db_session, actors):
     assert response.json()["starts_at"].endswith("Z")
     result = db_client.get("/api/v1/appointments?page=1&page_size=1")
     assert result.status_code == 200 and result.json()["total"] == 1
+    starts_at = response.json()["starts_at"]
+    slot_start = datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
+    included = db_client.get(
+        "/api/v1/appointments",
+        params={"starts_after": starts_at, "ends_before": (slot_start + timedelta(hours=1)).isoformat()},
+    )
+    excluded = db_client.get(
+        "/api/v1/appointments",
+        params={"starts_after": (slot_start + timedelta(seconds=1)).isoformat()},
+    )
+    assert included.status_code == 200 and included.json()["total"] == 1
+    assert excluded.status_code == 200 and excluded.json()["total"] == 0
     assert db_client.get("/api/v1/availability-slots?page_size=101").status_code == 422
     assert (
         db_client.post(
@@ -879,3 +943,28 @@ def test_slot_date_blocks_are_owner_scoped_and_use_manila_date(db_session, actor
     assert [s.slot_id for s in svc.list_slots(users[2], campus_id=campus.campus_id, page=2, page_size=1)["items"]] == [slots[2].slot_id]
     # Counselor scope remains private even when another counselor is unblocked.
     assert [s.slot_id for s in svc.list_slots(users[0])["items"]] == [slots[0].slot_id]
+
+
+def test_student_slot_listing_excludes_inactive_counselors_before_pagination(db_session, actors):
+    users, campus = actors
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=5)
+    active_slot = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start, ends_at=start + timedelta(minutes=30),
+    )
+    inactive_slot = AvailabilitySlot(
+        counselor_user_id=users[1].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start + timedelta(hours=1), ends_at=start + timedelta(hours=1, minutes=30),
+    )
+    users[1].account_status = "VERIFICATION_EXPIRED"
+    db_session.add_all([active_slot, inactive_slot])
+    db_session.flush()
+
+    result = AppointmentsService(db_session).list_slots(
+        users[2], campus_id=campus.campus_id, page_size=1
+    )
+
+    assert result["total"] == 1
+    assert [item.slot_id for item in result["items"]] == [active_slot.slot_id]

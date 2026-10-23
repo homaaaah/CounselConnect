@@ -23,6 +23,8 @@ from app.modules.appointments.schemas import (
     AvailabilityBlockCreateRequest,
     AvailabilityBlockResponse,
     WeeklyScheduleCreateRequest,
+    StandardWeekdayScheduleRequest,
+    CounselorBookingOption,
     WeeklyScheduleResponse,
 )
 from app.modules.appointments.service import (
@@ -94,6 +96,19 @@ def create_weekly_schedule(
 
 
 @router.post(
+    "/weekly-schedules/standard-weekdays",
+    status_code=201,
+    response_model=list[WeeklyScheduleResponse],
+)
+def create_standard_weekday_schedules(
+    data: StandardWeekdayScheduleRequest,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.create_standard_weekday_schedules(actor, data)
+
+
+@router.post(
     "/weekly-schedules/{weekly_schedule_id}/replace",
     response_model=WeeklyScheduleResponse,
 )
@@ -113,6 +128,27 @@ def deactivate_weekly_schedule(
     service: AppointmentsService = Depends(get_appointments_service),
 ):
     service.deactivate_weekly_schedule(actor, weekly_schedule_id)
+
+
+@router.post(
+    "/weekly-schedules/{weekly_schedule_id}/enable",
+    response_model=WeeklyScheduleResponse,
+)
+def enable_weekly_schedule(
+    weekly_schedule_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.enable_weekly_schedule(actor, weekly_schedule_id)
+
+
+@router.delete("/weekly-schedules/{weekly_schedule_id}/remove", status_code=204)
+def delete_weekly_schedule(
+    weekly_schedule_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    service.delete_weekly_schedule(actor, weekly_schedule_id)
 
 
 @router.get("/availability-blocks", response_model=list[AvailabilityBlockResponse])
@@ -141,15 +177,24 @@ def delete_availability_block(
     service.delete_availability_block(actor, availability_block_id)
 
 
+@router.get("/booking-counselors", response_model=list[CounselorBookingOption])
+def booking_counselors(
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.booking_counselors(actor)
+
+
 @router.get("/calendar", response_model=CalendarResponse)
 def calendar(
     actor: CurrentUser,
     start_date: date = Query(default=None),
     end_date: date = Query(default=None),
+    counselor_user_id: int | None = Query(default=None, gt=0),
     service: AppointmentsService = Depends(get_appointments_service),
 ):
     today = datetime.now(ZoneInfo("Asia/Manila")).date()
-    return service.calendar(actor, start_date or today, end_date or today + timedelta(days=30))
+    return service.calendar(actor, start_date or today, end_date or today + timedelta(days=30), counselor_user_id)
 
 
 @router.post("/calendar/blocks", status_code=201)
@@ -174,12 +219,13 @@ def list_slots(
     appointment_mode: AppointmentMode | None = None,
     starts_after: AwareDatetime | None = None,
     ends_before: AwareDatetime | None = None,
+    counselor_user_id: int | None = Query(None, gt=0),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     service: AppointmentsService = Depends(get_appointments_service),
 ):
     return service.list_slots(
-        actor, campus_id, appointment_mode, starts_after, ends_before, page, page_size
+        actor, campus_id, appointment_mode, starts_after, ends_before, page, page_size, counselor_user_id
     )
 
 
@@ -215,11 +261,13 @@ def update_location(
 def list_appointments(
     actor: CurrentUser,
     status: AppointmentStatus | None = None,
+    starts_after: AwareDatetime | None = None,
+    ends_before: AwareDatetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     service: AppointmentsService = Depends(get_appointments_service),
 ):
-    return service.list_appointments(actor, status, page, page_size)
+    return service.list_appointments(actor, status, page, page_size, starts_after, ends_before)
 
 
 @router.get("/appointments/scheduled-sessions", response_model=list[AppointmentSessionResponse])
@@ -236,7 +284,8 @@ def book(
     actor: CurrentUser,
     service: AppointmentsService = Depends(get_appointments_service),
 ):
-    return service.book(actor, data)
+    appointment = service.book(actor, data)
+    return _commit_and_publish(service, appointment, event="appointment_requested")
 
 
 @router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
@@ -290,7 +339,11 @@ def confirm(
     actor: CurrentUser,
     service: AppointmentsService = Depends(get_appointments_service),
 ):
-    return _commit_and_publish(service, service.transition(actor, appointment_id, "confirm"))
+    return _commit_and_publish(
+        service,
+        service.transition(actor, appointment_id, "confirm"),
+        event="appointment_confirmed",
+    )
 
 
 @router.post(

@@ -63,6 +63,14 @@ function AppShell() {
   const session = useSession();
   const toast = useToast();
 
+  useEffect(() => {
+    const onAppointmentToast = (event) => {
+      toast.success(event.detail?.message || "An appointment was updated.", { title: "Appointment update" });
+    };
+    window.addEventListener("counselconnect-toast", onAppointmentToast);
+    return () => window.removeEventListener("counselconnect-toast", onAppointmentToast);
+  }, [toast.success]);
+
   useEffect(() => { void session.restore(); }, [session.restore]);
 
   // Surface every failed API request as a visual notification.

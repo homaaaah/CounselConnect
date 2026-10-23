@@ -51,6 +51,12 @@ export function useSession() {
     try {
       const auth = await request("/auth/csrf");
       if (generation.current !== current) return;
+      if (!auth) {
+        // No live session (anonymous startup probe): stay signed out.
+        setCsrfToken(null);
+        setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true, error: null });
+        return;
+      }
       accept(auth);
     } catch (err) {
       if (generation.current !== current) return;
