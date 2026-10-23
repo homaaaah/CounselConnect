@@ -16,7 +16,7 @@ Scheduling follows the approved **CounselConnect Appointment Scheduling Process 
 
 **6. Actions after confirmation.** Cancellation sets `CANCELLED` and releases the future slot. Students may cancel or reschedule only until 24 hours before start; the assigned Counselor is unrestricted by that cutoff. Rescheduling (`CONFIRMED` only) selects a replacement slot and supported mode, returns the appointment to `PENDING`, and replaces the location snapshot atomically. Any participant join/message activity prevents rescheduling. Before start and before chat activity, the assigned Counselor may change to another mode supported by the same slot while keeping the appointment `CONFIRMED`. A failed change leaves the original reservation intact.
 
-**7. Online appointment.** The appointment lobby opens 30 minutes before start. At the scheduled start, the system authorizes the owning Student and assigned Counselor for the dedicated appointment text chat. The approved target also provides a one-to-one WebRTC audio/video call under `AUDIO_VIDEO_CALLS.md`; that call is planned, not yet implemented.
+**7. Online appointment.** The appointment lobby opens 30 minutes before start. At the scheduled start, the system authorizes the owning Student and assigned Counselor for the dedicated appointment text chat and the one-to-one WebRTC audio/video call under `AUDIO_VIDEO_CALLS.md`. Joining either channel is independent; both authorize the same appointment participants, confirmed `ONLINE` status, and session window.
 
 **8. Face-to-face appointment.** The system displays the saved campus Guidance Office location snapshot, and the Student attends onsite at that location.
 
@@ -58,7 +58,7 @@ Weekly schedules and temporary blocks are fully implemented (`GET /weekly-schedu
 - Status transitions and slot reservation/release must be atomic and auditable.
 - Mode compatibility and face-to-face location availability are validated server-side.
 - Legacy Guidance Staff and Superadmin have no appointment-participant or campus-schedule authority. Superadmin may see minimal operational metadata only.
-- Scheduled online counseling retains CounselConnect text messaging and adds planned one-to-one WebRTC audio/video; no recording or transcript.
+- Scheduled online counseling retains CounselConnect text messaging and provides one-to-one WebRTC audio/video; no recording or transcript and no persisted call metadata.
 
 ## Required tests
 
@@ -76,12 +76,15 @@ Weekly schedules and temporary blocks are fully implemented (`GET /weekly-schedu
 - Online conversation denied before confirmation or scheduled start.
 - Appointment/conversation Student and Counselor mismatch denial.
 - Face-to-face conversation-link denial and one-conversation-per-appointment enforcement.
+- Call denied before confirmation, outside the appointment window, for face-to-face appointments, and for non-participants.
+- Call signaling relayed only between the two participants; duplicate/third connections and invalid/oversized signals closed.
+- Call window ends on cancellation/outcome, and no call media/SDP/candidates/history are persisted.
 - Separation of `GENERAL`, `APPOINTMENT`, and `SOS` conversations.
 - UTC persistence and `Asia/Manila` display.
 
 ## Implemented scheduling flow
 
-The scheduling UI is at `#appointments`, available from the signed-in navigation to active Students and Counselors. Student sign-in opens Student services with an appointment link. Legacy Guidance Staff, Superadmin-as-participant, and pending/expired Students cannot load appointment counseling data. The reference flow must be revised to include appointment concern, audio/video, and counseling-record finalization.
+The scheduling UI is at `#appointments`, available from the signed-in navigation to active Students and Counselors. Student sign-in opens Student services with an appointment link. Legacy Guidance Staff, Superadmin-as-participant, and pending/expired Students cannot load appointment counseling data. The reference flow includes appointment concern, audio/video, and counseling-record finalization.
 
 - Counselor sets recurring university-local availability through weekly schedules (day 1–7 ISO, campus, local time range, 15–240-minute slot duration, mode). Slots are materialized lazily from active schedules when a calendar/slot search needs them, skipping availability-blocked periods and already-materialized times; manual concrete batch creation remains available. Counselor availability cannot overlap across campuses.
 - Students filter future slots by campus, Philippine date, and mode; requesting a slot creates `PENDING`. The owning Counselor can confirm or reject a pending request. Rejection optionally includes a note of at most 500 characters.

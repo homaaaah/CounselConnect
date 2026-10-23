@@ -204,9 +204,17 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `POST /appointments/{appointment_id}/complete` | Assigned Counselor; confirmed to completed once scheduled start is reached. |
 | `POST /appointments/{appointment_id}/no-show` | Assigned Counselor; confirmed to no-show once scheduled start is reached. |
 
-Transitions return 200 appointment responses. Responses include the schedule, campus/counselor names, authorized action capabilities, student name, booking-time `meeting_location`, and nullable `conversation_id`. Student cancellation/rescheduling closes 24 hours before start. All scheduling responses are `no-store`; schema validation excludes unknown request fields and returns sanitized errors. Exact shapes are generated in `contracts/openapi.json`.
+Transitions return 200 appointment responses. Responses include the schedule, campus/counselor names, authorized action capabilities (including `can_call`), student name, booking-time `meeting_location`, and nullable `conversation_id`. Student cancellation/rescheduling closes 24 hours before start. All scheduling responses are `no-store`; schema validation excludes unknown request fields and returns sanitized errors. Exact shapes are generated in `contracts/openapi.json`.
 
 Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMENT_NOT_FOUND`/`CAMPUS_NOT_FOUND`; and 409 `SLOT_UNAVAILABLE`, `SCHEDULE_CONFLICT`, `MODE_INCOMPATIBLE`, `GUIDANCE_OFFICE_REQUIRED`, `SLOT_IN_PAST`, `APPOINTMENT_DATE_PASSED`, `APPOINTMENT_TIME_PASSED`, `INVALID_APPOINTMENT_TRANSITION`, `SESSION_NOT_STARTED`, `SESSION_ALREADY_LINKED`, `PARTICIPANT_UNAVAILABLE`, `APPOINTMENT_CHANGED`, or `CONVERSATION_MISMATCH`. Unauthenticated and missing/invalid CSRF requests use the existing auth errors. Naive datetime inputs and invalid pagination/ranges/enums receive sanitized 422 errors.
+
+### Appointment calls
+
+- `GET /appointments/{appointment_id}/call` returns `appointment_id`, actor `role`, `peer_role`, `can_call`, window timestamps, `server_time`, and `ice_servers`. The owning Student or assigned Counselor gets 200 for a confirmed `ONLINE` appointment; `ice_servers` is populated only while the session window is open. Other participants get 404; other roles or inactive accounts get 403. Responses are `Cache-Control: no-store`.
+- `WS /appointments/{appointment_id}/call/ws` authenticates the session cookie, requires an allowed `Origin`, and reauthorizes the appointment/participant/status/mode/time on connect and every 30 seconds without renewing idle activity. Unauthorized connections close with `1008`.
+- Client messages are `ready`, `offer` (`sdp` string), `answer` (`sdp` string), `ice-candidate` (`candidate` object or null), and `hangup`. Server messages are `room-state`, `peer-joined`, `peer-left`, relayed `offer`/`answer`/`ice-candidate`, and `call-ended`. Messages are size- and rate-limited; unknown types close the socket.
+- The server relays only to the other authorized participant, one live connection per participant, and never persists or logs SDP, ICE candidates, media, or call history. The second participant to become ready initiates the offer. A duplicate connection for the same participant replaces the older socket and ends the paired call for both; participants can rejoin. `can_call` is false before the start, after the safety deadline, for face-to-face or non-confirmed appointments.
+- Stable HTTP errors: 403 `FORBIDDEN_ROLE`, `ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMENT_NOT_FOUND`. The GET endpoint returns 200 with `can_call:false` outside the window; WS authorization uses `CALL_NOT_AVAILABLE` internally and closes unauthorized/invalid sockets with `1008`.
 
 ### Messaging
 
@@ -215,7 +223,7 @@ Stable errors include 403 `FORBIDDEN_ROLE`/`ACCOUNT_NOT_ACTIVE`; 404 `APPOINTMEN
 - `GET /conversations/{conversation_id}` and `GET /conversations/{conversation_id}/messages` expose authorized metadata/cursor history.
 - `POST /conversations/{conversation_id}/messages` persists text with a required `client_message_id`; retries return the original message and sequence numbers are conversation-local.
 - `/conversations/{conversation_id}/ws` delivers committed events. `/appointments/session-events` delivers appointment/reminder events. Both authenticate the session cookie, require an allowed `Origin`, reauthorize periodically without extending idle expiry, and carry no durable writes.
-- Raw camera media and embeddings never enter message or API payloads.
+- Raw camera media, SDP, ICE candidates, and embeddings never enter message payloads or durable storage.
 - Attachments and delivery/read receipts remain absent in v1. Message bodies default to a 4,000-character maximum and purge 30 days after closure.
 
 ### SOS and assistant

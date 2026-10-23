@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API_BASE_URL, request } from "../../services/apiClient";
-
-export function socketUrl(path) {
-  if (typeof window === "undefined" || !window.location?.origin) return null;
-  const url = new URL(`${API_BASE_URL}${path}`, window.location.origin);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  return url.toString();
-}
+import { request } from "../../services/apiClient";
+import { socketUrl } from "../../services/realtime";
 
 export function useScheduledSessions(user) {
   const [sessions, setSessions] = useState([]);

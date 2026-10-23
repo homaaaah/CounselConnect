@@ -9,19 +9,11 @@ from threading import RLock
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.core.exceptions import AppError
 from app.database import get_engine
 from app.modules.auth.service import AuthService, SESSION_COOKIE
 from app.modules.messaging.service import MessagingService
-
-
-@dataclass(frozen=True)
-class SocketIdentity:
-    user_id: int
-    role_code: str
-    account_status: str
-    session_id: int
+from app.shared.realtime import SocketIdentity, authenticate_socket, origin_allowed
 
 
 @dataclass(eq=False)
@@ -93,23 +85,6 @@ class ConnectionRegistry:
 registry = ConnectionRegistry()
 
 
-def _origin_allowed(origin: str | None) -> bool:
-    return bool(origin and origin in get_settings().cors_origins)
-
-
-def authenticate_socket(raw_credential: str | None) -> SocketIdentity:
-    with Session(get_engine(), expire_on_commit=False) as session:
-        actor, user_session = AuthService(session).authenticate_request(
-            raw_credential, None, is_safe_method=True, record_activity=False
-        )
-        return SocketIdentity(
-            actor.user_id,
-            actor.role_code,
-            actor.account_status,
-            user_session.session_id,
-        )
-
-
 def authorize_conversation_socket(raw_credential: str | None, conversation_id: int) -> SocketIdentity:
     with Session(get_engine(), expire_on_commit=False) as session:
         actor, user_session = AuthService(session).authenticate_request(
@@ -120,7 +95,7 @@ def authorize_conversation_socket(raw_credential: str | None, conversation_id: i
 
 
 async def websocket_identity(websocket: WebSocket, *, conversation_id: int | None = None) -> SocketIdentity:
-    if not _origin_allowed(websocket.headers.get("origin")):
+    if not origin_allowed(websocket.headers.get("origin")):
         raise AppError("WEBSOCKET_ORIGIN_DENIED", "The connection origin is not allowed.", status_code=403)
     raw = websocket.cookies.get(SESSION_COOKIE)
     if conversation_id is None:

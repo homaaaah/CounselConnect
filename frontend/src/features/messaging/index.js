@@ -4,4 +4,5 @@
  */
 export { default as ScheduledSessionLauncher } from "./ScheduledSessionLauncher";
 export { useAppointmentChat } from "./useAppointmentChat";
-export { useScheduledSessions, socketUrl } from "./useScheduledSessions";
+export { useScheduledSessions } from "./useScheduledSessions";
+export { socketUrl } from "../../services/realtime";

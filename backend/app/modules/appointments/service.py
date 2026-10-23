@@ -1,5 +1,6 @@
 """Atomic scheduling workflow from Flowchart V1, page 4."""
 
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -38,6 +39,20 @@ def db_time(value):
     return (
         value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
     )
+
+
+@dataclass(frozen=True)
+class CallContext:
+    """Authorized, ephemeral call window for one appointment participant."""
+
+    appointment: Appointment
+    actor_role: str
+    peer_role: str
+    starts_at: datetime
+    ends_at: datetime
+    safety_deadline_at: datetime
+    server_time: datetime
+    can_call: bool
 
 
 class AppointmentsService(BaseService[Appointment]):
@@ -456,6 +471,16 @@ class AppointmentsService(BaseService[Appointment]):
     def _student_change_window_open(actor, starts_at, now):
         return actor.role_code != "STUDENT" or now <= starts_at - timedelta(hours=24)
 
+    @staticmethod
+    def _live_window(appointment, slot, moment, settings):
+        """True while a confirmed ONLINE appointment's session window is open."""
+        return (
+            appointment.status == "CONFIRMED"
+            and appointment.appointment_mode == "ONLINE"
+            and slot.starts_at <= moment
+            < slot.ends_at + timedelta(minutes=settings.chat_grace_minutes)
+        )
+
     def session_response(self, actor, appointment, *, now=None):
         self.authorize(actor)
         appointment = self._owned(actor, appointment)
@@ -477,7 +502,7 @@ class AppointmentsService(BaseService[Appointment]):
             appointment.status == "CONFIRMED"
             and appointment.appointment_mode == "ONLINE"
         )
-        live_window = confirmed_online and slot.starts_at <= moment < safety_deadline
+        live_window = self._live_window(appointment, slot, moment, settings)
         participant_joined = bool(
             conversation
             and (
@@ -520,6 +545,7 @@ class AppointmentsService(BaseService[Appointment]):
                 "can_join": live_window and (conversation is None or open_conversation),
                 "can_send": live_window and open_conversation and participant_joined,
                 "can_read_history": can_read_history,
+                "can_call": live_window,
                 "can_cancel": appointment.status in ("PENDING", "CONFIRMED") and student_window,
                 "can_reschedule": appointment.status == "CONFIRMED" and student_window and not has_activity,
                 "can_change_mode": actor.role_code == "COUNSELOR" and appointment.status == "CONFIRMED" and moment < slot.starts_at and not has_activity and slot.delivery_mode == "BOTH" and (appointment.appointment_mode == "FACE_TO_FACE" or bool((self._campus(slot.campus_id).guidance_office_location or "").strip())),
@@ -532,6 +558,29 @@ class AppointmentsService(BaseService[Appointment]):
 
     def session_detail(self, actor, appointment_id):
         return self.session_response(actor, self.repository.get(appointment_id))
+
+    def call_context(self, actor, appointment_id, *, now=None):
+        """Authorized appointment participants only; no conversation is required.
+
+        The returned window is ephemeral. Callers must not persist SDP, ICE
+        candidates, or derived call metadata (docs/AUDIO_VIDEO_CALLS.md).
+        """
+        self.authorize(actor)
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        slot = self.repository.find_slot(appointment.availability_slot_id)
+        moment = now or utcnow()
+        settings = get_settings()
+        deadline = slot.ends_at + timedelta(minutes=settings.chat_grace_minutes)
+        return CallContext(
+            appointment=appointment,
+            actor_role=actor.role_code,
+            peer_role="COUNSELOR" if actor.role_code == "STUDENT" else "STUDENT",
+            starts_at=slot.starts_at,
+            ends_at=slot.ends_at,
+            safety_deadline_at=deadline,
+            server_time=moment,
+            can_call=self._live_window(appointment, slot, moment, settings),
+        )
 
     def lock_session_appointment(self, actor, appointment_id):
         """Messaging service contract: lock and return an owned appointment."""

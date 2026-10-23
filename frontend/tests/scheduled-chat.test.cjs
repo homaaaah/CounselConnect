@@ -48,6 +48,7 @@ test("scheduled session explicitly joins, catches up, and persists a message", a
           can_join: true,
           can_send: joined,
           can_read_history: joined,
+          can_call: false,
           can_cancel: false,
           can_reschedule: false,
           can_change_mode: false,
@@ -122,7 +123,7 @@ test("counselor can join a conversation the student opened first", async t => {
         safety_deadline_at: new Date(now + 4_500_000).toISOString(), server_time: new Date(now).toISOString(),
         student_joined_at: new Date(now - 30_000).toISOString(), counselor_joined_at: counselorJoined ? new Date(now).toISOString() : null,
         conversation_status: "OPEN", closure_reason: null,
-        capabilities: { can_open_lobby: true, can_join: !counselorJoined, can_send: counselorJoined, can_read_history: counselorJoined, can_cancel: false, can_reschedule: false, can_change_mode: false },
+        capabilities: { can_open_lobby: true, can_join: !counselorJoined, can_send: counselorJoined, can_read_history: counselorJoined, can_call: false, can_cancel: false, can_reschedule: false, can_change_mode: false },
       });
     }
     if (path.endsWith("/appointments/7/session/join")) {
@@ -153,4 +154,54 @@ test("counselor can join a conversation the student opened first", async t => {
     await new Promise(resolve => setTimeout(resolve, 0));
   });
   assert.equal(counselorJoined, true);
+});
+
+test("scheduled session shows the appointment call panel without requesting media", async t => {
+  const now = Date.now();
+  const mediaCalls = [];
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    writable: true,
+    value: { mediaDevices: { getUserMedia: async constraints => { mediaCalls.push(constraints); } } },
+  });
+  t.after(() => {
+    if (navigatorDescriptor) Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    else delete globalThis.navigator;
+  });
+  global.window = {
+    location: { origin: "http://localhost:5173", hash: "#session/7" },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  setCsrfToken("synthetic-csrf");
+  t.after(() => setCsrfToken(null));
+  t.mock.method(global, "fetch", async url => {
+    const path = new URL(url, window.location.origin).pathname;
+    if (path.endsWith("/appointments/7/session")) {
+      return json({
+        appointment_id: 7, conversation_id: null, appointment_mode: "ONLINE", status: "CONFIRMED",
+        starts_at: new Date(now - 60_000).toISOString(), ends_at: new Date(now + 3_600_000).toISOString(),
+        lobby_opens_at: new Date(now - 1_800_000).toISOString(), messaging_opens_at: new Date(now - 60_000).toISOString(),
+        safety_deadline_at: new Date(now + 4_500_000).toISOString(), server_time: new Date(now).toISOString(),
+        student_joined_at: null, counselor_joined_at: null, conversation_status: null, closure_reason: null,
+        capabilities: { can_open_lobby: true, can_join: true, can_send: false, can_read_history: false, can_call: true, can_cancel: false, can_reschedule: false, can_change_mode: false },
+      });
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  });
+
+  let root;
+  await act(async () => {
+    root = create(React.createElement(ScheduledSessionPage, { user, appointmentId: 7 }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  t.after(async () => { await act(async () => root.unmount()); });
+
+  const joinCall = root.root.findAllByType("button").find(button =>
+    button.children.includes("Join video call")
+  );
+  assert.ok(joinCall, "the call panel offers an explicit join action");
+  assert.equal(mediaCalls.length, 0, "mounting the session must not open the camera");
+  assert.ok(JSON.stringify(root.toJSON()).includes("Peer-to-peer and not recorded"));
 });

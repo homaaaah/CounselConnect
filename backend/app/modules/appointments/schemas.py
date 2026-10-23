@@ -129,6 +129,7 @@ class AppointmentSessionCapabilities(BaseModel):
     can_join: bool
     can_send: bool
     can_read_history: bool
+    can_call: bool
     can_cancel: bool
     can_reschedule: bool
     can_change_mode: bool

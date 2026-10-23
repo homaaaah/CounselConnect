@@ -4624,6 +4624,72 @@
         }
       }
     },
+    "/api/v1/appointments/{appointment_id}/call": {
+      "get": {
+        "tags": [
+          "calls"
+        ],
+        "summary": "Call Config",
+        "operationId": "call_config_api_v1_appointments__appointment_id__call_get",
+        "parameters": [
+          {
+            "name": "appointment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Appointment Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallConfigResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Call Config Api V1 Appointments  Appointment Id  Call Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/content/cms-blocks": {
       "get": {
         "tags": [
@@ -5076,6 +5142,10 @@
             "type": "boolean",
             "title": "Can Read History"
           },
+          "can_call": {
+            "type": "boolean",
+            "title": "Can Call"
+          },
           "can_cancel": {
             "type": "boolean",
             "title": "Can Cancel"
@@ -5095,6 +5165,7 @@
           "can_join",
           "can_send",
           "can_read_history",
+          "can_call",
           "can_cancel",
           "can_reschedule",
           "can_change_mode"
@@ -5614,6 +5685,112 @@
           "days"
         ],
         "title": "CalendarResponse"
+      },
+      "CallConfigResponse": {
+        "properties": {
+          "appointment_id": {
+            "type": "integer",
+            "title": "Appointment Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "STUDENT",
+              "COUNSELOR"
+            ],
+            "title": "Role"
+          },
+          "peer_role": {
+            "type": "string",
+            "enum": [
+              "STUDENT",
+              "COUNSELOR"
+            ],
+            "title": "Peer Role"
+          },
+          "can_call": {
+            "type": "boolean",
+            "title": "Can Call"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "safety_deadline_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Safety Deadline At"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Server Time"
+          },
+          "ice_servers": {
+            "items": {
+              "$ref": "#/components/schemas/CallIceServer"
+            },
+            "type": "array",
+            "title": "Ice Servers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "appointment_id",
+          "role",
+          "peer_role",
+          "can_call",
+          "starts_at",
+          "ends_at",
+          "safety_deadline_at",
+          "server_time",
+          "ice_servers"
+        ],
+        "title": "CallConfigResponse"
+      },
+      "CallIceServer": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          }
+        },
+        "type": "object",
+        "required": [
+          "urls"
+        ],
+        "title": "CallIceServer"
       },
       "CampusResponse": {
         "properties": {

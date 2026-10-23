@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatSchedule } from "../features/appointments";
 import { useAppointmentChat } from "../features/messaging/useAppointmentChat";
+import AppointmentCallPanel from "../components/calls/AppointmentCallPanel";
 
 export default function ScheduledSessionPage({ user, appointmentId }) {
   const chat = useAppointmentChat(appointmentId);
@@ -18,6 +19,15 @@ export default function ScheduledSessionPage({ user, appointmentId }) {
       <a href="#appointments" className="text-sm font-medium text-emerald-700">← Back to appointments</a>
       <h1 className="mt-3 text-2xl font-bold">Scheduled counseling session</h1>
       <p className="mt-1 text-sm text-slate-500">{formatSchedule(session.starts_at)} to {formatSchedule(session.ends_at)}</p>
+      <AppointmentCallPanel
+        appointmentId={appointmentId}
+        canCall={session.capabilities.can_call === true}
+        startsAt={session.starts_at}
+        safetyDeadlineAt={session.safety_deadline_at}
+        serverTime={session.server_time}
+        appointmentMode={session.appointment_mode}
+        status={session.status}
+      />
       {chat.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-red-700">{chat.error}</p>}
       {beforeStart && <section className="mt-6 rounded-lg bg-emerald-50 p-5">
         <h2 className="font-semibold">Session lobby</h2>

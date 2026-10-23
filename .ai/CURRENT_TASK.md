@@ -1,50 +1,58 @@
 # CounselConnect - Current Task
 
 **Status:** COMPLETED
-**Task:** Port the CCFrontend visual design into `frontend/` (plan `.kilo/plans/1792748017338-merge-counselconnectmerge-snapshot.md`).
-**Route:** `ui-refactor` + `appointments`/`accounts` page components.
+**Task:** Implement appointment-bound WebRTC calls (Student + assigned Counselor) per `.kilo/plans/1792774405483-video-demo-test-button.md`.
+**Route:** `appointments` + `messaging` + `security`; HIGH risk (authorization, signaling, privacy).
 
 ## Result
 
-The frontend now uses CCFrontend's forest-green design and page layouts while keeping the repo's hooks, API behavior, registration validation messaging, and safety tests.
+The owning Student and assigned Counselor of a `CONFIRMED` `ONLINE` appointment can join a one-to-one call from `ScheduledSessionPage` between the scheduled start and appointment end plus the existing 15-minute grace. The backend authenticates the session/Origin, authorizes participant/status/mode/time on connect and revalidates every 30 seconds by wall clock, and relays SDP/ICE only between the two participants over a dedicated appointment WebSocket. Media is peer-to-peer; no media, SDP, ICE candidates, IP addresses, call history, or audit events are persisted or logged. The call is independent of chat join and never changes the appointment outcome. The manual `#video-demo` prototype and its Home shortcuts were retired.
 
-## Changes
+## Files changed
 
-### Design assets and wiring
-- `frontend/src/index.css` — CCFrontend green-token stylesheet; explicit `--primary: #4A6B5B`; green success-button hover.
-- `frontend/src/modal.css` (new) — auth/booking modal styles; green logo placeholder.
-- `frontend/src/pages/LandingPage.css` (new) — landing page styles.
-- `frontend/src/main.jsx` — imports `modal.css` after `index.css`.
-- `frontend/index.html` — adds the Merriweather font CCFrontend requires.
-- `frontend/src/pages/LandingPage.jsx` — CCFrontend markup + CSS import.
+### New
 
-### Page layouts / navigation
-- `frontend/src/App.jsx` — top-bar shell, landing hash handling, no sidebar offset; removed the inert `counselconnect-toast` listener.
-- `frontend/src/components/layout/AppNavBar.jsx` — CCFrontend top bar; retained `Users` for Counselors, `Verify enrollment` for non-active students (with `aria-current`), and hid Appointments for non-active students.
-- `frontend/src/pages/student/student_homepage.jsx` — green bento home; status-aware notification copy.
-- `frontend/src/pages/counselor/counselor_dashboard.jsx` — green dashboard; fixed the `key` spread warning.
-- `frontend/src/features/counselor/useCounselorDashboard.js` (new) — pages the documented `GET /appointments?page&page_size` endpoint instead of unsupported date filters.
-- `frontend/src/features/counselor/index.js` — exports the hook.
-- `frontend/src/components/appointments/BookingModal.jsx` — two-panel dialog; reschedule title restored.
-- `frontend/src/components/appointments/CalendarGrid.jsx` — modal calendar variant.
-- `frontend/src/pages/student/StudentAppointmentsPage.jsx` — CCFrontend records layout.
+- `backend/app/modules/calls/{__init__,schemas,service,realtime,router}.py`
+- `backend/app/shared/realtime.py`
+- `backend/app/tests/integration/test_calls.py` (18 DB-backed tests)
+- `frontend/src/features/calls/{index.js,signaling.js,useAppointmentCall.js}`
+- `frontend/src/components/calls/AppointmentCallPanel.jsx`
+- `frontend/src/services/realtime.js`
+- `frontend/tests/appointment-call.test.cjs` (10 tests)
 
-### Tests updated for intentional design changes
-- `frontend/tests/register-app.cjs` — stub `.css` imports.
-- `frontend/tests/appointments.test.cjs` — `ToastProvider` mounts, `Start Booking`, `My Appointments`.
-- `frontend/tests/navbar.test.cjs` — top-bar labels/expectations.
+### Modified
 
-### Preserved current behavior
-- `RegisterPage.jsx`, `useRegistration.js`, `useAppointments.js`, notifications, `apiClient`, and all backend/docs/OpenAPI files were not changed by this task.
+- `backend/app/config.py` — `CallIceServerConfig`, `call_ice_servers`, signal size/rate limits.
+- `backend/app/modules/appointments/{service,schemas}.py` — `CallContext`, `call_context`, shared `_live_window`, `can_call` capability.
+- `backend/app/modules_router.py` — mount the calls router.
+- `backend/app/modules/messaging/realtime.py` — use the shared socket auth helper.
+- `backend/.env.example` — call ICE/signal settings.
+- `contracts/openapi.json` — regenerated.
+- `frontend/src/pages/ScheduledSessionPage.jsx` — call panel; prototype link removed.
+- `frontend/src/features/messaging/{index.js,useAppointmentChat.js,useScheduledSessions.js}` — `socketUrl` moved to `services/realtime.js`.
+- `frontend/tests/scheduled-chat.test.cjs` — `can_call` fixtures and call-panel test.
+- `docs/AUDIO_VIDEO_CALLS.md`, `docs/API_CONTRACT.md`, `docs/APPOINTMENT_SCHEDULING.md`, `docs/REAL_TIME_MESSAGING.md`.
+- `.ai/{ARCHITECTURE,CONTEXT_MAP,DECISIONS,CURRENT_TASK}.md` — ADR-034 and routing map.
+- Removed: `frontend/src/features/video/*`, `frontend/src/pages/VideoCallPrototypePage.jsx`, `frontend/tests/video-prototype.test.cjs`, plus `#video-demo` route/Home shortcut references (these files were untracked, so removal restores the prior tree).
 
 ## Verification
 
-- `npm test`: **75 passed, 1 failed** — only the pre-existing calendar date-rot test; the same failure existed before this task.
-- `npm run build`: succeeded (74 modules).
-- `git diff --check`: clean.
-- Review follow-ups fixed: documented appointment pagination, reschedule heading, `aria-current`, Merriweather font, green hover/logo, Counselor Users link, status copy, dead listener.
+- `backend` calls tests with the disposable MySQL test DB: **23 passed, 0 failed**.
+- Full backend suite with the test DB: **256 passed, 1 failed** — the pre-existing `test_live_appointment_screens` harness failure (`StudentHomePage` useToast outside `ToastProvider` in `frontend/tests/live-appointments.cjs`); unrelated to this change and untouched.
+- `python scripts/export_openapi.py --check`: **matches the application**.
+- `frontend` full suite: **85 passed, 2 failed** — only the two pre-existing calendar date-rot tests (`2026-09-19` past fixture and the UTC/Manila window drift).
+- `npm run build`: **succeeded** (79 modules).
+- `git diff --check`: no whitespace errors; line-ending warnings only.
+- Independent read-only HIGH-risk review completed. Confirmed findings were fixed: wall-clock periodic revalidation (busy-client case), duplicate-connection takeover ends both sides, stale async offers discarded after hang-up, non-callable appointment copy, dead-peer cleanup, added regression tests, and contract/config wording.
+
+## Not run
+
+- Interactive two-browser manual call, real camera-indicator, real TURN/STUN network behavior, and Capacitor. These require devices/browsers and remain for human verification.
 
 ## Remaining limitations
 
-- Known pre-existing calendar test failure remains.
-- `CCFrontend/` and `CounselConnectMerge/` remain untracked and untouched.
+- TURN uses static environment credentials in v1; ephemeral coturn credentials and multi-process signaling are follow-ups.
+- One backend process only (the room registry is in memory, like chat).
+- Both participants must explicitly join; there is no ringing/notification, and both must rejoin after a drop.
+- P2P candidates can expose network addresses to the other authorized participant; documented in the UI/docs.
+- The two calendar test failures and the live-appointments harness failure above remain pre-existing and were not modified.

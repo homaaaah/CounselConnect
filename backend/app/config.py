@@ -7,9 +7,17 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
+
+
+class CallIceServerConfig(BaseModel):
+    """One ICE server entry, supplied through the environment as JSON."""
+
+    urls: list[str]
+    username: str | None = None
+    credential: str | None = None
 
 
 class Settings(BaseSettings):
@@ -40,6 +48,16 @@ class Settings(BaseSettings):
     chat_retention_days: int = Field(default=30, ge=1, le=365)
     chat_max_message_characters: int = Field(default=4000, ge=1, le=20_000)
     chat_maintenance_interval_seconds: int = Field(default=30, ge=1, le=3600)
+
+    # --- Appointment video calls (ADR-034) ---
+    # JSON list, e.g. [{"urls":["stun:host:3478"]},{"urls":["turn:host:3478"],
+    # "username":"...","credential":"..."}]. Credentials are only returned to
+    # an authorized participant inside the appointment call window.
+    call_ice_servers: list[CallIceServerConfig] = [
+        CallIceServerConfig(urls=["stun:stun.l.google.com:19302"])
+    ]
+    call_signal_max_bytes: int = Field(default=65_536, ge=1_024, le=1_048_576)
+    call_signal_messages_per_minute: int = Field(default=300, ge=10, le=6_000)
 
     # --- Non-MySQL storage roots (never inside version control) ---
     cor_storage_root: str = "./var/cor"

@@ -18,7 +18,7 @@ Conversation types remain GENERAL, APPOINTMENT, and SOS. A conversation cannot b
 
 ## Audio/video relationship
 
-Planned WebRTC audio/video uses the same appointment participants/window but is a separate media/signaling domain described in AUDIO_VIDEO_CALLS.md. Text messages remain durable. Call media, recordings, transcripts, and automatic summaries are never message content or persistent records.
+WebRTC audio/video uses the same appointment participants/window but is a separate media/signaling domain described in AUDIO_VIDEO_CALLS.md (ADR-034). Text messages remain durable. Call media, recordings, transcripts, automatic summaries, SDP/ICE payloads, and call history are never message content or persistent records. Starting or ending a call does not create/join the chat or change the appointment outcome.
 
 ## Counseling-record relationship
 
@@ -34,6 +34,6 @@ Optional AI-assisted observation is consented/session-only and separate from mes
 
 ## Required tests
 
-Participant and multi-Counselor isolation; Superadmin/legacy-role denial; purpose validation; pre-window/unconfirmed/cancelled/face-to-face denial; participant mismatch; unique appointment link; send/retry/idempotency; reconnect/catch-up; timeout/outcome separation; message purge; session expiry; no heartbeat renewal; no clinical notes/media/AI observations in messages.
+Participant and multi-Counselor isolation; Superadmin/legacy-role denial; purpose validation; pre-window/unconfirmed/cancelled/face-to-face denial; participant mismatch; unique appointment link; send/retry/idempotency; reconnect/catch-up; timeout/outcome separation; message purge; session expiry; no heartbeat renewal; no clinical notes/media/AI observations in messages; call signaling isolated from chat persistence.
 
 The process-local WebSocket registry supports one backend process in v1. Messages are text-only with a configurable 4,000-character default. Attachments, delivery/read receipts, and multi-process fan-out are not implemented.

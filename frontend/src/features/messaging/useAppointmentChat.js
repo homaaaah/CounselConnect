@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "../../services/apiClient";
-import { socketUrl } from "./useScheduledSessions";
+import { socketUrl } from "../../services/realtime";
 
 const clientId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
