@@ -1,7 +1,7 @@
 """auth Pydantic contracts (ADR-019).
 
-Login accepts one identifier: students use their student number, staff
-use their email (ADR-005). Responses carry the CSRF token (safe to expose
+Login accepts one identifier: students use their registered email or
+student number; staff use their email (ADR-030). Responses carry the CSRF token (safe to expose
 to the authenticated caller; it must accompany unsafe-method requests)
 and both expiry timestamps so the frontend can render the five-minute
 idle warning (FR-AUTH-03).

@@ -32,7 +32,6 @@ html {
   --counseling-hover-primary: #3b82f6;
   --counseling-high-contrast: #1d4ed8;
   --counseling-deep-contrast: #1e3a8a;
-
   /* Auth/landing surface tokens — referenced by `.signup-card`, form inputs,
      and landing cards. Previously undefined, which made the register card's
      background transparent (invisible over the dark modal overlay). Darker
@@ -41,6 +40,7 @@ html {
   --text-dark: #18181b;
   --text-muted: #4b5563;
   --border-color: #d1d5db;
+  --primary: var(--counseling-active-focus);
 }
 
 /* Visible keyboard focus on every interactive element (WCAG 2.4.7). */
@@ -814,6 +814,37 @@ html {
   padding: 2.5rem 2rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   margin: 0 auto;
+  color: var(--text-dark);
+}
+
+.signup-card .signup-header {
+  padding-right: 1.5rem;
+}
+
+.signup-card .form-group {
+  min-width: 0;
+}
+
+.signup-card .form-input:focus-visible,
+.signup-card .form-select:focus-visible {
+  outline: 2px solid var(--counseling-active-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .signup-card {
+    padding: 2rem 1.25rem 1.5rem;
+  }
+
+  .signup-card .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .signup-card .form-input,
+  .signup-card .form-select {
+    font-size: 1rem;
+  }
 }
 
 .login-header,

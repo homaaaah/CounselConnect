@@ -49,6 +49,7 @@ Use `GET` to read, `POST` to create or perform an explicit state transition, `PA
 - Authorization must enforce role, ownership, assignment, appointment status/mode/time, and conversation purpose where applicable.
 - A hidden or disabled frontend control is not an authorization control.
 - Authentication uses revocable opaque sessions stored in MySQL. For the web client, send the random session credential only in a `Secure`, `HttpOnly`, `SameSite=Lax` cookie; store only its cryptographic hash. Do not use JWT refresh tokens or browser `localStorage` for authentication.
+- `POST /auth/login` accepts `{ "identifier", "password" }`; Students may use their registered email or student number, while staff use email (ADR-030). Success returns the user, CSRF token, and idle/absolute expiry timestamps; the session credential is set only in the HttpOnly cookie.
 - State-changing cookie-authenticated requests require CSRF protection.
 - All roles use a one-hour idle timeout and a 12-hour absolute timeout, with a five-minute warning and explicit continuation. Genuine CounselConnect user actions renew idle activity; background polling and WebSocket heartbeats do not. `Remember Me` is excluded from v1.
 - Passwords use Argon2id. Password-reset credentials are hashed, single-use, expire after 30 minutes, and successful reset revokes active sessions.

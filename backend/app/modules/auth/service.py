@@ -1,6 +1,6 @@
 """auth service: login/session/CSRF business rules (ADR-019).
 
-- Identifier: student number for Students, email for staff (ADR-005).
+- Identifier: registered email or student number for Students; email for staff (ADR-030).
 - Credential: 256-bit random opaque token; only its SHA-256 digest is
   stored/looked up (user_sessions).
 - Sessions: 1h idle (last_activity_at), 12h absolute, never sliding;
@@ -69,7 +69,7 @@ class AuthService(BaseService[User]):
 
         Staff (Counselor, Guidance Staff, Superadmin) sign in with email.
         Students sign in with their registered email or their student number
-        (ADR-005/019, ADR-030). A public registration must never shadow a staff
+        (ADR-030). A public registration must never shadow a staff
         member's login identifier.
         """
         account = self.accounts.find_user_by_email(identifier)

@@ -33,10 +33,7 @@ class AuthRepository(BaseRepository[User]):
     # ------------------------------------------------------- lookups
 
     def find_user_by_identifier(self, identifier: str) -> User | None:
-        """Look up a user by the approved login identifier.
-
-        # TODO: Identifier policy (email vs student number) is part of ADR-P01.
-        """
+        """Look up a user by email; student-number lookup uses the profile repository."""
         return self.session.scalar(select(User).where(User.email == identifier))
 
     def find_session_by_token_hash(self, token_hash: bytes) -> UserSession | None:
