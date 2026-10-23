@@ -44,7 +44,7 @@ def _auth_response(user, session, csrf_token: str) -> AuthResponse:
     )
 
 
-@router.post("/login", response_model=AuthResponse, summary="Sign in (student number or staff email)")
+@router.post("/login", response_model=AuthResponse, summary="Sign in (student email/number or staff email)")
 def login(
     data: LoginRequest,
     response: Response,

@@ -53,7 +53,12 @@ export default function App() {
 }
 
 function AppShell() {
-  const [page, setPage] = useState(window.location.hash.replace("#", "") || "landing");
+  const landingSections = new Set(["features", "news", "faq", "counselors"]);
+  const currentHashPage = () => {
+    const hash = window.location.hash.replace("#", "") || "landing";
+    return landingSections.has(hash) ? "landing" : hash;
+  };
+  const [page, setPage] = useState(currentHashPage);
   const { status, error } = useHealth();
   const session = useSession();
   const toast = useToast();
@@ -81,7 +86,7 @@ function AppShell() {
   };
 
   useEffect(() => {
-    const onHash = () => setPage(window.location.hash.replace("#", "") || "landing");
+    const onHash = () => setPage(currentHashPage());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -90,9 +95,6 @@ function AppShell() {
     return <p role="status" className="p-6">Restoring your session…</p>;
   }
 
-  // Counselor shell: fixed left sidebar on desktop — page content shifts
-  // right by the sidebar width (16rem) so nothing hides underneath it.
-  const counselorShell = ["COUNSELOR", "SUPERADMIN"].includes(session.user?.role_code);
   const sessionAppointmentId = page.startsWith("session/") ? Number(page.slice("session/".length)) : null;
 
   return (
@@ -107,7 +109,7 @@ function AppShell() {
           }}
         />
       )}
-      <div className={counselorShell ? "lg:ml-64" : undefined}>
+      <div>
         {page === "login" && <LoginPage onSignedIn={session.accept} />}
         {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
         {page === "register" && <RegisterPage />}

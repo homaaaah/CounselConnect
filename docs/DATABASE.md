@@ -9,7 +9,7 @@
 | Identity/academics | `users`, `student_profiles`, `campuses`, `departments`, `programs` |
 | Sessions | `user_sessions` |
 | Enrollment | `cor_screenings`, `cor_screening_files` (ADR-029), `profile_change_requests` (ADR-032). Legacy `enrollment_verifications`, `enrollment_verification_files` are retained for history. |
-| Appointments | `counselor_weekly_schedules`, `counselor_availability_blocks`, `availability_slots`, `appointments` |
+| Appointments | `counselor_weekly_schedules`, `counselor_availability_blocks`, `counselor_blocked_dates`, `availability_slots`, `appointments` |
 | Messaging | `conversations`, `messages` |
 | SOS | `sos_cases`, `sos_responses` |
 | Resources | `resource_sources`, `wellness_resources`, `resource_files`, `resource_categories`, `wellness_resource_categories` |
@@ -23,6 +23,7 @@
 - `availability_slots.delivery_mode`: `ONLINE`, `FACE_TO_FACE`, or `BOTH`.
 - `counselor_weekly_schedules`: active, university-local recurring schedule definitions. `day_of_week` uses ISO values 1 (Monday) through 7 (Sunday); `start_time` and `end_time` are local schedule times, while generated slot timestamps remain UTC.
 - `counselor_availability_blocks`: temporary UTC intervals during which the Counselor is unavailable. They retain no appointment changes and may not overlap an active appointment when created through the service layer.
+- `counselor_blocked_dates`: Counselor-owned whole-day calendar overrides; these dates are excluded from the Counselor's bookable calendar.
 - `availability_slots.weekly_schedule_id`: nullable provenance link for slots generated from a weekly schedule. Legacy and concrete one-off slots remain valid with `NULL`.
 - `appointments.appointment_mode`: Student-selected `ONLINE` or `FACE_TO_FACE` compatible with the slot.
 - `appointments.meeting_location`: required booking-time campus-location snapshot for face-to-face appointments; null for online appointments.
@@ -66,4 +67,4 @@ No COR blob/base64, raw camera media, embeddings/biometric templates, observed-e
 
 ## Intentionally absent in V1
 
-No role/permission join model, separate Counselor/admin profiles, profile-change requests, recurrence/history/notification tables, conversation participant/read-receipt/transcript tables, SOS question/rule tables, emotion tables, resource review-history/tag tables, assistant history, or CMS version/draft/schedule tables.
+No role/permission join model, separate Counselor/admin profiles, recurrence-history or notification tables, conversation participant/read-receipt/transcript tables, SOS question/rule tables, emotion tables, resource review-history/tag tables, assistant history, or CMS version/draft/schedule tables. Recurring availability definitions are stored in `counselor_weekly_schedules`; Student profile edits are stored in `profile_change_requests`.

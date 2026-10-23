@@ -18,6 +18,8 @@ export const EMPTY_FORM = {
 
 /** Friendly text for the documented registration error codes. */
 const ERROR_MESSAGES = {
+  VALIDATION_ERROR:
+    "Some registration fields need attention. Check the details and try again.",
   EMAIL_ALREADY_REGISTERED: "That email is already registered. Try signing in instead.",
   STUDENT_NUMBER_ALREADY_REGISTERED:
     "That student number is already registered. Sign in to confirm your details.",
@@ -49,6 +51,29 @@ const ERROR_MESSAGES = {
   CHANGE_REQUEST_REASON_REQUIRED: "Enter a reason for rejecting this request.",
   CHANGE_REQUEST_NOT_FOUND: "That edit request could not be found.",
 };
+
+const VALIDATION_FIELD_LABELS = {
+  email: "email address",
+  password: "password (at least 8 characters)",
+  file: "COR PDF",
+};
+
+function validationErrorMessage(details) {
+  const labels = [...new Set(
+    (Array.isArray(details?.fields) ? details.fields : [])
+      .map((field) => {
+        const location = Array.isArray(field?.loc) ? field.loc : [];
+        const name = location[location.length - 1];
+        return VALIDATION_FIELD_LABELS[name];
+      })
+      .filter(Boolean),
+  )];
+
+  if (labels.length === 0) {
+    return ERROR_MESSAGES.VALIDATION_ERROR;
+  }
+  return `Please check your ${labels.join(", ")}, then try again.`;
+}
 
 /** Human-readable screening failure reasons (mirrors the backend contract). */
 export const FAILURE_REASON_MESSAGES = {
@@ -160,7 +185,14 @@ export function useRegistration() {
       };
     } catch (err) {
       if (err instanceof ApiError) {
-        return { success: false, code: err.code, message: ERROR_MESSAGES[err.code] ?? err.message };
+        return {
+          success: false,
+          code: err.code,
+          status: err.status,
+          message: err.code === "VALIDATION_ERROR"
+            ? validationErrorMessage(err.details)
+            : ERROR_MESSAGES[err.code] ?? err.message,
+        };
       }
       return { success: false, message: "Registration failed. Please try again." };
     } finally {

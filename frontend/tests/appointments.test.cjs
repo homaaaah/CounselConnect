@@ -9,6 +9,7 @@ const CalendarGrid = require("../src/components/appointments/CalendarGrid.jsx").
 const BookingModal = require("../src/components/appointments/BookingModal.jsx").default;
 const App = require("../src/App.jsx").default;
 const { manilaInputToUTC, formatSchedule } = require("../src/features/appointments");
+const { ToastProvider } = require("../src/components/feedback");
 const { setCsrfToken } = require("../src/services/apiClient");
 
 const student = { user_id: 2, role_code: "STUDENT", account_status: "ACTIVE", first_name: "Ana", last_name: "Test", email: "synthetic@example.edu" };
@@ -66,7 +67,7 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
 }
 async function mount(t, component) {
   let root;
-  await act(async () => { root = create(component); });
+  await act(async () => { root = create(React.createElement(ToastProvider, null, component)); });
   t.after(async () => { await act(async () => root.unmount()); setCsrfToken(null); });
   return root;
 }
@@ -79,7 +80,7 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
   const calls = setup(t, { calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
   const requestsBefore = calls.length;
-  const schedule = button(root, "Schedule");
+  const schedule = button(root, "Start Booking");
   assert.ok(schedule);
   await act(async () => schedule.props.onClick());
   const dayCell = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01"));
@@ -102,7 +103,7 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
 test("booking modal shows the revealed campus/time details before requesting", async t => {
   setup(t, { calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -131,7 +132,7 @@ test("booking loads every selected-date slot page and lets the student choose a 
     },
   });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -167,7 +168,7 @@ test("a background slot refresh preserves a selected compatible appointment mode
 test("server booking conflict keeps the modal open and shows the slot-unavailable error", async t => {
   setup(t, { failure: true, calendar: calendar() });
   const root = await mount(t, React.createElement(HomePage, { user: student }));
-  await act(async () => button(root, "Schedule").props.onClick());
+  await act(async () => button(root, "Start Booking").props.onClick());
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "09:00").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -195,7 +196,7 @@ test("records view keeps every appointment outcome accessible by status", async 
   setup(t, { appointments: [appointment] });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
   const rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("My appointments"), "records heading for students");
+  assert.ok(rendered.includes("My Appointments"), "records heading for students");
   const labels = ["Confirmed", "Pending", "Completed", "No-show", "Cancelled", "Rejected"];
   const tabs = root.root.findAllByType("button").filter(b => labels.includes(buttonText(b)));
   assert.equal(tabs.length, labels.length, "every appointment status has a record tab");

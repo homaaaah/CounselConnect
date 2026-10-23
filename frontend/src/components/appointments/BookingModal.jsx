@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { formatSchedule } from "../../features/appointments";
-import { buttonClass, secondaryClass, modeLabel } from "./ui.js";
+import { formatSchedule, manilaToday } from "../../features/appointments";
+import { buttonClass, modeLabel } from "./ui.js";
 import CalendarGrid from "./CalendarGrid.jsx";
 
 /**
@@ -15,7 +15,18 @@ import CalendarGrid from "./CalendarGrid.jsx";
  * slot by epoch instant (slot starts_at is UTC ISO — string equality
  * would never hit). state.mutate returns a boolean and surfaces its own
  * message/error, so success shows a confirmation panel here and failure
- * keeps the calendar visible with the error below it.
+ * keeps the details visible with the error beside them.
+ *
+ * Layout (redesign): a fixed header (title, live step subtitle, PROGRESS
+ * bar), a scrollable body with a two-panel grid (availability calendar on
+ * the left, appointment details on the right), and a fixed footer
+ * (Back / Cancel + the primary confirm action). The card itself is the
+ * <form>, so the footer's confirm button submits the same handler as before.
+ *
+ * Real steps: the app has no counselor-first or six-step wizard — booking is
+ * slot-scoped and GET /availability-slots is the only counselor/campus
+ * source. The progress therefore reflects the two real stages of this dialog:
+ * 1) choose date & time, 2) confirm details.
  */
 export default function BookingModal({ open, onClose, state, rescheduleId = null }) {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -79,94 +90,145 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
     if (ok) {
       setDone(true);
     }
-    // On failure state.mutate surfaces state.error below the calendar; the
-    // details form stays visible so the visitor can change time or retry
-    // (the server rejects stale slots again with SLOT_UNAVAILABLE).
+    // On failure state.mutate surfaces state.error beside the details; the
+    // details stay visible so the visitor can change time or retry (the
+    // server rejects stale slots again with SLOT_UNAVAILABLE).
   };
 
   if (!open) return null;
 
+  const today = manilaToday();
+  const stepTotal = 2;
+  const step = slotDetails ? 2 : 1;
+  const progressPercent = Math.round((step / stepTotal) * 100);
+  const subtitle = rescheduleId
+    ? (step === 1 ? "Step 1 of 2: Choose a new date & time" : "Step 2 of 2: Confirm reschedule")
+    : (step === 1 ? "Step 1 of 2: Choose date & time" : "Step 2 of 2: Confirm your appointment");
+  const onCalendarSelect = () => {
+    setPickedTime(null); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null); setMode("ONLINE");
+  };
+  const onCalendarPickTime = (date, time) => {
+    setSelectedDate(date); setPickedTime(time); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null); setMode("ONLINE");
+  };
+  const confirmDisabled = submitting || state.busy || !slotDetails
+    || (mode === "FACE_TO_FACE" && !slotDetails.guidance_office_location);
+
   return <div className="modal-overlay" role="dialog" aria-modal="true"
     aria-label={rescheduleId ? "Reschedule appointment" : "Schedule an appointment"}
     onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
-    <div className="modal-card booking-modal-card">
-      <button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog">
+    <form className="modal-card booking-modal-card" onSubmit={submit}>
+      <button type="button" className="modal-close booking-modal-close" onClick={onClose} aria-label="Close dialog">
         <i className="fa-solid fa-xmark" aria-hidden="true"></i>
       </button>
 
-      {done
-        ? <>
-            <h2 className="text-xl font-semibold">{rescheduleId ? "Reschedule requested" : "Appointment requested"}</h2>
-            <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-              {rescheduleId ? "Rescheduled. Awaiting counselor review." : "Request submitted. Awaiting counselor review."}
-            </p>
-            <button type="button" className={buttonClass + " mt-4"} onClick={onClose}>Close</button>
-          </>
-        : <>
-            <h2 className="text-xl font-semibold">{rescheduleId ? "Reschedule appointment" : "Schedule an appointment"}</h2>
-            <p className="mt-1 text-sm text-slate-500">Click a date to see available times, then pick one to reveal campus and mode details. Philippine time.</p>
+      <header className="booking-modal-header">
+        <h2 className="booking-modal-title">{rescheduleId ? "Reschedule appointment" : "Schedule an Appointment"}</h2>
+        <p className="booking-modal-subtitle">{subtitle}</p>
+        <div className="booking-progress-row">
+          <span className="booking-progress-label">Progress</span>
+          <span className="booking-progress-label">Step {step} of {stepTotal}</span>
+        </div>
+        <div className="booking-progress-track" role="progressbar" aria-label="Booking progress"
+          aria-valuemin={0} aria-valuemax={stepTotal} aria-valuenow={step}>
+          <div className="booking-progress-fill" style={{ width: progressPercent + "%" }} />
+        </div>
+      </header>
 
-            {!state.calendar && state.loading
-              ? <p role="status" className="mt-4">Loading calendar…</p>
-              : <>
-                  <div className="mt-4">
-                    <CalendarGrid calendar={state.calendar}
-                      onSelect={() => { setPickedTime(null); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null); setMode("ONLINE"); }}
-                      onPickTime={(date, time) => {
-                        setSelectedDate(date); setPickedTime(time); setSlotCandidates([]); setSelectedSlotId(null); setSlotDetails(null); setMode("ONLINE");
-                      }} />
+      <div className="booking-modal-body">
+        {done
+          ? <div className="booking-success">
+              <h3 className="booking-success-title">{rescheduleId ? "Reschedule requested" : "Appointment requested"}</h3>
+              <p role="status" className="booking-success-note">
+                {rescheduleId ? "Rescheduled. Awaiting counselor review." : "Request submitted. Awaiting counselor review."}
+              </p>
+            </div>
+          : (!state.calendar && state.loading)
+            ? <p role="status" className="booking-loading">Loading calendar...</p>
+            : <div className="booking-layout">
+                <section className="booking-panel booking-panel--calendar" aria-label="Availability calendar">
+                  <CalendarGrid variant="modal" calendar={state.calendar}
+                    onSelect={onCalendarSelect} onPickTime={onCalendarPickTime} />
+                  <div className="booking-legend">
+                    <span className="booking-legend-item"><span className="booking-dot booking-dot--selected" aria-hidden="true" />Selected</span>
+                    <span className="booking-legend-item"><span className="booking-dot booking-dot--available" aria-hidden="true" />Available</span>
+                    <span className="booking-legend-item"><span className="booking-dot booking-dot--unavailable" aria-hidden="true" />Unavailable</span>
                   </div>
+                </section>
 
-                  {state.error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}
+                <section className="booking-panel booking-panel--details" aria-label="Appointment details">
+                  {state.error && <div role="alert" className="booking-alert booking-alert--error">
+                    <p>{state.error}</p>
+                    <button type="button" className="booking-btn-text" disabled={state.loading}
+                      onClick={() => void state.refresh?.()}>
+                      {state.loading ? "Retrying availability…" : "Retry availability"}
+                    </button>
+                  </div>}
 
-                  {selectedDate && !pickedTime && <p className="mt-3 text-sm text-slate-500">Pick a time on your selected date to continue.</p>}
-                  {pickedTime && state.loading && <p role="status" className="mt-3 text-sm text-slate-500">Loading slot details…</p>}
-
+                  {!pickedTime && <p className="booking-hint">Click a date to see available times, then pick one to reveal campus and mode details. Philippine time.</p>}
+                  {selectedDate && !pickedTime && <p className="booking-hint">Pick a time on your selected date to continue.</p>}
+                  {pickedTime && state.loading && <p role="status" className="booking-hint">Loading slot details...</p>}
                   {pickedTime && !state.loading && !slotDetails &&
-                    <p role="alert" className="mt-3 text-sm text-amber-700">That time is no longer available. Please pick another time.</p>}
+                    <p role="alert" className="booking-alert booking-alert--warn">That time is no longer available. Please pick another time.</p>}
 
-                  {pickedTime && !state.loading && slotDetails && <form className="mt-5 rounded-lg bg-white p-4" onSubmit={submit}>
-                    {slotCandidates.length > 1 && <fieldset className="mb-4">
-                      <legend className="text-sm font-medium">Choose an available counselor and campus</legend>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {pickedTime && !state.loading && slotDetails && <div className="booking-details">
+                    <h3 className="booking-details-title">Additional information</h3>
+
+                    {slotCandidates.length > 0 && <fieldset className="booking-counselors">
+                      <legend className="booking-counselors-legend">Choose an available counselor and campus</legend>
+                      <div className="booking-counselors-grid">
                         {slotCandidates.map((candidate) => <button key={candidate.slot_id} type="button"
                           aria-pressed={selectedSlotId === candidate.slot_id}
                           aria-label={`Choose ${candidate.counselor_name} at ${candidate.campus_name}`}
-                          className={selectedSlotId === candidate.slot_id
-                            ? "rounded-md border border-emerald-700 bg-emerald-50 p-3 text-left text-sm"
-                            : "rounded-md border border-slate-300 p-3 text-left text-sm hover:bg-slate-50"}
+                          className={"booking-counselor-card" + (selectedSlotId === candidate.slot_id ? " booking-counselor-card--selected" : "")}
                           onClick={() => setSelectedSlotId(candidate.slot_id)}>
-                          <span className="block font-medium">{candidate.counselor_name}</span>
-                          <span className="block text-slate-600">{candidate.campus_name} · {modeLabel(candidate.delivery_mode)}</span>
+                          <span className="booking-availability">
+                            <span className={"booking-dot " + (selectedDate === today ? "booking-dot--available" : "booking-dot--soon")} aria-hidden="true" />
+                            {selectedDate === today ? "Available today" : "Available"}
+                          </span>
+                          <span className="booking-counselor-name">{candidate.counselor_name}</span>
+                          <span className="booking-counselor-campus">{candidate.campus_name} · {modeLabel(candidate.delivery_mode)}</span>
+                          {selectedSlotId === candidate.slot_id && <span className="booking-counselor-check" aria-hidden="true"><i className="fa-solid fa-check"></i></span>}
                         </button>)}
                       </div>
                     </fieldset>}
-                    <p className="text-sm font-medium">Additional information</p>
-                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                      <div><dt className="text-slate-500">Campus</dt><dd className="font-medium">{slotDetails.campus_name}</dd></div>
-                      <div><dt className="text-slate-500">Time</dt><dd className="font-medium">{formatSchedule(slotDetails.starts_at)} – {formatSchedule(slotDetails.ends_at)}</dd></div>
-                      <div><dt className="text-slate-500">Counselor</dt><dd className="font-medium">{slotDetails.counselor_name}</dd></div>
-                      <div><dt className="text-slate-500">Mode</dt><dd className="font-medium">{modeLabel(slotDetails.delivery_mode)}</dd></div>
-                      {slotDetails.guidance_office_location && <div className="sm:col-span-2"><dt className="text-slate-500">Guidance Office</dt><dd className="font-medium">{slotDetails.guidance_office_location}</dd></div>}
+
+                    <dl className="booking-info">
+                      <div><dt>Campus</dt><dd>{slotDetails.campus_name}</dd></div>
+                      <div><dt>Time</dt><dd>{formatSchedule(slotDetails.starts_at)} – {formatSchedule(slotDetails.ends_at)}</dd></div>
+                      <div><dt>Counselor</dt><dd>{slotDetails.counselor_name}</dd></div>
+                      <div><dt>Mode</dt><dd>{modeLabel(slotDetails.delivery_mode)}</dd></div>
+                      {slotDetails.guidance_office_location && <div className="booking-info-wide"><dt>Guidance Office</dt><dd>{slotDetails.guidance_office_location}</dd></div>}
                     </dl>
-                    <label className="mt-3 block text-sm">Appointment mode
-                      <select className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={mode} onChange={e => setMode(e.target.value)}>
+
+                    <label className="booking-field">Appointment mode
+                      <select className="booking-select" value={mode} onChange={e => setMode(e.target.value)}>
                         {slotDetails.delivery_mode !== "FACE_TO_FACE" && <option value="ONLINE">Online</option>}
                         {slotDetails.delivery_mode !== "ONLINE" && <option value="FACE_TO_FACE">Face-to-face</option>}
                       </select>
                     </label>
+
                     {slotDetails.delivery_mode !== "ONLINE" && !slotDetails.guidance_office_location && (
-                      <p role="alert" className="mt-2 text-sm text-amber-700">This campus has no Guidance Office location yet; face-to-face booking is unavailable for this slot.</p>
+                      <p role="alert" className="booking-alert booking-alert--warn">This campus has no Guidance Office location yet; face-to-face booking is unavailable for this slot.</p>
                     )}
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button className={buttonClass} disabled={submitting || state.busy || (mode === "FACE_TO_FACE" && !slotDetails.guidance_office_location)}>
-                        {rescheduleId ? "Confirm reschedule" : "Confirm booking"}
-                      </button>
-                      <button type="button" className={secondaryClass} disabled={submitting || state.busy} onClick={() => { setPickedTime(null); setSlotDetails(null); }}>Change time</button>
-                    </div>
-                  </form>}
-                </>}
-          </>}
-    </div>
+                  </div>}
+                </section>
+              </div>}
+      </div>
+
+      <footer className="booking-modal-footer">
+        {done
+          ? <button type="button" className={buttonClass + " booking-btn-primary"} onClick={onClose}>Close</button>
+          : <>
+              <div className="booking-footer-left">
+                {slotDetails && <button type="button" className="booking-btn-text" disabled={state.busy}
+                  onClick={() => { setPickedTime(null); setSlotDetails(null); }}>‹ Back</button>}
+                <button type="button" className="booking-btn-text" onClick={onClose}>Cancel</button>
+              </div>
+              <button type="submit" className={buttonClass + " booking-btn-primary"} disabled={confirmDisabled}>
+                {rescheduleId ? "Confirm reschedule" : "Confirm booking"}
+              </button>
+            </>}
+      </footer>
+    </form>
   </div>;
 }

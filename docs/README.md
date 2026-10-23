@@ -17,5 +17,6 @@
 | Workflows | WORKFLOWS.md |
 | Resource removal | WELLNESS_RESOURCE_DISCOVERY.md |
 | Assistant status | VIRTUAL_GUIDANCE_ASSISTANT.md |
+| Advisor revision (target scope) | CounselConnect_Advisor_Revision_Summary.md |
 
 **Implemented** exists in source. **Planned** is approved but not built. **Removed target scope** is legacy functionality awaiting decommissioning. **Pending** requires a recorded decision.

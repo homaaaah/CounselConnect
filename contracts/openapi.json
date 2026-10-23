@@ -10,7 +10,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Sign in (student number or staff email)",
+        "summary": "Sign in (student email/number or staff email)",
         "operationId": "login_api_v1_auth_login_post",
         "requestBody": {
           "content": {

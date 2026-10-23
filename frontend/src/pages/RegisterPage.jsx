@@ -427,7 +427,10 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
         </form>
 
         {result && (
-          <div className={`form-message ${resultClass}`} role="status">
+          <div
+            className={`form-message ${resultClass}`}
+            role={result.success ? "status" : "alert"}
+          >
             {result.message}
           </div>
         )}

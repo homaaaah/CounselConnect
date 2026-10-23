@@ -20,12 +20,14 @@ for (const extension of [".js", ".jsx"]) {
   };
 }
 
-// Node falls back to the `.js` handler for unknown extensions, so image
-// imports (appointment.jpg, bg.jpg, ...) would be parsed as JavaScript.
-// Stub them with the asset path, mirroring what Vite returns for asset
-// imports in dev builds.
+// Node falls back to the `.js` handler for unknown extensions, so asset and
+// CSS imports would be parsed as JavaScript. Stub them the way Vite does for
+// non-code imports (CSS is injected by the bundler, not at runtime).
 for (const assetExtension of [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"]) {
   require.extensions[assetExtension] = (module, filename) => {
     module._compile(`module.exports = ${JSON.stringify(filename)};`, filename);
   };
 }
+require.extensions[".css"] = (module, filename) => {
+  module._compile("module.exports = {};", filename);
+};

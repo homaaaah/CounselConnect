@@ -1,6 +1,6 @@
 """auth service: login/session/CSRF business rules (ADR-019).
 
-- Identifier: student number for Students, email for staff (ADR-005).
+- Identifier: registered email or student number for Students, email for staff (ADR-030).
 - Credential: 256-bit random opaque token; only its SHA-256 digest is
   stored/looked up (user_sessions).
 - Sessions: 1h idle (last_activity_at), 12h absolute, never sliding;
