@@ -1,5 +1,7 @@
 ﻿# CounselConnect â€” Appointment Scheduling
 
+> The counselor-first booking flow and its API additions are implemented. The implementation plan and acceptance criteria are documented in [COUNSELOR_FIRST_BOOKING_PLAN.md](COUNSELOR_FIRST_BOOKING_PLAN.md); server-side booking validation remains authoritative.
+
 ## Contract
 
 Scheduling follows the approved **CounselConnect Appointment Scheduling Process Flow** (2026-09-10), reference Flowchart V1 page 4. Availability comes from Counselor weekly schedules plus temporary blocks, Students request slots, and Counselors review requests and record outcomes.
@@ -97,6 +99,8 @@ The scheduling UI is at `#appointments`, available from the signed-in navigation
 **Scheduled Live Chat boundary:** confirmed online appointments appear in an appointment-derived launcher. The lobby opens 30 minutes before start. Confirmation does not create a conversation; the first explicit join at or after start creates or reuses the single appointment conversation. REST persists and retrieves ordered messages, while WebSockets deliver committed events. At slot end plus the configured 15-minute grace period, the worker closes an open conversation with `TIMEOUT` without changing the `CONFIRMED` appointment outcome.
 
 **UI boundary:** weekly-schedule and availability-block management forms are implemented on the counselor appointments screen, with backend audit events. The scheduled-session page provides lobby, explicit join, durable text messaging, reconnection catch-up, and Counselor outcome controls. Closed history is Counselor-only until retention cleanup.
+
+Appointment records may be filtered by aware `starts_after` (inclusive) and `ends_before` (exclusive) query parameters on `GET /appointments`. The Counselor dashboard uses a Manila-local day converted to UTC boundaries, so its “today” list does not depend on the first page of all appointment history.
 
 ## Pending policy and integration
 

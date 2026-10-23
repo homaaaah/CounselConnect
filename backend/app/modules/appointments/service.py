@@ -537,9 +537,13 @@ class AppointmentsService(BaseService[Appointment]):
             page_size=page_size,
         )
 
-    def list_appointments(self, actor, status=None, page=1, page_size=20):
+    def list_appointments(self, actor, status=None, page=1, page_size=20, starts_after=None, ends_before=None):
         self.authorize(actor)
-        items, total = self.repository.appointments(actor, status, page, page_size)
+        items, total = self.repository.appointments(
+            actor, status, page, page_size,
+            db_time(starts_after) if starts_after else None,
+            db_time(ends_before) if ends_before else None,
+        )
         return dict(
             items=[self.appointment_response(a, actor) for a in items],
             total=total,

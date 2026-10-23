@@ -169,6 +169,11 @@ Invalid, expired, rotated-away, or malformed `X-COR-Token` values return `401 IN
 - Student-selected `appointment_mode` is `ONLINE` or `FACE_TO_FACE` and must be compatible with the slot.
 - A face-to-face booking returns the appointment's `meeting_location` snapshot. It does not depend on later campus-location edits.
 - Only Counselor may mutate `guidance_office_location`.
+
+#### Counselor-first booking
+
+The Student booking modal uses six stages: choose Counselor, date, time/campus, session mode, review, and submit. `GET /booking-counselors` supplies active Counselor IDs and display names. The selected Counselor scopes `GET /calendar` and `GET /availability-slots`. Booking and rescheduling continue to submit only `availability_slot_id` and `appointment_mode`; the server derives the Counselor from the slot and revalidates availability inside the write transaction. See [COUNSELOR_FIRST_BOOKING_PLAN.md](COUNSELOR_FIRST_BOOKING_PLAN.md) for implementation details and acceptance criteria.
+
 - A confirmed online appointment may obtain exactly one `APPOINTMENT` conversation when the approved start-time rule allows it.
 
 ### Implemented scheduling endpoints
@@ -194,7 +199,7 @@ Scheduling follows `APPOINTMENT_SCHEDULING.md` and Flowchart V1 page 4. All rout
 | `DELETE /calendar/blocks/{blocked_date}` | Counselor; removes a whole-day blocked date; 204. |
 | `POST /availability-slots` | Counselor; `campus_id`, `delivery_mode`, aware `starts_at`/`ends_at`, positive `slot_duration_minutes`. 201 list envelope of 1â€“200 concrete slots. |
 | `PATCH /campuses/{campus_id}/guidance-office-location` | Counselor; nonblank `guidance_office_location` (max 255); 200 campus response. |
-| `GET /appointments` | Own appointments; optional `status`; `page=1`, `page_size=20` (max 100). |
+| `GET /appointments` | Own appointments; optional `status`, aware `starts_after` (inclusive), and `ends_before` (exclusive) filters on appointment start time; `page=1`, `page_size=20` (max 100). |
 | `POST /appointments` | Student; `availability_slot_id`, `appointment_mode`; 201 `PENDING` appointment. |
 | `GET /appointments/{appointment_id}` | Owner Student/assigned Counselor; 200 appointment. |
 | `GET /appointments/scheduled-sessions` | Owner Student/assigned Counselor; confirmed online sessions and server-derived capabilities/timing. |

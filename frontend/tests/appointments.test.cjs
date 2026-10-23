@@ -38,7 +38,11 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
     }
     if (path.endsWith("/accounts/campuses")) return json(envelope([{ campus_id: 1, campus_name: "Main", guidance_office_location: "Room 201" }]));
     if (path.endsWith("/booking-counselors")) return json([{ counselor_user_id: 1, counselor_name: "Cora Test" }]);
-    if (path.endsWith("/availability-slots")) return json(slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]));
+    if (path.endsWith("/availability-slots")) {
+      const response = slotsResponse ? slotsResponse(parsed.searchParams) : envelope([slot]);
+      // The API echoes the requested page size, including selected-date reads.
+      return json({ ...response, page_size: Number(parsed.searchParams.get("page_size") || 20) });
+    }
     if (path.endsWith("/appointments")) return json(envelope(
       typeof appointments === "function" ? appointments(parsed.searchParams) : appointments
     ));

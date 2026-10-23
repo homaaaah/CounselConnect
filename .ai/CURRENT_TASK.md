@@ -28,7 +28,7 @@
 
 ## Verification
 
-- `node --test frontend/tests/*.test.cjs`: passed (77 tests).
+- `node --test frontend/tests/*.test.cjs`: passed (78 tests).
 - `npm.cmd --prefix frontend run build`: passed (74 modules).
 - Python compile check and `git diff --check`: passed.
-- Appointment integration tests were invoked but skipped (62 tests) because `COUNSELCONNECT_TEST_DATABASE_URL` is not configured in this checkout. Database-backed filter/auth behavior still needs that isolated MySQL test database.
+- Appointment integration tests were invoked but skipped (63 tests) because `COUNSELCONNECT_TEST_DATABASE_URL` is not configured in this checkout. Database-backed filter/auth behavior still needs that isolated MySQL test database.

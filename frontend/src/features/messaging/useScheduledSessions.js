@@ -42,6 +42,19 @@ export function useScheduledSessions(user) {
         if (event.event === "appointment_reminder" && typeof Notification !== "undefined" && Notification.permission === "granted") {
           new Notification("CounselConnect", { body: event.message });
         }
+        if (["appointment_requested", "appointment_session_changed", "appointment_confirmed", "session_closed"].includes(event.event)) {
+          window.dispatchEvent(new CustomEvent("appointment-updated", { detail: event }));
+          if (event.event === "appointment_requested" && user?.role_code === "COUNSELOR") {
+            window.dispatchEvent(new CustomEvent("counselconnect-toast", {
+              detail: { message: "A new appointment request is ready for review." },
+            }));
+          }
+          if (event.event === "appointment_confirmed" && user?.role_code === "STUDENT") {
+            window.dispatchEvent(new CustomEvent("counselconnect-toast", {
+              detail: { message: "Your appointment has been confirmed." },
+            }));
+          }
+        }
         void refresh();
       };
     }

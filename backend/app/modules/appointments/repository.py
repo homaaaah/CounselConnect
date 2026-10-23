@@ -12,6 +12,7 @@ from app.modules.appointments.models import (
     CounselorBlockedDate,
     CounselorWeeklySchedule,
 )
+from app.modules.accounts.models import User
 
 
 class AppointmentsRepository(BaseRepository[Appointment]):
@@ -342,7 +343,15 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         if actor.role_code == "COUNSELOR":
             stmt = stmt.where(AvailabilitySlot.counselor_user_id == actor.user_id)
         else:
-            stmt = stmt.where(AvailabilitySlot.status == "AVAILABLE")
+            active_counselor = select(User.user_id).where(
+                User.user_id == AvailabilitySlot.counselor_user_id,
+                User.role_code == "COUNSELOR",
+                User.account_status == "ACTIVE",
+            ).exists()
+            stmt = stmt.where(
+                AvailabilitySlot.status == "AVAILABLE",
+                active_counselor,
+            )
             if counselor_user_id is not None:
                 stmt = stmt.where(AvailabilitySlot.counselor_user_id == counselor_user_id)
         if campus_id is not None:

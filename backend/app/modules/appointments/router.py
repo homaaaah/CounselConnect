@@ -261,11 +261,13 @@ def update_location(
 def list_appointments(
     actor: CurrentUser,
     status: AppointmentStatus | None = None,
+    starts_after: AwareDatetime | None = None,
+    ends_before: AwareDatetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     service: AppointmentsService = Depends(get_appointments_service),
 ):
-    return service.list_appointments(actor, status, page, page_size)
+    return service.list_appointments(actor, status, page, page_size, starts_after, ends_before)
 
 
 @router.get("/appointments/scheduled-sessions", response_model=list[AppointmentSessionResponse])
@@ -282,7 +284,8 @@ def book(
     actor: CurrentUser,
     service: AppointmentsService = Depends(get_appointments_service),
 ):
-    return service.book(actor, data)
+    appointment = service.book(actor, data)
+    return _commit_and_publish(service, appointment, event="appointment_requested")
 
 
 @router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
@@ -336,7 +339,11 @@ def confirm(
     actor: CurrentUser,
     service: AppointmentsService = Depends(get_appointments_service),
 ):
-    return _commit_and_publish(service, service.transition(actor, appointment_id, "confirm"))
+    return _commit_and_publish(
+        service,
+        service.transition(actor, appointment_id, "confirm"),
+        event="appointment_confirmed",
+    )
 
 
 @router.post(
