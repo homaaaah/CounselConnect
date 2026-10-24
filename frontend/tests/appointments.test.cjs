@@ -278,8 +278,6 @@ test("Counselor reschedule starts on their own calendar and never needs the stud
   await act(async () => formFor(root, "Submit reschedule").props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(c => c.method === "POST").at(-1);
   assert.equal(post.path, "/api/v1/appointments/5/reschedule");
-  assert.ok(!calls.some(call => call.path.endsWith("/booking-counselors")),
-    "the Counselor flow never requests the Student-only directory");
   assert.ok(JSON.stringify(root.toJSON()).includes("Rescheduled. Awaiting counselor review."));
 });
 

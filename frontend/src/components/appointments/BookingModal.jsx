@@ -49,7 +49,8 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
     if (!open || !selectedDate || !pickedTime || state.loading) return;
     const startEpoch = new Date(`${selectedDate}T${pickedTime}:00+08:00`).getTime();
     const matches = state.slots.items.filter(slot =>
-      slot.counselor_user_id === selectedCounselorId
+      slot.status === "AVAILABLE"
+      && slot.counselor_user_id === selectedCounselorId
       && new Date(slot.starts_at).getTime() === startEpoch);
     setSlotCandidates(matches);
     if (matches.some(slot => slot.slot_id === selectedSlotId)) return;
@@ -222,7 +223,8 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
       <footer className="booking-modal-footer">
         {done ? <button type="button" className={`${buttonClass} booking-btn-primary`} onClick={onClose}>Close</button> : <>
           <div className="booking-footer-left">
-            {step > 1 && step < 6 && <button type="button" className="booking-btn-text" disabled={submitting || state.busy} onClick={back}>‹ Back</button>}
+            {step > 1 && step < 6 && !(step === 2 && selfCounselorId != null)
+              && <button type="button" className="booking-btn-text" disabled={submitting || state.busy} onClick={back}>‹ Back</button>}
             <button type="button" className="booking-btn-text" onClick={onClose}>Cancel</button>
           </div>
           {step === 3 && <button type="button" className={`${buttonClass} booking-btn-primary`} disabled={!slotDetails || state.loading}

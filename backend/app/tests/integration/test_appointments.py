@@ -466,6 +466,9 @@ def test_booking_rejects_slots_from_disabled_or_deleted_weekly_schedule(db_sessi
         svc.book(users[2], request)
     assert disabled.value.code == "SLOT_UNAVAILABLE"
 
+    # An active-but-soft-deleted definition is still rejected, so the
+    # is_deleted predicate is exercised on its own.
+    schedule.is_active = True
     schedule.is_deleted = True
     db_session.flush()
     with pytest.raises(AppError) as deleted:

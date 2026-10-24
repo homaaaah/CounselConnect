@@ -161,12 +161,13 @@ function WeeklyScheduleEditor({ state }) {
       <div className="sm:col-span-3">
         {mode !== "ONLINE" && campus && !campus.guidance_office_location && <p role="alert" className="text-sm text-amber-700">This campus has no Guidance Office location. Face-to-face availability needs one first.</p>}
         {!wholeSlots && <p role="alert" className="text-sm text-amber-700">The time range must contain whole {duration}-minute slots.</p>}
+        {!editingId && 480 % Number(duration) !== 0 && <p className="text-sm text-slate-500">The 8:00 AM–4:00 PM weekday action needs a slot length that divides 8 hours (15, 20, 30, 60, 120, or 240 minutes).</p>}
         <div className="mt-3 flex flex-wrap gap-2">
           <button className={buttonClass} disabled={state.busy || !campusId || !wholeSlots}>
             {editingId ? "Save changes" : "Add availability"}
           </button>
           {!editingId && <button type="button" className={secondaryClass}
-            disabled={state.busy || !campusId}
+            disabled={state.busy || !campusId || 480 % Number(duration) !== 0}
             onClick={() => void state.mutate("/weekly-schedules/standard-weekdays", {
               campus_id: Number(campusId), slot_duration_minutes: Number(duration), delivery_mode: mode,
             }, "POST", "Standard weekday availability saved for Monday–Friday, 8:00 AM–4:00 PM.")}>

@@ -67,15 +67,21 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         return schedule
 
     def slot_schedule_is_active(self, slot):
-        """One-off slots are always bookable; generated slots follow their definition."""
+        """One-off slots are always bookable; generated slots follow their definition.
+
+        Locks the definition row so the booking transaction cannot act on a
+        snapshot taken before a concurrent disable/delete commit.
+        """
         if slot.weekly_schedule_id is None:
             return True
         return self.session.scalar(
-            select(CounselorWeeklySchedule.weekly_schedule_id).where(
+            select(CounselorWeeklySchedule.weekly_schedule_id)
+            .where(
                 CounselorWeeklySchedule.weekly_schedule_id == slot.weekly_schedule_id,
                 CounselorWeeklySchedule.is_active.is_(True),
                 CounselorWeeklySchedule.is_deleted.is_(False),
             )
+            .with_for_update()
         ) is not None
 
     def lock_weekly_schedule(self, counselor_id, weekly_schedule_id):
