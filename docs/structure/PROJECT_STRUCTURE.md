@@ -14,7 +14,7 @@ This document describes the repository layout and intended home for new files. E
 
 Avoid feature code at repository root.
 
-`CounselConnect-test-Registration_Fix/` is a historical reference snapshot of an earlier branch's registration and appointment work. It is untracked, excluded from builds, tests, and imports, and must not be edited or used as a source tree; the merged changes now live in `backend/` and `frontend/`.
+An earlier `CounselConnect-test-Registration_Fix/` reference snapshot of a sibling branch's registration and appointment work was merged into this tree and then removed. Its changes now live in `backend/` and `frontend/`; the applied delta remains in history on branch `merge/snapshot-fix` (commit `de76c4d`).
 
 ## Backend
 
