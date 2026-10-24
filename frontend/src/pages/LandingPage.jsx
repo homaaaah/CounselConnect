@@ -265,10 +265,13 @@ export default function LandingPage({ onSignedIn }) {
           ) : (
             <div className="faq-grid">
               {faqs.map((f) => (
-                <div className="faq-card" key={f.content_id}>
-                  <h3>{f.title}</h3>
+                <details className="faq-item" name="faq" key={f.content_id}>
+                  <summary>
+                    <span>{f.title}</span>
+                    <i className="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                  </summary>
                   <p>{f.body}</p>
-                </div>
+                </details>
               ))}
             </div>
           )}
