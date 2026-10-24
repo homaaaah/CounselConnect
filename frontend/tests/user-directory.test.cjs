@@ -6,6 +6,8 @@ const { create, act } = require("react-test-renderer");
 require("./register-app.cjs");
 
 const App = require("../src/App.jsx").default;
+const CounselorUsersPage = require("../src/pages/counselor/CounselorUsersPage.jsx").default;
+const { ToastProvider } = require("../src/components/feedback/Notifications.jsx");
 const { setCsrfToken } = require("../src/services/apiClient.js");
 
 const counselor = { user_id: 1, email: "counselor@example.edu", role_code: "COUNSELOR",
@@ -75,9 +77,9 @@ async function mount(t, component) {
   return root;
 }
 
-test("counselor Users page lists students with their screening status", async (t) => {
+test("superadmin Users page lists students with their screening status", async (t) => {
   environment(t, "#users");
-  const calls = fakeApi(t, authFor(counselor));
+  const calls = fakeApi(t, authFor(superadmin));
   const root = await mount(t, React.createElement(App));
   assert.ok(calls.some((call) => call.path === "/api/v1/accounts/students"), "directory endpoint is called");
   const rendered = JSON.stringify(root.toJSON());
@@ -89,9 +91,16 @@ test("counselor Users page lists students with their screening status", async (t
   assert.ok(rendered.includes("BSIT"));
 });
 
-test("counselor sidebar exposes the Users link", async (t) => {
+test("counselor navigation hides the Users link (Superadmin-only for now)", async (t) => {
   environment(t, "#home");
   fakeApi(t, authFor(counselor));
+  const root = await mount(t, React.createElement(App));
+  assert.equal(root.root.findAllByProps({ href: "#users" }).length, 0);
+});
+
+test("superadmin navigation exposes the Users link", async (t) => {
+  environment(t, "#home");
+  fakeApi(t, authFor(superadmin));
   const root = await mount(t, React.createElement(App));
   assert.ok(root.root.findAllByProps({ href: "#users" }).length >= 1);
 });
@@ -104,10 +113,11 @@ test("students cannot see or open the Users directory", async (t) => {
   assert.ok(!JSON.stringify(root.toJSON()).includes("Student accounts and their latest COR screening"));
 });
 
-test("counselor can open a student's complete profile and screening", async (t) => {
+test("the Users component stays read-only without the recovery grant", async (t) => {
   environment(t, "#users");
-  fakeApi(t, authFor(counselor));
-  const root = await mount(t, React.createElement(App));
+  fakeApi(t, authFor(superadmin));
+  const root = await mount(t, React.createElement(ToastProvider, null,
+    React.createElement(CounselorUsersPage)));
   const viewButton = root.root.findAllByType("button")
     .find((button) => button.children.join("") === "View");
   assert.ok(viewButton, "directory rows expose a View action");

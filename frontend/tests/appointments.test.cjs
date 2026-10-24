@@ -8,6 +8,8 @@ const HomePage = require("../src/pages/HomePage.jsx").default;
 const CalendarGrid = require("../src/components/appointments/CalendarGrid.jsx").default;
 const BookingModal = require("../src/components/appointments/BookingModal.jsx").default;
 const CounselorAppointmentsPage = require("../src/pages/counselor/CounselorAppointmentsPage.jsx").default;
+const CounselorSchedulePage = require("../src/pages/counselor/CounselorSchedulePage.jsx").default;
+const CounselorHistoryPage = require("../src/pages/counselor/CounselorHistoryPage.jsx").default;
 const App = require("../src/App.jsx").default;
 const { manilaInputToUTC, formatSchedule } = require("../src/features/appointments");
 const { ToastProvider } = require("../src/components/feedback");
@@ -264,7 +266,7 @@ test("confirmed student record opens the reschedule modal and sends reschedule",
 
 test("Counselor reschedule starts on their own calendar and never needs the student directory", async t => {
   const calls = setup(t, { user: counselor, appointments: [appointment], calendar: calendar() });
-  const root = await mount(t, React.createElement(CounselorAppointmentsPage, { user: counselor }));
+  const root = await mount(t, React.createElement(CounselorHistoryPage, { user: counselor }));
   await act(async () => button(root, "Reschedule").props.onClick());
   const opened = JSON.stringify(root.toJSON());
   assert.ok(opened.includes("Step 2 of 6: Date"), "Counselor starts at the calendar step");
@@ -315,7 +317,8 @@ test("Counselor can open cancelled appointment history", async t => {
     user: counselor,
     appointments: query => query.get("status") === "CANCELLED" ? [cancelled] : [appointment],
   });
-  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
+  const root = await mount(t, React.createElement(CounselorHistoryPage, { user: counselor }));
+  await act(async () => root.root.findByProps({ "aria-label": "Filter session history, Confirmed" }).props.onClick());
   await act(async () => {
     button(root, "Cancelled").props.onClick();
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -324,6 +327,18 @@ test("Counselor can open cancelled appointment history", async t => {
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("CANCELLED"));
   assert.ok(rendered.includes("Ana Test"));
+});
+
+test("counselor history search filters records by student name", async t => {
+  const other = { ...appointment, appointment_id: 6, student_name: "Bea Cruz" };
+  setup(t, { user: counselor, appointments: [appointment, other] });
+  const root = await mount(t, React.createElement(CounselorHistoryPage, { user: counselor }));
+  const search = root.root.findAllByType("input").find(input => input.props.placeholder === "Search");
+  assert.ok(search, "history exposes a search field");
+  await act(async () => search.props.onChange({ target: { value: "bea" } }));
+  const rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("Bea Cruz"));
+  assert.ok(!rendered.includes("Ana Test"), "non-matching rows are filtered out");
 });
 
 test("calendar failure does not prevent appointment records from loading", async t => {
@@ -335,7 +350,7 @@ test("calendar failure does not prevent appointment records from loading", async
   assert.ok(rendered.includes("Could not load the availability calendar."));
 });
 
-test("availability-block failure preserves counselor records and can recover", async t => {
+test("availability-block failure on the Schedule page can recover", async t => {
   let attempts = 0;
   const block = { availability_block_id: 7, counselor_user_id: 1, starts_at: "2099-01-01T01:00:00Z", ends_at: "2099-01-01T02:00:00Z", is_all_day: false, reason: "Training" };
   const calls = setup(t, {
@@ -345,9 +360,8 @@ test("availability-block failure preserves counselor records and can recover", a
       ? json({ error: { code: "BLOCKS_UNAVAILABLE", message: "Unavailable times are temporarily unavailable." } }, 503)
       : json([block]),
   });
-  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
+  const root = await mount(t, React.createElement(CounselorSchedulePage, { user: counselor }));
   let rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("Ana Test"), "successful counselor records remain visible");
   assert.ok(rendered.includes("Unavailable times are temporarily unavailable."));
   await act(async () => {
     button(root, "Retry unavailable times").props.onClick();
@@ -360,7 +374,7 @@ test("availability-block failure preserves counselor records and can recover", a
 
 test("counselor blocks an unavailable calendar date", async t => {
   const calls = setup(t, { user: counselor });
-  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
+  const root = await mount(t, React.createElement(CounselorSchedulePage, { user: counselor }));
   const form = formFor(root, "Block date");
   const date = form.findByProps({ type: "date" });
   await act(async () => {
@@ -374,7 +388,7 @@ test("counselor blocks an unavailable calendar date", async t => {
 
 test("counselor edit mode seeds the form and replaces a weekly schedule", async t => {
   const calls = setup(t, { user: counselor });
-  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
+  const root = await mount(t, React.createElement(CounselorSchedulePage, { user: counselor }));
   // The seeded availability row shows the documented fields.
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("Your weekly availability"));
@@ -403,14 +417,37 @@ test("counselor edit mode seeds the form and replaces a weekly schedule", async 
   assert.equal(calls.some(c => c.method === "DELETE" && c.path.endsWith("/weekly-schedules/3")), false);
 });
 
-test("counselor page shows student records and availability sections distinctly from the student page", async t => {
+test("counselor accepts a pending request from the Appointment Requests page", async t => {
+  const pending = { ...appointment, status: "PENDING" };
+  const calls = setup(t, { user: counselor, appointments: [pending] });
+  const root = await mount(t, React.createElement(CounselorAppointmentsPage, { user: counselor }));
+  assert.ok(calls.some(call => call.path.endsWith("/appointments") && call.query.status === "PENDING"),
+    "the requests queue loads pending appointments only");
+  const accept = button(root, "Accept Appointment");
+  assert.ok(accept, "a pending request exposes Accept Appointment");
+  await act(async () => accept.props.onClick());
+  const post = calls.filter(call => call.method === "POST").at(-1);
+  assert.equal(post.path, "/api/v1/appointments/5/confirm");
+});
+
+test("counselor pages split requests, availability, and history", async t => {
   setup(t, { user: counselor, appointments: [appointment] });
-  const root = await mount(t, React.createElement(AppointmentsPage, { user: counselor }));
-  const rendered = JSON.stringify(root.toJSON());
-  assert.ok(rendered.includes("Student appointments"), "counselor heading");
-  assert.ok(rendered.includes("Student records"), "counselor records section");
-  assert.ok(rendered.includes("Your weekly availability"), "counselor edit mode");
-  assert.ok(!rendered.includes("My appointments"), "student heading must not appear for counselor");
+  const requests = await mount(t, React.createElement(CounselorAppointmentsPage, { user: counselor }));
+  const requestsBody = JSON.stringify(requests.toJSON());
+  assert.ok(requestsBody.includes("Appointment Requests"), "requests heading");
+  assert.ok(!requestsBody.includes("Your weekly availability"), "availability is not on the requests page");
+  assert.ok(!requestsBody.includes("Student records"), "records are not on the requests page");
+
+  const schedule = await mount(t, React.createElement(CounselorSchedulePage, { user: counselor }));
+  assert.ok(JSON.stringify(schedule.toJSON()).includes("Your weekly availability"), "availability edit mode lives on Schedule");
+
+  const history = await mount(t, React.createElement(CounselorHistoryPage, { user: counselor }));
+  assert.ok(JSON.stringify(history.toJSON()).includes("Student records"), "records live on History");
+
+  const studentPage = await mount(t, React.createElement(AppointmentsPage, { user: student }));
+  const studentBody = JSON.stringify(studentPage.toJSON());
+  assert.ok(studentBody.includes("My Appointments"), "student heading unchanged");
+  assert.ok(!studentBody.includes("Appointment Requests"), "student page must not show the counselor review queue");
 });
 
 for (const [role, status] of [["GUIDANCE_STAFF", "ACTIVE"], ["STUDENT", "PENDING_VERIFICATION"], ["STUDENT", "VERIFICATION_EXPIRED"]]) {

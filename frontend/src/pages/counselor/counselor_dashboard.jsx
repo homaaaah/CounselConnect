@@ -30,20 +30,24 @@ const initials = (name) =>
   (name ?? "").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 
 function EmptyState({ text }) {
-  return <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{text}</p>;
+  return <p className="rounded-2xl border border-dashed border-[#E9EDF1] bg-slate-50 p-6 text-center text-sm text-slate-500">{text}</p>;
 }
 
-function StatCard({ label, value, loading, icon, urgent }) {
-  return <div className="rounded-xl border border-slate-200 bg-white p-4">
+function StatCard({ label, value, loading, icon, urgent, href }) {
+  const body = <>
     <div className="flex items-start justify-between">
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
         <i className={"fa-solid " + icon} aria-hidden="true"></i>
       </span>
-      {urgent && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">Urgent</span>}
+      {urgent && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">Action needed</span>}
     </div>
-    <p className="mt-3 text-2xl font-bold text-slate-900">{loading ? "…" : value ?? "—"}</p>
+    <p className="mt-3 text-2xl font-bold text-slate-900">{loading ? "..." : value ?? "—"}</p>
     <p className="text-xs text-slate-500">{label}</p>
-  </div>;
+  </>;
+  const shell = "flex h-full flex-col rounded-2xl border border-[#E9EDF1] bg-white p-4";
+  return href
+    ? <a href={href} className={shell + " transition-shadow hover:shadow-sm"}>{body}</a>
+    : <div className={shell}>{body}</div>;
 }
 
 function StatusBadge({ status }) {
@@ -86,10 +90,10 @@ function WelcomeBanner({ user, today }) {
 }
 
 function TodayAppointments({ today }) {
-  return <section className="rounded-2xl border border-slate-200 bg-white p-6">
+  return <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6">
     <div className="flex items-center justify-between gap-3">
       <h2 className="text-base font-semibold text-slate-900">Today's appointments</h2>
-      <a href="#appointments" className="text-sm font-semibold text-emerald-700 hover:underline">View Schedule</a>
+      <a href="#history" className="text-sm font-semibold text-emerald-700 hover:underline">View Schedule</a>
     </div>
     {today.error && <p role="alert" className="mt-3 text-sm text-red-700">{today.error}</p>}
     {today.loading
@@ -116,11 +120,11 @@ function TodayAppointments({ today }) {
 }
 
 function AvailabilityWidget() {
-  return <section className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-6">
+  return <section className="flex h-full flex-col rounded-2xl border border-[#E9EDF1] bg-white p-6">
     <h2 className="text-base font-semibold text-slate-900">Availability update</h2>
     <p className="mt-1 text-sm text-slate-500">Set the open slots students can book for the upcoming week.</p>
     <div className="mt-auto pt-5">
-      <a href="#appointments"
+      <a href="#schedule"
         className="inline-flex items-center gap-2 rounded-full bg-[#1C6B1B] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#175317]">
         Manage Schedule <i className="fa-solid fa-arrow-right" aria-hidden="true"></i>
       </a>
@@ -180,32 +184,30 @@ function CaseDistributionChart({ segments }) {
 
 export default function CounselorDashboard({ user }) {
   const dash = useCounselorDashboard(user);
+  const pending = dash.pendingRequests.total;
   const metrics = [
     { key: "appointments", label: "Appointments", icon: "fa-calendar-check", value: dash.appointments.total, loading: dash.appointments.loading },
-    { key: "emergencies", label: "Emergencies", icon: "fa-truck-medical", value: dash.emergencies, urgent: (dash.emergencies ?? 0) > 0 },
+    { key: "pending", label: "Pending Requests", icon: "fa-clock", value: pending, loading: dash.pendingRequests.loading, urgent: (pending ?? 0) > 0, href: "#appointments" },
     { key: "solved", label: "Solved Cases", icon: "fa-clipboard-check", value: dash.solvedCases },
     { key: "ongoing", label: "On-going", icon: "fa-hourglass-half", value: dash.ongoingCases },
   ];
   const caseSegments = dash.caseDistribution ?? [];
 
-  return <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-800 sm:px-6 lg:px-8">
+  return <main className="min-h-screen bg-[#F7F9FB] px-4 py-8 text-slate-800 sm:px-6">
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Dashboard</h2>
-          <p className="text-sm text-slate-500">Guidance Office overview. Philippine time (Asia/Manila).</p>
+          {/* h2: the welcome banner owns the page's single h1. */}
+          <h2 className="text-2xl font-bold text-[#207524]">Dashboard</h2>
+          <p className="mt-1 text-sm text-slate-500">Guidance Office overview. Philippine time (Asia/Manila).</p>
         </div>
-        <a href="#users" className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          <i className="fa-solid fa-users mr-2" aria-hidden="true"></i>
-          Student directory{dash.students.total != null ? ` (${dash.students.total})` : ""}
-        </a>
       </header>
 
       {dash.appointments.error && <p role="alert" className="text-sm text-red-700">{dash.appointments.error}</p>}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2"><WelcomeBanner user={user} today={dash.today} /></div>
-        <div className="grid grid-cols-2 gap-4 lg:col-span-1">
+        <div className="grid grid-cols-2 gap-6 lg:col-span-1">
           {metrics.map(({ key, ...metric }) => <StatCard key={key} {...metric} />)}
         </div>
       </div>
@@ -216,12 +218,12 @@ export default function CounselorDashboard({ user }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-2">
+        <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6 lg:col-span-2">
           <h2 className="text-base font-semibold text-slate-900">Weekly appointment volume</h2>
           <p className="mt-1 text-sm text-slate-500">Your cases versus the center average.</p>
           <div className="mt-4"><WeeklyVolumeChart data={dash.weeklyVolume} /></div>
         </section>
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-1">
+        <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6 lg:col-span-1">
           <h2 className="text-base font-semibold text-slate-900">Case distribution</h2>
           <p className="mt-1 text-sm text-slate-500">Active cases by primary concern.</p>
           <div className="mt-4"><CaseDistributionChart segments={caseSegments} /></div>

@@ -8,6 +8,8 @@ import CounselorUsersPage from "./pages/counselor/CounselorUsersPage";
 import RegistrationStatusPage from "./pages/student/RegistrationStatusPage";
 import StudentAppointmentsPage from "./pages/student/StudentAppointmentsPage";
 import CounselorAppointmentsPage from "./pages/counselor/CounselorAppointmentsPage";
+import CounselorSchedulePage from "./pages/counselor/CounselorSchedulePage";
+import CounselorHistoryPage from "./pages/counselor/CounselorHistoryPage";
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
 import { AppNavBar } from "./components/layout";
@@ -138,12 +140,18 @@ function AppShell() {
         {page === "registration" && (session.user?.role_code === "STUDENT"
           ? <RegistrationStatusPage key={session.user.user_id} user={session.user} onRejected={handleRejected} />
           : <LoginPage onSignedIn={session.accept} />)}
-        {page === "users" && (["COUNSELOR", "SUPERADMIN"].includes(session.user?.role_code)
-          ? <CounselorUsersPage canRecover={session.user.role_code === "SUPERADMIN"} />
+        {page === "schedule" && (session.user?.role_code === "COUNSELOR"
+          ? <CounselorSchedulePage key={session.user.user_id} user={session.user} />
+          : <LoginPage onSignedIn={session.accept} />)}
+        {page === "history" && (session.user?.role_code === "COUNSELOR"
+          ? <CounselorHistoryPage key={session.user.user_id} user={session.user} />
+          : <LoginPage onSignedIn={session.accept} />)}
+        {page === "users" && (session.user?.role_code === "SUPERADMIN"
+          ? <CounselorUsersPage canRecover />
           : <LoginPage onSignedIn={session.accept} />)}
         {sessionAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <ScheduledSessionPage key={`${session.user.user_id}-${sessionAppointmentId}`} user={session.user} appointmentId={sessionAppointmentId} />}
-        {!["login", "staff-login", "register", "registration", "users", "home", "appointments"].includes(page) && !sessionAppointmentId && (
+        {!["login", "staff-login", "register", "registration", "users", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && (
           <LandingPage
             onSignedIn={session.accept}
           />

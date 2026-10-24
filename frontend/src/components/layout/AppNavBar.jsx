@@ -3,9 +3,12 @@
  *
  * All signed-in roles share one top-bar header. Only the links and the
  * "coming soon" entries differ by role:
- *   - Counselor: Dashboard (#home), Appointments (#appointments); Sessions,
- *     Schedule and History have no routes yet, so they render as
- *     non-navigable "coming soon" placeholders.
+ *   - Counselor: Dashboard (#home), Appointments (#appointments), Schedule
+ *     (#schedule), History (#history); Sessions has no route yet, so it
+ *     renders as a non-navigable "coming soon" placeholder. The Users
+ *     directory is Superadmin-only for now (deferred counselor feature).
+ *     Active link is green with a thin underline, and the right side shows a
+ *     notification bell plus a text-only identity block (Navbar UI Spec).
  *   - Superadmin (ADR-030): Users only.
  *   - Guidance Staff: Home only.
  *   - Student: Home (#home), Appointments (#appointments); History and
@@ -25,42 +28,53 @@ const roleLabel = (code) =>
       : code === "SUPERADMIN" ? "Superadmin"
         : "Student";
 
+// ponytail: no notifications API yet, so the badge only shows when a real
+// count is supplied; add the source when the feature ships.
+function NotificationBell({ count = 0, onOpen }) {
+  return (
+    <button type="button" onClick={onOpen}
+      aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
+      className="relative rounded-full p-2 text-[#207524] hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#207524]">
+      <i className="fa-solid fa-bell text-lg" aria-hidden="true"></i>
+      {count > 0 && (
+        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E44D53] px-1 text-[10px] font-semibold text-white">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 /**
- * Role-based navigation for the shared top bar. `links` navigate; `comingSoon`
- * labels render as non-navigable placeholders until their features ship.
+ * Role-based navigation for the shared top bar, as an ordered item list.
+ * Items with an `href` navigate; items flagged `soon` render as
+ * non-navigable placeholders until their features ship.
  */
 function roleNav(user) {
   if (user.role_code === "COUNSELOR") {
-    return {
-      links: [
-        { label: "Dashboard", href: "#home" },
-        { label: "Users", href: "#users" },
-        { label: "Appointments", href: "#appointments" },
-      ],
-      // No dedicated routes yet — shown in the nav but inactive for now.
-      comingSoon: ["Sessions", "Schedule", "History"],
-    };
+    return [
+      { label: "Dashboard", href: "#home" },
+      { label: "Appointments", href: "#appointments" },
+      // Non-navigable placeholder: visible but not clickable, no "soon" tag.
+      { label: "Sessions", soon: true, badge: false },
+      { label: "Schedule", href: "#schedule" },
+      { label: "History", href: "#history" },
+    ];
   }
   if (user.role_code === "SUPERADMIN") {
-    return { links: [{ label: "Users", href: "#users" }], comingSoon: [] };
+    return [{ label: "Users", href: "#users" }];
   }
   if (user.role_code === "GUIDANCE_STAFF") {
-    return { links: [{ label: "Home", href: "#home" }], comingSoon: [] };
+    return [{ label: "Home", href: "#home" }];
   }
   const active = user.account_status === "ACTIVE";
-  return {
-    links: active
-      ? [
-          { label: "Home", href: "#home" },
-          { label: "Appointments", href: "#appointments" },
-        ]
-      : [{ label: "Home", href: "#home" }],
-    // No dedicated routes yet — shown in the nav but inactive for now.
-    comingSoon: ["History", "Session"],
-  };
+  return (active
+    ? [{ label: "Home", href: "#home" }, { label: "Appointments", href: "#appointments" }]
+    : [{ label: "Home", href: "#home" }])
+    .concat([{ label: "History", soon: true }, { label: "Session", soon: true }]);
 }
 
-export default function AppNavBar({ user, page, onSignOut }) {
+export default function AppNavBar({ user, page, onSignOut, notificationCount = 0, onNotificationsOpen }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -70,15 +84,17 @@ export default function AppNavBar({ user, page, onSignOut }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  return <TopBarNav user={user} page={page} onSignOut={onSignOut} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />;
+  return <TopBarNav user={user} page={page} onSignOut={onSignOut} menuOpen={menuOpen} setMenuOpen={setMenuOpen}
+    notificationCount={notificationCount} onNotificationsOpen={onNotificationsOpen} />;
 }
 
 /* ---------------- Top bar (all signed-in roles) ---------------- */
 
-function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
+function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationCount, onNotificationsOpen }) {
   const [profileOpen, setProfileOpen] = useState(false);
-  const { links, comingSoon } = roleNav(user);
+  const items = roleNav(user);
   const isStudent = user.role_code === "STUDENT";
+  const isCounselor = user.role_code === "COUNSELOR";
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -89,10 +105,15 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
 
   const linkClass = (href) => {
     const current = href === "#" + page;
+    // Counselor reference state: green text with a thin green underline.
+    const active = isCounselor
+      ? "border-b-2 border-[#207524] text-[#207524]"
+      : "border-b-2 border-counseling-active-focus text-zinc-900";
+    const hover = isCounselor ? "hover:text-[#207524]" : "hover:text-counseling-active-focus";
     return "px-1 py-4 text-sm font-medium transition-colors " +
       (current
-        ? "border-b-2 border-counseling-active-focus text-zinc-900"
-        : "border-b-2 border-transparent text-zinc-900 hover:text-counseling-active-focus");
+        ? active
+        : "border-b-2 border-transparent text-zinc-900 " + hover);
   };
 
   const bannerText = user.role_code !== "STUDENT" || user.account_status === "ACTIVE" ? null
@@ -106,18 +127,23 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
     <>
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
         <nav aria-label="App navigation" className="mx-auto flex max-w-6xl items-center gap-4 px-4 sm:px-6">
-          <a href="#home" className="py-2 text-base font-semibold tracking-tight text-emerald-800">CounselConnect</a>
+          <a href="#home" className="flex items-center gap-2 py-2 text-base font-semibold tracking-tight text-slate-700">
+            {/* Same brand mark as the login/register modal header (modal.css .brand-logo). */}
+            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-[#1C6B1B] bg-[#e8f5e9] text-xs text-[#1C6B1B]">
+              <i className="fa-solid fa-hands-holding-child"></i>
+            </span>
+            CounselConnect
+          </a>
           <div className="hidden items-center gap-5 md:flex">
-            {links.map((link) => (
+            {items.map((link) => link.href ? (
               <a key={link.href} href={link.href} className={linkClass(link.href)}
                 {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
                 onClick={() => setMenuOpen(false)}>{link.label}</a>
-            ))}
-            {comingSoon.map((label) => (
-              <span key={label} aria-disabled="true" title="Coming soon"
+            ) : (
+              <span key={link.label} aria-disabled="true" title="Coming soon"
                 className="inline-flex cursor-default items-center gap-1 border-b-2 border-transparent px-1 py-4 text-sm text-slate-300">
-                {label}
-                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>
+                {link.label}
+                {link.badge !== false && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>}
               </span>
             ))}
             {isStudent && user.account_status !== "ACTIVE" && (
@@ -172,6 +198,18 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
                   </div>
                 </div>
               </>
+            ) : isCounselor ? (
+              <>
+                <NotificationBell count={notificationCount} onOpen={onNotificationsOpen} />
+                <span className="hidden text-right leading-tight sm:block">
+                  <span className="block text-sm font-semibold text-slate-700">{user.first_name} {user.last_name}</span>
+                  <span className="block text-xs text-[#7B8493]">{roleLabel(user.role_code)}</span>
+                </span>
+                <button type="button" onClick={onSignOut}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+                  Sign out
+                </button>
+              </>
             ) : (
               <>
                 <span className="hidden items-center gap-2 sm:inline-flex">
@@ -196,17 +234,18 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen }) {
         </nav>
         <div id="app-nav-links" hidden={!menuOpen}
           className="border-t border-slate-200 bg-white px-4 pb-3 md:hidden">
-          {links.map((link) => (
+          {items.map((link) => link.href ? (
             <a key={link.href} href={link.href} className={"block py-2.5 text-sm font-medium " +
-              (link.href === "#" + page ? "text-counseling-active-focus" : "text-zinc-900")}
+              (link.href === "#" + page
+                ? (isCounselor ? "text-[#207524]" : "text-counseling-active-focus")
+                : "text-zinc-900 " + (isCounselor ? "hover:text-[#207524]" : "hover:text-counseling-active-focus"))}
               {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
               onClick={() => setMenuOpen(false)}>{link.label}</a>
-          ))}
-          {comingSoon.map((label) => (
-            <span key={label} aria-disabled="true" title="Coming soon"
-              className="inline-flex cursor-default items-center gap-1 py-2.5 text-sm text-slate-300">
-              {label}
-              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>
+          ) : (
+            <span key={link.label} aria-disabled="true" title="Coming soon"
+              className="flex items-center gap-1 py-2.5 text-sm text-slate-300">
+              {link.label}
+              {link.badge !== false && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>}
             </span>
           ))}
           {user.role_code === "STUDENT" && user.account_status !== "ACTIVE" && (

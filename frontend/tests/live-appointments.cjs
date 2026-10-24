@@ -6,7 +6,9 @@ const assert = require("node:assert/strict");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
 require("./register-app.cjs");
-const AppointmentsPage = require("../src/pages/AppointmentsPage.jsx").default;
+const CounselorAppointmentsPage = require("../src/pages/counselor/CounselorAppointmentsPage.jsx").default;
+const CounselorSchedulePage = require("../src/pages/counselor/CounselorSchedulePage.jsx").default;
+const CounselorHistoryPage = require("../src/pages/counselor/CounselorHistoryPage.jsx").default;
 const HomePage = require("../src/pages/HomePage.jsx").default;
 const { request, setCsrfToken } = require("../src/services/apiClient");
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
@@ -74,9 +76,9 @@ async function pickBookableDay() {
 
 async function main() {
   try {
-    // Counselor saves a recurring weekly schedule through the real editor.
-    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, AppointmentsPage,
-      () => { const refresh = exactButton("Refresh records"); return Boolean(refresh) && !refresh.props.disabled; });
+    // Counselor saves a recurring weekly schedule through the real editor (Schedule page).
+    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorSchedulePage,
+      () => Boolean(formFor("Add availability")));
     await waitFor(() => Boolean(formFor("Add availability")));
     await act(async () => {
       const selects = formFor("Add availability").findAllByType("select");
@@ -109,35 +111,24 @@ async function main() {
     await act(async () => formFor("Confirm booking").props.onSubmit({ preventDefault() {} }));
     await waitFor(() => JSON.stringify(root.toJSON()).includes("Request submitted. Awaiting counselor review."));
 
-    // Counselor reviews the pending request, confirms, then cancels; the
-    // released slot becomes available again.
-    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, AppointmentsPage,
-      () => { const refresh = exactButton("Refresh records"); return Boolean(refresh) && !refresh.props.disabled; });
-    await act(async () => exactButton("Pending").props.onClick());
-    await waitFor(() => Boolean(exactButton("Confirm")));
-    await act(async () => exactButton("Confirm").props.onClick());
+    // Counselor reviews the pending request on the Appointment Requests page...
+    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorAppointmentsPage,
+      () => Boolean(exactButton("Accept Appointment")));
+    await act(async () => exactButton("Accept Appointment").props.onClick());
     // The pending queue empties once the confirmation and refresh finish.
-    // Gating on the enabled Refresh button proves the confirm-mutate's
-    // finally released the mutating guard; clicking through a still-busy
-    // state would silently drop the later cancel (direct onClick bypasses
-    // the buttons' disabled attribute).
-    await waitFor(() => {
-      const refresh = exactButton("Refresh records");
-      return Boolean(refresh) && !refresh.props.disabled
-        && !exactButton("Confirm") && !exactButton("Reject");
-    });
-    await act(async () => exactButton("Confirmed").props.onClick());
-    await waitFor(() => Boolean(exactButton("Reschedule")));
+    // Gating on the button disappearing proves the confirm-mutate's finally
+    // released the mutating guard; clicking through a still-busy state would
+    // silently drop the later cancel (direct onClick bypasses disabled).
+    await waitFor(() => !exactButton("Accept Appointment") && !exactButton("Reject"));
+
+    // ...then cancels the confirmed record from the History page; the
+    // released slot becomes available again.
+    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorHistoryPage,
+      () => Boolean(exactButton("Reschedule")));
     await act(async () => exactButton("Cancel appointment").props.onClick());
     await waitFor(() => Boolean(exactButton("Confirm cancellation")));
     await act(async () => exactButton("Confirm cancellation").props.onClick());
-    // The confirmed queue empties after the cancellation and refresh finish
-    // (same busy-guard gating as the confirm step above).
-    await waitFor(() => {
-      const refresh = exactButton("Refresh records");
-      return Boolean(refresh) && !refresh.props.disabled
-        && !exactButton("Cancel appointment") && !exactButton("Reschedule");
-    });
+    await waitFor(() => !exactButton("Cancel appointment") && !exactButton("Reschedule"));
 
     // Verify the released reservation through the real API client.
     const cancelled = await request("/appointments?status=CANCELLED");

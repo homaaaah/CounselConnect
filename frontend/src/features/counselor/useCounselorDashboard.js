@@ -2,12 +2,14 @@
  * useCounselorDashboard — data seam for the Counselor dashboard.
  *
  * Only the appointment figures have a documented source today:
- *   - GET /appointments        -> total (KPI) via the existing useAppointmentCount
- *                                 hook, and the first page of records used to
- *                                 derive today's rows.
- *   - GET /accounts/students   -> student total via useStudentCount.
+ *   - GET /appointments                -> total (KPI) and the first page of
+ *                                         records used to derive today's rows,
+ *                                         via the existing useAppointmentCount
+ *                                         hook.
+ *   - GET /appointments?status=PENDING -> pending-request KPI (same hook).
+ *   - GET /accounts/students           -> student total via useStudentCount.
  *
- * Everything else the dashboard shows (emergency cases, solved/ongoing case
+ * Everything else the dashboard shows (solved/ongoing case
  * counts, weekly appointment volume, case distribution) has NO documented
  * endpoint yet, so those fields resolve to null/[]. Their widgets render an
  * empty state and will populate automatically once a source is wired here.
@@ -26,6 +28,7 @@ const manilaDay = (value) =>
 
 export function useCounselorDashboard(user) {
   const appointments = useAppointmentCount();
+  const pendingRequests = useAppointmentCount("PENDING");
   const students = useStudentCount();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,11 +77,11 @@ export function useCounselorDashboard(user) {
   }, [user?.user_id]);
 
   return {
-    appointments, // { total, loading, error }
-    students,     // { total, loading, error }
+    appointments,      // { total, loading, error }
+    pendingRequests,   // { total, loading, error }
+    students,          // { total, loading, error }
     today: { items, loading, error },
     // No documented data source yet — widgets render an empty state.
-    emergencies: null,
     solvedCases: null,
     ongoingCases: null,
     weeklyVolume: null,
