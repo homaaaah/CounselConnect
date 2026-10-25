@@ -5,8 +5,10 @@
 -- FAQ/announcement rows may duplicate if run twice.
 
 INSERT INTO campuses (campus_name, guidance_office_location) VALUES
-  ('Main Campus', 'Guidance and Counseling Office, 2F Main Building')
-  , ('Second Campus', NULL)
+  ('University of Caloocan City South (Main)', 'Guidance and Counseling Office, 2F Main Building')
+  , ('Congressional Extension Campus', NULL)
+  , ('Camarin Extension Campus', NULL)
+  , ('Bagong Silang Extension Campus', NULL)
 ON DUPLICATE KEY UPDATE campus_name = campus_name;
 
 INSERT INTO departments (department_name) VALUES
@@ -14,8 +16,15 @@ INSERT INTO departments (department_name) VALUES
 ON DUPLICATE KEY UPDATE department_name = department_name;
 
 INSERT INTO programs (department_id, program_code, program_name) VALUES
-  ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSIT-DEV', 'BS Information Technology')
-  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSED-GEN', 'BS Education (General)')
+  ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSIS', 'BS Information Systems')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSIT', 'BS Information Technology')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSEMC', 'BS Entertainment and Multimedia Computing')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSCS', 'BS Computer Science')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSPSY', 'BS Psychology')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BSMATH', 'BS Mathematics')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BAPOLSCI', 'BA Political Science')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BACOMM', 'BA Communication')
+  , ((SELECT department_id FROM departments WHERE department_name = 'Department of Student Affairs'), 'BPA', 'Bachelor of Public Administration')
 ON DUPLICATE KEY UPDATE program_code = program_code;
 
 INSERT INTO content_items (content_type, content_key, title, body, is_published) VALUES
@@ -55,3 +64,8 @@ INSERT INTO users (email, password_hash, role_code, account_status, first_name, 
    '$argon2id$v=19$m=65536,t=3,p=4$n3wS06XnrqYUyhm9HLl+Zg$eb6BAoymtbI1LF4iGQWJrQHY7N0VMadERUZhjkmm8vs',
    'SUPERADMIN', 'ACTIVE', 'Super', 'Admin')
 ON DUPLICATE KEY UPDATE email = email;
+
+-- Optional cleanup for dev DBs seeded before the 4-campus/9-program update.
+-- Run manually only if the rows are unreferenced (FKs are RESTRICT).
+-- DELETE FROM programs WHERE program_code IN ('BSIT-DEV', 'BSED-GEN');
+-- DELETE FROM campuses WHERE campus_name IN ('Main Campus', 'Second Campus');

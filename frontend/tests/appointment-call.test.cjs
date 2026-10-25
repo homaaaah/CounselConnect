@@ -15,6 +15,10 @@ const button = (root, label) => root.root
   .findAllByType("button")
   .find(node => node.children.filter(child => typeof child === "string").join("").trim() === label);
 
+const byLabel = (root, label) => root.root
+  .findAllByType("button")
+  .find(node => node.props["aria-label"] === label);
+
 class FakeWebSocket {
   static instances = [];
   constructor(url) {
@@ -202,15 +206,18 @@ test("join, negotiate, toggle devices, and hang up cleans up", async t => {
   });
   assert.ok(JSON.stringify(root.toJSON()).includes("Connected"));
 
-  const mic = button(root, "Microphone");
+  const videos = root.root.findAllByType("video").map(node => node.props["aria-label"]);
+  assert.deepEqual(videos.sort(), ["Counselor", "Your camera"], "remote video and self-view render");
+
+  const mic = byLabel(root, "Microphone");
   assert.equal(mic.props["aria-pressed"], true);
   await act(async () => { mic.props.onClick(); });
   assert.equal(env.tracks[0].enabled, false);
-  assert.equal(button(root, "Microphone").props["aria-pressed"], false);
-  await act(async () => { button(root, "Camera").props.onClick(); });
+  assert.equal(byLabel(root, "Microphone").props["aria-pressed"], false);
+  await act(async () => { byLabel(root, "Camera").props.onClick(); });
   assert.equal(env.tracks[1].enabled, false);
 
-  await act(async () => { button(root, "Hang up & stop camera").props.onClick(); });
+  await act(async () => { byLabel(root, "End call").props.onClick(); });
   assert.deepEqual(socket.sent.at(-1), { type: "hangup" });
   assert.equal(peer.closed, true);
   assert.deepEqual([...env.stopped].sort(), ["audio", "video"]);
@@ -283,7 +290,7 @@ test("a late offer after hang-up is discarded", async t => {
   const peer = FakePeerConnection.instances[0];
   assert.ok(peer, "the pending offer created a peer connection");
 
-  await act(async () => { button(root, "Hang up & stop camera").props.onClick(); });
+  await act(async () => { byLabel(root, "End call").props.onClick(); });
   await act(async () => { peer.releaseOffer(); });
   await flush();
 
@@ -328,7 +335,7 @@ test("window close during a call ends it", async t => {
   });
   assert.ok(JSON.stringify(root.toJSON()).includes("The video call window has ended"));
   assert.deepEqual([...env.stopped].sort(), ["audio", "video"]);
-  assert.equal(button(root, "Hang up & stop camera"), undefined);
+  assert.equal(byLabel(root, "End call"), undefined);
 });
 
 test("unmount stops tracks and closes the signaling socket", async t => {

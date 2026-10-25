@@ -1,56 +1,77 @@
 # CounselConnect - Current Task
 
 **Status:** COMPLETED
-**Task:** Merge `CounselConnect-test-Registration_Fix/` (registration QoL, auth CSRF/audience gate, appointment scheduling) into the appointment-call work per `.kilo/plans/1792774405483-video-demo-test-button.md`.
-**Route:** `appointments` + `auth` + `registration` + `security`; HIGH risk (auth/session behavior, migration, scheduling authorization).
+**Task:** Session UI: scrollable tab panels, automatic join at the scheduled start, and **Mark as done** moved to the session header.
+**Risk:** HIGH (completion action placement); MEDIUM (auto-join); LOW (layout).
+**Route:** `appointments` + `messaging` (including `docs/REAL_TIME_MESSAGING.md`), plus the `ui-refactor` safety checklist.
+
+## Objective
+
+On both roles' scheduled-session page, the right tab panel scrolls internally; the open page submits the existing authorized join request once at/after the scheduled start (with a manual retry on failure); and the Counselor's **Mark as done** lives in the page header beside **Mark no-show** instead of the Record panel. The standalone `#session-record/{id}` page's tab content also scrolls.
 
 ## Result
 
-The snapshot's product changes now sit on top of the appointment-call feature on branch `merge/calls-checkpoint`. Students get the six-stage counselor-first booking flow and a month calendar; Counselors get scoped calendar/booked-slot views, standard weekday availability, enable/disable/soft-delete, and a working self-scoped reschedule. Anonymous startup probes no longer surface a 401, and the Student/staff login forms reject and revoke the wrong audience. `counselor_weekly_schedules.is_deleted` exists with a soft-delete path that keeps existing slots and appointments valid while removing the definition from listings and future availability. Calls, the call panel, `services/realtime.js`, `test_calls.py`, and `appointment-call.test.cjs` were preserved. The `CounselConnect-test-Registration_Fix/` reference folder was merged and then removed; its delta remains in `merge/snapshot-fix` (`de76c4d`).
+- The Counselor session page owns one `useSessionRecordEditor` instance; the Student hook is disabled and never requests `/appointments/{id}/record`.
+- The header **Mark as done** appears only after a successful record load, saves the current form first, skips a PUT for an already-`FINAL` record, then calls the unchanged `POST /mark-done`. A rejected completion switches to the Record tab and surfaces the named missing fields.
+- An open page (including one already in the lobby) submits the join once at/after `messaging_opens_at`; the automatic attempt is a background request (no idle renewal), and a failure shows the error plus **Retry joining** (a normal user request). A start-boundary background session refresh prevents waiting for the 15-second interval.
+- The session page and standalone record page use bounded viewport layouts with independently scrolling tab content. The rail Record panel no longer shows **Mark as done**; the standalone page keeps **Finalize record**/**Reopen for editing**.
+- A failed record load now offers an inline **Reload record** control, replacing the implicit refetch that remounting the tab used to provide.
 
-## Branch / commits
+## In scope
 
-- `merge/calls-checkpoint` — `e3d5bc1` calls checkpoint, `940c9c3` merge of `merge/snapshot-fix` (= `de76c4d`, applied on `f9abe19`), `cac4186` post-merge harness/docs fixes, `8e23d8a` review fixes, `d0d2e3b` hardening. No push.
+- `frontend/src/pages/ScheduledSessionPage.jsx`, `frontend/src/pages/SessionRecordPage.jsx`
+- `frontend/src/components/sessionRecords/SessionRecordWorkspace.jsx`
+- `frontend/src/features/sessionRecords/useSessionRecord.js`, new `useSessionRecordEditor.js`
+- `frontend/src/features/messaging/useAppointmentChat.js`
+- `frontend/tests/scheduled-chat.test.cjs`, `frontend/tests/session-records.test.cjs`
+- Owning docs and ADR-038.
 
-## Merge decisions
+## Out of scope
 
-- Copied an explicit allow-list from the snapshot; never a whole-tree copy.
-- Excluded the snapshot's `.ai/`, `contracts/openapi.json`, `docs/AUDIO_VIDEO_CALLS.md`, its deletions of `TEAM_SETUP_GUIDE.md`/`WORKFLOWS.md`, and all local artifacts.
-- Regenerated `contracts/openapi.json` from the merged app instead of merging JSON.
-- Repaired double-encoded (cp1252/UTF-8) text in the copied `docs/API_CONTRACT.md` and `docs/APPOINTMENT_SCHEDULING.md`.
-- Dropped the unreferenced `frontend/src/assets/bg.jpg`, matching the snapshot.
+- Any backend, API, schema, migration, permission, retention, or student file-visibility change.
+- A Files tab on the session page; the Student keeps the `#session-record/{id}` link.
+- Replacing the explicit join contract with server-side auto-join on reads.
+- The future video-permission/chat-UI layout plan.
 
-## Fixes found by review (not present in the snapshot)
+## Acceptance criteria
 
-- `backend/app/tests/conftest.py`: added the missing `20261024_weekly_sched_softdel` loader/call.
-- `appointments/service.py`: `appointment_response` normalizes slot datetimes with `db_time` (aware/naive comparison crash).
-- `appointments/service.py`: imported `WeeklyScheduleCreateRequest`; the standard-weekday action previously raised `NameError`.
-- `appointments/{service,repository}.py`: booking/reschedule now reject slots generated from a disabled or soft-deleted weekly schedule (`slot_schedule_is_active`, locking current read).
-- `BookingModal.jsx`: Counselors start at the calendar step (`selfCounselorId`), cannot go back to the empty directory step, and candidates are filtered to `AVAILABLE`.
-- `CounselorAppointmentsPage.jsx`: standard-weekday button is gated on a duration that divides the 8-hour block, not on the unrelated custom range.
-- `useCounselorDashboard.js`: restored paging so "today" is not truncated at 100 records.
-- `docs/COUNSELOR_FIRST_BOOKING_PLAN.md`: acceptance criteria now match the shipped unpaginated `GET /booking-counselors`.
-- Tests added: calendar `booked_slots` counselor-only, stale-schedule booking rejection, standard-weekday all-or-nothing batch, enable/soft-delete round trip, migration round trip, Counselor reschedule, isolated Origin rejection.
+- The Counselor page fetches `/record` once at page level; the Student page never requests `/record`.
+- **Mark as done** is in the header (only after a successful record load), saves the current form first, never saves an already-`FINAL` record, then calls the unchanged `/mark-done`; incomplete fields switch to the Record tab and name the fields.
+- The Record panel no longer renders **Mark as done**; the standalone page keeps **Finalize record** and **Reopen for editing**.
+- An open session page joins automatically once at/after `messaging_opens_at`; a failure shows the error plus **Retry joining** and does not retry on every tick.
+- Tab content scrolls inside the panel on desktop and mobile; tablist/link stay outside the scroll area; desktop page does not scroll.
+- Focused and full frontend tests, the frontend build, the backend regression, and the OpenAPI check all pass (or gaps are reported).
 
-## Verification (all run)
+## Contracts to preserve
 
-- Backend targeted: `test_appointments` 68 passed, `test_calls` 23 passed, `test_calendar` 5 passed, `test_recurring_schedules` 9 passed, `test_auth_flow` passed.
-- Full backend suite with the disposable MySQL test DB: **265 passed, 1 failed** — only the pre-existing `test_live_appointment_screens` harness failure (`StudentHomePage` `useToast` outside `ToastProvider` in `frontend/tests/live-appointments.cjs`), unchanged from before this merge.
-- `python scripts/export_openapi.py --check`: matches the application.
-- Alembic: single head `20261024_weekly_sched_softdel`; migration upgrade adds `is_deleted`, downgrade removes it, rows preserved (covered by a scratch-schema test).
-- Frontend `npm test`: **95 passed, 0 failed** (the snapshot's dynamic-date tests also cleared the two pre-existing calendar date-rot failures).
-- `npm run build`: succeeded (81 modules).
-- `git diff --check`: no whitespace errors (line-ending warnings only).
-- Two read-only HIGH-risk reviews. Confirmed findings fixed: Counselor reschedule dead end, stale-slot booking, missing standard-weekday import, lock inconsistency, preselected RESERVED counselor candidate, duration-45/90 weekday 422, dashboard truncation, and the Origin test's lack of isolation.
+| Invariant / user capability | Owning contract and code | Regression test |
+|---|---|---|
+| Join stays participant/`CONFIRMED`/`ONLINE`/window authorized and records `*_joined_at` | `backend/app/modules/appointments/service.py`, `messaging/service.py` | `test_session_records.py`, `scheduled-chat.test.cjs` |
+| Chat send/catch-up/WebSocket and call panel behavior unchanged | `useAppointmentChat.js`, `AppointmentCallPanel` | `scheduled-chat.test.cjs`, `appointment-call.test.cjs` |
+| Students never request the record/notepad; finalized assessment only after `COMPLETED` | `useSessionRecord.js` `enabled`, `_record_response` | `session-records.test.cjs`, `test_session_records.py` |
+| Mark as done saves first, skips an already-`FINAL` record, and is atomic server-side | `useSessionRecordEditor.markDone`, `mark_session_done` | `scheduled-chat.test.cjs`, `test_session_records.py` |
+| Standalone page keeps Finalize/Reopen; Counselor History keeps status-only Mark completed | `SessionRecordPage`, `SessionRecordWorkspace` variant | `session-records.test.cjs`, `appointments.test.cjs` |
 
-## Not run
+- Compatible API methods, paths, payload fields, and response shapes: no change.
+- Navigation and actions that must remain available: Student files link, Mark no-show, Reopen, Finalize on the standalone page.
+- Required integration/browser checks and prerequisites: MySQL test URL for backend regression; manual two-role QA for time-dependent auto-join and layout.
+- Intentional behavior changes explicitly authorized by the user: auto-join at start (still an authorized background request), header placement, internal scrolling.
 
-- Interactive two-browser call, real camera/TURN behavior, and Capacitor. These need devices/browsers and remain human verification.
-- Manual QA checklist from the plan (audience mismatch, anonymous CSRF, registration upload/password UX, counselor selection, calendar month/booked slots, weekday/enable/delete, toasts, live call).
+## Verification (run)
 
-## Remaining limitations
+- `node --test frontend/tests/scheduled-chat.test.cjs frontend/tests/session-records.test.cjs`: **14 passed**.
+- `npm --prefix frontend test`: **121 passed**.
+- `npm --prefix frontend run build`: succeeded.
+- `pytest app/tests/integration/test_session_records.py app/tests/integration/test_appointments.py app/tests/integration/test_appointments_frontend.py -q` (with `COUNSELCONNECT_TEST_DATABASE_URL`): **83 passed, 1 skipped**. Skip reason: `test_appointments.py:327` "Manila already rolled to the next day for this slot time" (time-dependent, not a missing DB).
+- `pytest app/tests --ignore=app/tests/integration/test_calls.py -q`: **260 passed**.
+- `test_calls.py`: 19 tests passed in-file, then the file run hung on the peer-disconnect test; the remaining 4 tests (including that test) pass when run individually/groups. The suite's call behaviors are covered, but the full-file run is a reproducible environment hang unrelated to this frontend change.
+- `python -B scripts/export_openapi.py --check`: matches the application.
+- Fresh read-only HIGH-risk review performed; MEDIUM findings (start-boundary cached capabilities, Notes editing during save, failed-record recovery) and LOW test-strength gaps were fixed and covered.
 
-- `CounselorAppointmentsPage` now defaults its status filter to `PENDING` (snapshot behavior change; intentional).
-- `docs/TEAM_SETUP_GUIDE.md` and `docs/WORKFLOWS.md` are kept even though the snapshot deleted them.
-- The temp worktree `C:\Users\delac\AppData\Local\Temp\kilo\cc-snapshot-fix` and branch `merge/snapshot-fix` are still registered for review.
-- TURN uses static environment credentials; one backend process only (in-memory room registry); both call participants must join explicitly.
+## Remaining risks / limitations
+
+- Manual QA has not been run in this session: both roles, pre-start/post-start entry, mobile/desktop panel scrolling, join failure retry, and header save-first/incomplete-field behavior still need a browser pass.
+- Auto-join is still one authorized request; the only new behavior is who submits it (the open page) and that the automatic attempt does not renew idle activity.
+- The full `test_calls.py` file run hangs in this environment at the peer-disconnect test; individual/groupped runs pass. Frontend changes do not touch call signaling.
+- `docs/DATABASE.md` was not edited (no schema change; it still carries the earlier reopen wording owned by the prior task).
+- UI disabling is cosmetic; the server remains authoritative.

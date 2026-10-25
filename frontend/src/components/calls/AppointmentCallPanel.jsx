@@ -11,10 +11,20 @@ import { formatSchedule } from "../../features/appointments";
 import { callStatusText, useAppointmentCall } from "../../features/calls";
 
 const primaryButton = "rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButton = "rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-const dangerButton = "rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50";
+const controlButton = "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-slate-800/80 text-lg text-white backdrop-blur transition-colors hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
+const endCallButton = "flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-lg text-white transition-colors hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
 
-function VideoTile({ videoRef, stream, label, muted, emptyText, children }) {
+function elapsedText(now, startsAt) {
+  const start = new Date(startsAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(now)) return "";
+  const total = Math.max(0, Math.floor((now - start) / 1000));
+  const hours = Math.floor(total / 3600);
+  return [hours, Math.floor(total / 60) % 60, total % 60]
+    .map(part => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function VideoTile({ videoRef, stream, label, muted, emptyText, className = "", children }) {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return undefined;
@@ -25,7 +35,7 @@ function VideoTile({ videoRef, stream, label, muted, emptyText, children }) {
   }, [stream, videoRef]);
 
   return (
-    <div className="relative aspect-video overflow-hidden rounded-xl bg-slate-900">
+    <div className={`relative overflow-hidden bg-slate-900 ${className}`}>
       <video
         ref={videoRef}
         autoPlay
@@ -34,7 +44,7 @@ function VideoTile({ videoRef, stream, label, muted, emptyText, children }) {
         aria-label={label}
         className="h-full w-full object-cover"
       />
-      {!stream && (
+      {!stream && emptyText && (
         <p className="absolute inset-0 flex items-center justify-center p-3 text-center text-sm text-slate-300">
           {emptyText}
         </p>
@@ -52,6 +62,9 @@ export default function AppointmentCallPanel({
   serverTime,
   appointmentMode = "ONLINE",
   status = "CONFIRMED",
+  now: nowProp,
+  peerName,
+  selfName,
 }) {
   const call = useAppointmentCall({ appointmentId, canCall });
   const localVideoRef = useRef(null);
@@ -77,7 +90,11 @@ export default function AppointmentCallPanel({
     };
   }, [call.remoteStream]);
 
-  const now = serverTime ? new Date(serverTime).getTime() : Date.now();
+  const now = Number.isFinite(nowProp)
+    ? nowProp
+    : serverTime
+      ? new Date(serverTime).getTime()
+      : Date.now();
   const startTime = new Date(startsAt).getTime();
   const deadline = new Date(safetyDeadlineAt).getTime();
   const callableAppointment = appointmentMode === "ONLINE" && status === "CONFIRMED";
@@ -85,6 +102,7 @@ export default function AppointmentCallPanel({
   const afterWindow = callableAppointment && Number.isFinite(deadline) && now >= deadline;
   const inCall = call.active || ["connected", "negotiating"].includes(call.phase);
   const otherLabel = call.peerRole === "COUNSELOR" ? "Counselor" : call.peerRole === "STUDENT" ? "Student" : "Other participant";
+  const participantLabel = peerName || otherLabel;
 
   async function playRemote() {
     try {
@@ -96,11 +114,15 @@ export default function AppointmentCallPanel({
   }
 
   return (
-    <section aria-labelledby="call-heading" className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+    <section aria-labelledby="call-heading" className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="call-heading" className="font-semibold">Video call</h2>
         {call.phase === "connected" && (
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Live</span>
+          <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true"></span>
+            <span>Live session: {participantLabel}</span>
+            <span className="rounded bg-slate-100 px-2 py-0.5 font-mono font-normal text-slate-600">{elapsedText(now, startsAt)}</span>
+          </p>
         )}
       </div>
       <p className="mt-1 text-xs text-slate-500">
@@ -140,44 +162,74 @@ export default function AppointmentCallPanel({
           </p>
 
           {(inCall || call.phase === "failed") && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <VideoTile
-                videoRef={localVideoRef}
-                stream={call.localStream}
-                label="Your camera"
-                muted
-                emptyText={call.phase === "joining" ? "Starting camera and microphone…" : "Camera off"}
-              />
+            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-slate-900">
               <VideoTile
                 videoRef={remoteVideoRef}
                 stream={call.remoteStream}
                 label={otherLabel}
                 emptyText="Waiting for the other participant's video."
+                className="h-full w-full"
               >
                 {playBlocked && (
                   <button
                     type="button"
-                    className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow"
+                    className="absolute inset-0 flex items-center justify-center bg-black/40"
                     onClick={playRemote}
                   >
-                    Click to play
+                    <span className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow">Click to play</span>
                   </button>
                 )}
-              </VideoTile>
-            </div>
-          )}
 
-          {call.active && (
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={secondaryButton} aria-pressed={call.micOn} onClick={call.toggleMic}>
-                Microphone
-              </button>
-              <button type="button" className={secondaryButton} aria-pressed={call.camOn} onClick={call.toggleCam}>
-                Camera
-              </button>
-              <button type="button" className={dangerButton} onClick={call.hangUp}>
-                Hang up &amp; stop camera
-              </button>
+                {call.localStream && (
+                  <div className="absolute right-3 top-3 w-32 overflow-hidden rounded-lg ring-2 ring-white/40 sm:w-40">
+                    <VideoTile
+                      videoRef={localVideoRef}
+                      stream={call.localStream}
+                      label="Your camera"
+                      muted
+                      className="aspect-video w-full"
+                    >
+                      <span className="absolute inset-x-0 bottom-0 bg-black/50 px-2 py-0.5 text-[10px] font-medium text-white">
+                        {selfName || "You"}
+                      </span>
+                    </VideoTile>
+                  </div>
+                )}
+
+                {call.active && (
+                  <div className="absolute inset-x-0 bottom-4 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      className={controlButton}
+                      aria-label="Microphone"
+                      aria-pressed={call.micOn}
+                      title={call.micOn ? "Mute microphone" : "Unmute microphone"}
+                      onClick={call.toggleMic}
+                    >
+                      <i className={call.micOn ? "fa-solid fa-microphone" : "fa-solid fa-microphone-slash"} aria-hidden="true"></i>
+                    </button>
+                    <button
+                      type="button"
+                      className={controlButton}
+                      aria-label="Camera"
+                      aria-pressed={call.camOn}
+                      title={call.camOn ? "Turn camera off" : "Turn camera on"}
+                      onClick={call.toggleCam}
+                    >
+                      <i className={call.camOn ? "fa-solid fa-video" : "fa-solid fa-video-slash"} aria-hidden="true"></i>
+                    </button>
+                    <button
+                      type="button"
+                      className={endCallButton}
+                      aria-label="End call"
+                      title="Hang up and stop camera"
+                      onClick={call.hangUp}
+                    >
+                      <i className="fa-solid fa-phone-slash" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                )}
+              </VideoTile>
             </div>
           )}
 

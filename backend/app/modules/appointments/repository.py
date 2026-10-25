@@ -11,6 +11,8 @@ from app.modules.appointments.models import (
     CounselorAvailabilityBlock,
     CounselorBlockedDate,
     CounselorWeeklySchedule,
+    SessionDocument,
+    SessionRecord,
 )
 from app.modules.accounts.models import User
 
@@ -462,3 +464,31 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             .order_by(AvailabilitySlot.ends_at, Appointment.appointment_id)
             .limit(100)
         ))
+
+    # ------------------------------------------------- session records/files
+
+    def session_record(self, appointment_id, *, lock=False):
+        stmt = select(SessionRecord).where(SessionRecord.appointment_id == appointment_id)
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt)
+
+    def session_documents(self, appointment_id):
+        return list(self.session.execute(
+            select(SessionDocument, User.first_name, User.last_name)
+            .join(User, User.user_id == SessionDocument.uploader_user_id)
+            .where(
+                SessionDocument.appointment_id == appointment_id,
+                SessionDocument.deleted_at.is_(None),
+            )
+            .order_by(SessionDocument.created_at.desc(), SessionDocument.document_id.desc())
+        ))
+
+    def session_document(self, appointment_id, document_id, *, lock=False):
+        stmt = select(SessionDocument).where(
+            SessionDocument.document_id == document_id,
+            SessionDocument.appointment_id == appointment_id,
+        )
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt)

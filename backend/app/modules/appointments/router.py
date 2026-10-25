@@ -2,10 +2,12 @@
 
 import asyncio
 from datetime import date, timedelta, datetime
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
-from fastapi import APIRouter, Depends, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import AwareDatetime
 
+from app.config import get_settings
 from app.modules.accounts.schemas import CampusResponse
 from app.modules.appointments.schemas import (
     AppointmentCreateRequest,
@@ -22,6 +24,9 @@ from app.modules.appointments.schemas import (
     CalendarBlockRequest, CalendarResponse,
     AvailabilityBlockCreateRequest,
     AvailabilityBlockResponse,
+    SessionDocumentResponse,
+    SessionRecordResponse,
+    SessionRecordUpdateRequest,
     WeeklyScheduleCreateRequest,
     StandardWeekdayScheduleRequest,
     CounselorBookingOption,
@@ -415,6 +420,127 @@ def no_show(
         service.transition(actor, appointment_id, "no-show"),
         event="session_closed",
     )
+
+
+@router.post(
+    "/appointments/{appointment_id}/mark-done", response_model=AppointmentSessionResponse
+)
+def mark_session_done(
+    appointment_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    appointment = service.mark_session_done(actor, appointment_id)
+    _commit_and_publish(service, appointment, event="session_closed")
+    return service.session_response(actor, appointment)
+
+
+@router.get(
+    "/appointments/{appointment_id}/record", response_model=SessionRecordResponse
+)
+def get_session_record(
+    appointment_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.get_session_record(actor, appointment_id)
+
+
+@router.put(
+    "/appointments/{appointment_id}/record", response_model=SessionRecordResponse
+)
+def save_session_record(
+    appointment_id: int,
+    data: SessionRecordUpdateRequest,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.save_session_record(actor, appointment_id, data)
+
+
+@router.post(
+    "/appointments/{appointment_id}/record/finalize", response_model=SessionRecordResponse
+)
+def finalize_session_record(
+    appointment_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.finalize_session_record(actor, appointment_id)
+
+
+@router.post(
+    "/appointments/{appointment_id}/record/reopen", response_model=SessionRecordResponse
+)
+def reopen_session_record(
+    appointment_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.reopen_session_record(actor, appointment_id)
+
+
+@router.get(
+    "/appointments/{appointment_id}/documents",
+    response_model=list[SessionDocumentResponse],
+)
+def list_session_documents(
+    appointment_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    return service.list_session_documents(actor, appointment_id)
+
+
+@router.post(
+    "/appointments/{appointment_id}/documents",
+    response_model=SessionDocumentResponse,
+    status_code=201,
+)
+def upload_session_document(
+    appointment_id: int,
+    file: UploadFile,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    content = file.file.read(get_settings().session_document_max_mb * 1024 * 1024 + 1)
+    return service.upload_session_document(
+        actor, appointment_id, content, file.filename or "session-file"
+    )
+
+
+@router.get("/appointments/{appointment_id}/documents/{document_id}/download")
+def download_session_document(
+    appointment_id: int,
+    document_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    content, mime_type, filename = service.download_session_document(
+        actor, appointment_id, document_id
+    )
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.delete(
+    "/appointments/{appointment_id}/documents/{document_id}", status_code=204
+)
+def delete_session_document(
+    appointment_id: int,
+    document_id: int,
+    actor: CurrentUser,
+    service: AppointmentsService = Depends(get_appointments_service),
+):
+    service.delete_session_document(actor, appointment_id, document_id)
+    return Response(status_code=204)
 
 
 @router.websocket("/appointments/session-events")

@@ -10,7 +10,7 @@ Conversation types remain GENERAL, APPOINTMENT, and SOS. A conversation cannot b
 
 - Confirmation does not create a conversation.
 - The launcher/lobby appears 30 minutes before a confirmed ONLINE appointment.
-- At or after start, the first explicit authorized join locks/revalidates the appointment and lazily creates/reuses its single APPOINTMENT conversation.
+- At or after start, the scheduled session page submits the participant's authorized join automatically; the request is still required, and the server revalidates it, locks the appointment, and lazily creates/reuses its single APPOINTMENT conversation. The automatic attempt does not renew idle activity; a failed automatic join shows the error and a manual retry (which is normal user activity).
 - REST is the durable source for ordered messages/history. FastAPI WebSockets deliver committed events; reconnect catches up through REST.
 - The safety deadline is appointment end plus the configured 15-minute grace period.
 - Timeout closes chat without inventing COMPLETED or NO_SHOW; the assigned Counselor records the outcome.

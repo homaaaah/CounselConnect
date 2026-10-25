@@ -13,9 +13,10 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
+    Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.mysql import BIGINT, DATE, SMALLINT, TIME, TINYINT
+from sqlalchemy.dialects.mysql import BINARY, BIGINT, DATE, SMALLINT, TIME, TINYINT
 from sqlalchemy import Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -186,3 +187,68 @@ class Appointment(Base):
     counselor_reminder_dispatched_at: Mapped[object | None] = mapped_column(DATETIME6)
     created_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow)
     updated_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow, onupdate=utcnow)
+
+
+class SessionRecord(Base):
+    """One private counseling record per appointment (draft then finalized)."""
+
+    __tablename__ = "session_records"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", name="uq_session_records_appointment"),
+        CheckConstraint("status IN ('DRAFT', 'FINAL')", name="chk_session_records_status"),
+    )
+
+    record_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    appointment_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True),
+        ForeignKey("appointments.appointment_id", name="fk_session_records_appointment", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    counselor_user_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True),
+        ForeignKey("users.user_id", name="fk_session_records_counselor", ondelete="RESTRICT", onupdate="CASCADE"),
+        nullable=False,
+    )
+    notepad: Mapped[str | None] = mapped_column(Text)
+    presenting_concern: Mapped[str | None] = mapped_column(Text)
+    session_summary: Mapped[str | None] = mapped_column(Text)
+    intervention: Mapped[str | None] = mapped_column(Text)
+    plan: Mapped[str | None] = mapped_column(Text)
+    follow_up_on: Mapped[object | None] = mapped_column(DATE)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="DRAFT")
+    finalized_at: Mapped[object | None] = mapped_column(DATETIME6)
+    created_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow)
+    updated_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow, onupdate=utcnow)
+
+
+class SessionDocument(Base):
+    """Private appointment attachment; bytes live outside MySQL."""
+
+    __tablename__ = "session_documents"
+    __table_args__ = (
+        Index("idx_session_documents_appointment", "appointment_id", "deleted_at"),
+        UniqueConstraint("storage_key", name="uq_session_documents_storage_key"),
+    )
+
+    document_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
+    appointment_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True),
+        ForeignKey("appointments.appointment_id", name="fk_session_documents_appointment", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    uploader_user_id: Mapped[int] = mapped_column(
+        BIGINT(unsigned=True),
+        ForeignKey("users.user_id", name="fk_session_documents_uploader", ondelete="RESTRICT", onupdate="CASCADE"),
+        nullable=False,
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BIGINT(unsigned=True), nullable=False)
+    sha256: Mapped[bytes] = mapped_column(BINARY(32), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    deleted_at: Mapped[object | None] = mapped_column(DATETIME6)
+    deleted_by_user_id: Mapped[int | None] = mapped_column(
+        BIGINT(unsigned=True),
+        ForeignKey("users.user_id", name="fk_session_documents_deleted_by", ondelete="RESTRICT", onupdate="CASCADE"),
+    )
+    created_at: Mapped[object] = mapped_column(DATETIME6, nullable=False, server_default=TS_DEFAULT, insert_default=utcnow)

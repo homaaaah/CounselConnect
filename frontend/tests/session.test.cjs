@@ -39,6 +39,7 @@ const failure = (status) => json({ error: { code: "TEST_ERROR", message: "Test e
 
 function environment(t, initialHash = "#home") {
   const events = new EventTarget();
+  const docEvents = new EventTarget();
   let hash = initialHash;
   const location = { reload: t.mock.fn() };
   Object.defineProperty(location, "hash", {
@@ -47,9 +48,16 @@ function environment(t, initialHash = "#home") {
   });
   global.window = { location, open: t.mock.fn(),
     addEventListener: events.addEventListener.bind(events),
-    removeEventListener: events.removeEventListener.bind(events) };
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events) };
+  global.document = { visibilityState: "visible",
+    getElementById: () => null,
+    querySelector: () => null,
+    addEventListener: docEvents.addEventListener.bind(docEvents),
+    removeEventListener: docEvents.removeEventListener.bind(docEvents),
+    dispatchEvent: docEvents.dispatchEvent.bind(docEvents) };
   setCsrfToken(null);
-  t.after(() => { setCsrfToken(null); });
+  t.after(() => { setCsrfToken(null); delete global.document; });
 }
 
 function fakeApi(t, recover = () => json(auth), login = auth) {
@@ -224,6 +232,55 @@ test("a late unauthenticated response cannot erase a newer login token", async (
   resolve(failure(401));
   await pending;
   assert.equal(getCsrfToken(), auth.csrf_token);
+});
+
+test("regaining focus refreshes the signed-in user without the restore gate", async (t) => {
+  environment(t, "#home");
+  let firstName = "Cora";
+  const calls = fakeApi(t, () => json({ ...auth, user: { ...auth.user, first_name: firstName } }));
+  const root = await mount(t);
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Cora"));
+
+  firstName = "Marisol";
+  const csrfCalls = () => calls.filter((call) => call.path.endsWith("/auth/csrf")).length;
+  const before = csrfCalls();
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Marisol"));
+
+  assert.equal(csrfCalls(), before + 1, "exactly one background probe");
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Restoring your session/);
+  assert.equal(getCsrfToken(), auth.csrf_token, "the CSRF token is unchanged");
+});
+
+test("background refresh is not user activity and never surfaces errors", async (t) => {
+  environment(t, "#home");
+  let fail = false;
+  const calls = fakeApi(t, () => (fail ? failure(500) : json(auth)));
+  const root = await mount(t);
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Cora"));
+
+  fail = true;
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  const probe = calls.find((call) => call.path.endsWith("/auth/csrf") && call.headers["X-Background-Refresh"] === "1");
+  assert.ok(probe, "the probe is marked as a background refresh");
+  assert.match(JSON.stringify(root.toJSON()), /Cora/, "a failed probe keeps the user signed in");
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Test error/, "no error toast for a silent probe");
+});
+
+test("anonymous visitors do not probe the session on focus", async (t) => {
+  environment(t, "#home");
+  const calls = fakeApi(t, () => json(null));
+  const root = await mount(t);
+  await waitFor(() => !JSON.stringify(root.toJSON()).includes("Restoring your session"));
+
+  const csrfCalls = () => calls.filter((call) => call.path.endsWith("/auth/csrf")).length;
+  const before = csrfCalls();
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  assert.equal(csrfCalls(), before, "no focus probe without a session");
 });
 
 test("non-envelope error bodies still throw a safe ApiError", async (t) => {

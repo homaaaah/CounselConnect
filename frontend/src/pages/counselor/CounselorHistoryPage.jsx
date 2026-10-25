@@ -30,6 +30,7 @@ function RecordCard({ appointment: a, state, onReschedule }) {
     {a.rejection_note && <p className="mt-2 text-sm text-slate-600">Counselor note: {a.rejection_note}</p>}
     {a.status === "CONFIRMED" && <p className="mt-2 text-sm text-slate-600">A completed session is marked here; report contents are not part of the frontend records view.</p>}
     <div className="mt-4 flex flex-wrap gap-2">
+      {["CONFIRMED", "COMPLETED"].includes(a.status) && <a className={secondaryClass} href={"#session-record/" + a.appointment_id}>Session record</a>}
       {canCancel && <button className={secondaryClass} disabled={state.busy} onClick={() => setCancelling(!cancelling)}>Cancel appointment</button>}
       {canReschedule && <button className={secondaryClass} disabled={state.busy} onClick={() => onReschedule(a.appointment_id)}>Reschedule</button>}
       {canChangeMode && <button className={secondaryClass} disabled={state.busy} onClick={() => void action("change-mode", { appointment_mode: a.appointment_mode === "ONLINE" ? "FACE_TO_FACE" : "ONLINE" })}>Change to {a.appointment_mode === "ONLINE" ? "face-to-face" : "online"}</button>}

@@ -1,7 +1,12 @@
 """Atomic scheduling workflow from Flowchart V1, page 4."""
 
+import hashlib
+import io
+import logging
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends
@@ -18,14 +23,21 @@ from app.modules.appointments.models import (
     AvailabilitySlot,
     CounselorAvailabilityBlock,
     CounselorWeeklySchedule,
+    SessionDocument,
+    SessionRecord,
 )
 from app.modules.appointments.repository import AppointmentsRepository
 from app.modules.appointments.schemas import (
     AppointmentResponse,
     AppointmentSessionResponse,
     AvailabilitySlotResponse,
+    SessionDocumentResponse,
+    SessionRecordResponse,
+    SessionRecordUpdateRequest,
     WeeklyScheduleCreateRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def utcnow():
@@ -839,6 +851,28 @@ class AppointmentsService(BaseService[Appointment]):
             )
         return appointment
 
+    def _close_appointment_conversation(self, appointment, reason):
+        if appointment.conversation_id is None:
+            return
+        from app.modules.messaging.service import MessagingService
+
+        MessagingService(self.repository.session).close_for_appointment(
+            appointment, reason
+        )
+
+    def _complete_appointment(self, actor, appointment, slot):
+        """Shared completion side effects: close chat, release slot, audit."""
+        self._close_appointment_conversation(appointment, "COUNSELOR_OUTCOME")
+        slot.status = "AVAILABLE"
+        appointment.status = "COMPLETED"
+        self.repository.session.flush()
+        self.audit.record(
+            actor.user_id,
+            "appointment_completed",
+            "appointment",
+            appointment.appointment_id,
+        )
+
     def transition(self, actor, appointment_id, action, rejection_note=None):
         self.authorize(
             actor, ("STUDENT", "COUNSELOR") if action == "cancel" else ("COUNSELOR",)
@@ -874,23 +908,27 @@ class AppointmentsService(BaseService[Appointment]):
                 "SESSION_NOT_STARTED",
                 "Wait until the scheduled start to record an outcome.",
             )
-        if target != "CONFIRMED":
-            if appointment.conversation_id is not None:
-                from app.modules.messaging.service import MessagingService
-
-                reason = "APPOINTMENT_CANCELLED" if action == "cancel" else "COUNSELOR_OUTCOME"
-                MessagingService(self.repository.session).close_for_appointment(appointment, reason)
-            slot.status = "AVAILABLE"
-        appointment.status = target
-        if action == "reject":
-            appointment.rejection_note = rejection_note
-        self.repository.session.flush()
-        self.audit.record(
-            actor.user_id,
-            "appointment_" + target.lower(),
-            "appointment",
-            appointment.appointment_id,
-        )
+        if action == "complete":
+            self._complete_appointment(actor, appointment, slot)
+        else:
+            if target != "CONFIRMED":
+                reason = (
+                    "APPOINTMENT_CANCELLED"
+                    if action == "cancel"
+                    else "COUNSELOR_OUTCOME"
+                )
+                self._close_appointment_conversation(appointment, reason)
+                slot.status = "AVAILABLE"
+            appointment.status = target
+            if action == "reject":
+                appointment.rejection_note = rejection_note
+            self.repository.session.flush()
+            self.audit.record(
+                actor.user_id,
+                "appointment_" + target.lower(),
+                "appointment",
+                appointment.appointment_id,
+            )
         return self.appointment_response(appointment, actor)
 
     def reschedule(self, actor, appointment_id, data):
@@ -1018,6 +1056,352 @@ class AppointmentsService(BaseService[Appointment]):
             appointment.appointment_id,
         )
         return self.appointment_response(appointment, actor)
+
+    # ------------------------------------------------ session records/files
+
+    RECORD_FIELDS = ("presenting_concern", "session_summary", "intervention", "plan")
+    RECORD_WRITABLE_STATUSES = ("CONFIRMED", "COMPLETED")
+    SESSION_FILE_TYPES = {
+        ".pdf": ("application/pdf", "pdf"),
+        ".jpg": ("image/jpeg", "jpg"),
+        ".jpeg": ("image/jpeg", "jpg"),
+        ".png": ("image/png", "png"),
+    }
+
+    def _record_writable(self, appointment) -> bool:
+        return appointment.status in self.RECORD_WRITABLE_STATUSES
+
+    def _finalize_record(self, actor, record):
+        record.status = "FINAL"
+        record.finalized_at = utcnow()
+        self.audit.record(
+            actor.user_id, "session_record_finalized", "session_record", record.record_id
+        )
+
+    def _record_response(self, actor, appointment, record):
+        counselor = actor.role_code == "COUNSELOR"
+        if not counselor and (
+            record is None
+            or record.status != "FINAL"
+            or appointment.status != "COMPLETED"
+        ):
+            raise AppError(
+                "RECORD_NOT_FOUND",
+                "No final session record is available.",
+                status_code=404,
+            )
+        can_edit = (
+            counselor
+            and self._record_writable(appointment)
+            and (record is None or record.status == "DRAFT")
+        )
+        values = {
+            field: getattr(record, field, None)
+            for field in ("notepad", *self.RECORD_FIELDS, "follow_up_on")
+        }
+        if not counselor:
+            values["notepad"] = None
+        return SessionRecordResponse(
+            appointment_id=appointment.appointment_id,
+            record_id=record.record_id if record is not None else None,
+            status=record.status if record is not None else "DRAFT",
+            finalized_at=record.finalized_at if record is not None else None,
+            updated_at=record.updated_at if record is not None else None,
+            can_edit=can_edit,
+            can_finalize=can_edit,
+            can_reopen=bool(
+                counselor
+                and record is not None
+                and record.status == "FINAL"
+                and appointment.status in ("CONFIRMED", "COMPLETED")
+            ),
+            **values,
+        )
+
+    def get_session_record(self, actor, appointment_id):
+        self.authorize(actor)
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        return self._record_response(
+            actor, appointment, self.repository.session_record(appointment_id)
+        )
+
+    def save_session_record(self, actor, appointment_id, data: SessionRecordUpdateRequest):
+        self.authorize(actor, ("COUNSELOR",))
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        if not self._record_writable(appointment):
+            raise AppError(
+                "RECORD_NOT_EDITABLE",
+                "The record can be edited only for confirmed or completed sessions.",
+                status_code=409,
+            )
+        record = self.repository.session_record(appointment_id, lock=True)
+        if record is not None and record.status == "FINAL":
+            raise AppError(
+                "RECORD_FINALIZED", "The finalized record is read-only.", status_code=409
+            )
+        if record is None:
+            record = SessionRecord(
+                appointment_id=appointment.appointment_id,
+                counselor_user_id=actor.user_id,
+            )
+            self.repository.add(record)
+        for field in ("notepad", *self.RECORD_FIELDS, "follow_up_on"):
+            setattr(record, field, getattr(data, field))
+        self.repository.session.flush()
+        return self._record_response(actor, appointment, record)
+
+    def finalize_session_record(self, actor, appointment_id):
+        self.authorize(actor, ("COUNSELOR",))
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        if not self._record_writable(appointment):
+            raise AppError(
+                "RECORD_NOT_EDITABLE",
+                "The record can be edited only for confirmed or completed sessions.",
+                status_code=409,
+            )
+        record = self.repository.session_record(appointment_id, lock=True)
+        if record is None:
+            raise AppError(
+                "RECORD_NOT_SAVED", "Save the record before finalizing it.", status_code=409
+            )
+        if record.status == "FINAL":
+            raise AppError("RECORD_ALREADY_FINAL", "The record is already finalized.", status_code=409)
+        missing = [field for field in self.RECORD_FIELDS if not (getattr(record, field) or "").strip()]
+        if missing:
+            raise AppError(
+                "RECORD_INCOMPLETE",
+                "Complete every assessment field before finalizing.",
+                details={"fields": missing},
+                status_code=409,
+            )
+        self._finalize_record(actor, record)
+        self.repository.session.flush()
+        return self._record_response(actor, appointment, record)
+
+    def mark_session_done(self, actor, appointment_id):
+        """Finalize the assessment (if needed) and complete the appointment atomically."""
+        self.authorize(actor, ("COUNSELOR",))
+        appointment = self._locked_owned(actor, appointment_id)
+        if appointment.status != "CONFIRMED":
+            raise AppError(
+                "INVALID_APPOINTMENT_TRANSITION",
+                "This action is not available for the current appointment status.",
+            )
+        slot = self.repository.find_slot(appointment.availability_slot_id, lock=True)
+        if slot.starts_at > utcnow():
+            raise AppError(
+                "SESSION_NOT_STARTED",
+                "Wait until the scheduled start to record an outcome.",
+            )
+        record = self.repository.session_record(appointment_id, lock=True)
+        if record is None:
+            raise AppError(
+                "RECORD_NOT_SAVED",
+                "Open the session record and complete the assessment before marking the session done.",
+                status_code=409,
+            )
+        if record.status == "DRAFT":
+            missing = [
+                field
+                for field in self.RECORD_FIELDS
+                if not (getattr(record, field) or "").strip()
+            ]
+            if missing:
+                raise AppError(
+                    "RECORD_INCOMPLETE",
+                    "Complete every assessment field before marking the session done.",
+                    details={"fields": missing},
+                    status_code=409,
+                )
+            self._finalize_record(actor, record)
+        self._complete_appointment(actor, appointment, slot)
+        return appointment
+
+    def reopen_session_record(self, actor, appointment_id):
+        self.authorize(actor, ("COUNSELOR",))
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        record = self.repository.session_record(appointment_id, lock=True)
+        if (
+            record is None
+            or record.status != "FINAL"
+            or appointment.status not in ("CONFIRMED", "COMPLETED")
+        ):
+            raise AppError(
+                "RECORD_NOT_REOPENABLE",
+                "Only a finalized record for a confirmed or completed session can be reopened.",
+                status_code=409,
+            )
+        record.status = "DRAFT"
+        record.finalized_at = None
+        self.audit.record(
+            actor.user_id, "session_record_reopened", "session_record", record.record_id
+        )
+        self.repository.session.flush()
+        return self._record_response(actor, appointment, record)
+
+    def _validate_session_file(self, content: bytes, filename: str) -> tuple[str, str]:
+        suffix = Path(filename or "").suffix.lower()
+        if suffix not in self.SESSION_FILE_TYPES:
+            raise AppError(
+                "SESSION_FILE_TYPE_INVALID",
+                "Upload a PDF, JPEG, or PNG file.",
+                status_code=422,
+            )
+        mime, ext = self.SESSION_FILE_TYPES[suffix]
+        if not content:
+            raise AppError("SESSION_FILE_EMPTY", "The selected file is empty.", status_code=422)
+        max_bytes = get_settings().session_document_max_mb * 1024 * 1024
+        if len(content) > max_bytes:
+            raise AppError(
+                "SESSION_FILE_TOO_LARGE",
+                f"Files must be at most {get_settings().session_document_max_mb} MB.",
+                status_code=422,
+            )
+        if mime == "application/pdf":
+            if not content.startswith(b"%PDF-") or b"%%EOF" not in content[-1024:]:
+                raise AppError(
+                    "SESSION_FILE_INVALID", "The file is not a valid PDF.", status_code=422
+                )
+        else:
+            try:
+                from PIL import Image
+
+                with Image.open(io.BytesIO(content)) as image:
+                    image.verify()
+            except Exception:
+                raise AppError(
+                    "SESSION_FILE_INVALID", "The file is not a valid image.", status_code=422
+                ) from None
+        return mime, ext
+
+    def _session_storage_path(self, storage_key: str) -> Path:
+        root = Path(get_settings().session_document_storage_root).resolve()
+        target = (root / storage_key).resolve()
+        if not target.is_relative_to(root) or target == root:
+            raise OSError("Invalid private storage key")
+        return target
+
+    def _store_session_bytes(self, content: bytes, ext: str) -> str:
+        # ponytail: no crash-recovery marker; an unreferenced file after a failed
+        # commit is harmless and never served. Add a sweep job if orphans matter.
+        key = f"session/{uuid.uuid4().hex}.{ext}"
+        target = self._session_storage_path(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        return key
+
+    def _delete_session_bytes(self, storage_key: str) -> bool:
+        try:
+            self._session_storage_path(storage_key).unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False
+
+    def _document_response(self, actor, document, uploader_name):
+        return SessionDocumentResponse(
+            document_id=document.document_id,
+            appointment_id=document.appointment_id,
+            uploader_user_id=document.uploader_user_id,
+            uploader_name=uploader_name,
+            original_filename=document.original_filename,
+            mime_type=document.mime_type,
+            size_bytes=document.size_bytes,
+            created_at=document.created_at,
+            can_delete=actor.role_code == "COUNSELOR"
+            or document.uploader_user_id == actor.user_id,
+        )
+
+    def _assert_document_access(self, actor, appointment):
+        if actor.role_code == "STUDENT" and appointment.status != "COMPLETED":
+            raise AppError(
+                "DOCUMENT_ACCESS_CLOSED",
+                "Session files open after the Counselor marks the session completed.",
+                status_code=409,
+            )
+
+    def list_session_documents(self, actor, appointment_id):
+        self.authorize(actor)
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        self._assert_document_access(actor, appointment)
+        return [
+            self._document_response(
+                actor, document, f"{first_name} {last_name}".strip()
+            )
+            for document, first_name, last_name in self.repository.session_documents(appointment_id)
+        ]
+
+    def upload_session_document(self, actor, appointment_id, content, filename):
+        self.authorize(actor)
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        self._assert_document_access(actor, appointment)
+        if not self._record_writable(appointment):
+            raise AppError(
+                "DOCUMENT_UPLOAD_CLOSED",
+                "Files can be added only for confirmed or completed sessions.",
+                status_code=409,
+            )
+        mime, ext = self._validate_session_file(content, filename)
+        safe_name = (Path(filename or "").name or f"session-file.{ext}").strip()[:255]
+        storage_key = self._store_session_bytes(content, ext)
+        document = SessionDocument(
+            appointment_id=appointment.appointment_id,
+            uploader_user_id=actor.user_id,
+            original_filename=safe_name,
+            mime_type=mime,
+            size_bytes=len(content),
+            sha256=hashlib.sha256(content).digest(),
+            storage_key=storage_key,
+        )
+        self.repository.add(document)
+        try:
+            self.repository.session.flush()
+            self.audit.record(
+                actor.user_id, "session_document_uploaded", "session_document", document.document_id
+            )
+            self.repository.session.commit()
+        except Exception:
+            self.repository.session.rollback()
+            self._delete_session_bytes(storage_key)
+            raise
+        return self._document_response(
+            actor, document, f"{actor.first_name} {actor.last_name}".strip()
+        )
+
+    def download_session_document(self, actor, appointment_id, document_id):
+        self.authorize(actor)
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        self._assert_document_access(actor, appointment)
+        document = self.repository.session_document(appointment_id, document_id)
+        if document is None or document.deleted_at is not None:
+            raise AppError("DOCUMENT_NOT_FOUND", "File not found.", status_code=404)
+        try:
+            content = self._session_storage_path(document.storage_key).read_bytes()
+        except OSError:
+            raise AppError("DOCUMENT_NOT_FOUND", "File not found.", status_code=404) from None
+        self.audit.record(
+            actor.user_id, "session_document_downloaded", "session_document", document.document_id
+        )
+        return content, document.mime_type, document.original_filename
+
+    def delete_session_document(self, actor, appointment_id, document_id):
+        self.authorize(actor)
+        appointment = self._owned(actor, self.repository.get(appointment_id))
+        self._assert_document_access(actor, appointment)
+        document = self.repository.session_document(appointment_id, document_id, lock=True)
+        if document is None or document.deleted_at is not None:
+            raise AppError("DOCUMENT_NOT_FOUND", "File not found.", status_code=404)
+        if actor.role_code != "COUNSELOR" and document.uploader_user_id != actor.user_id:
+            raise AppError(
+                "DOCUMENT_DELETE_FORBIDDEN", "You cannot delete this file.", status_code=403
+            )
+        document.deleted_at = utcnow()
+        document.deleted_by_user_id = actor.user_id
+        self.audit.record(
+            actor.user_id, "session_document_deleted", "session_document", document.document_id
+        )
+        self.repository.session.commit()
+        if not self._delete_session_bytes(document.storage_key):
+            logger.warning("session_document_cleanup_retry_required")
 
 
 def get_appointments_service(session: Session = Depends(get_session)):

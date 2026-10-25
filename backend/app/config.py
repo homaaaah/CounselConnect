@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # --- COR upload (PDF-only limit; policy ratified by ADR-024) ---
     cor_max_mb: int = 10
 
+    # --- Appointment-scoped session documents (private clinical files) ---
+    session_document_storage_root: str = "./var/session-documents"
+    session_document_max_mb: int = Field(default=10, ge=1, le=50)
+
     # --- Automated COR screening (ADR-029) ---
     # When disabled the registration-with-COR endpoint fails closed with
     # REGISTRATION_DISABLED; it never auto-activates an account.

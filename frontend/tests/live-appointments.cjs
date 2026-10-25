@@ -11,6 +11,7 @@ const CounselorSchedulePage = require("../src/pages/counselor/CounselorScheduleP
 const CounselorHistoryPage = require("../src/pages/counselor/CounselorHistoryPage.jsx").default;
 const HomePage = require("../src/pages/HomePage.jsx").default;
 const { request, setCsrfToken } = require("../src/services/apiClient");
+const { ToastProvider } = require("../src/components/feedback");
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
 assert.ok(base && new URL(base).hostname === "127.0.0.1", "A disposable loopback API is required");
 const nativeFetch = global.fetch;
@@ -39,7 +40,12 @@ async function waitFor(check) {
   }
   throw new Error("Expected scheduling UI state was not reached: " + JSON.stringify(root?.toJSON()));
 }
-const buttonText = (b) => b.children.filter(c => typeof c === "string").join("").trim();
+const buttonText = (b) => {
+  const collect = value => typeof value === "string" ? value
+    : Array.isArray(value) ? value.map(collect).join("")
+      : value && typeof value === "object" ? collect(value.children) : "";
+  return collect(b.children).trim();
+};
 const allButtons = () => root.root.findAllByType("button");
 const button = (label) => allButtons()
   .find(b => buttonText(b) === label || buttonText(b).includes(label));
@@ -54,7 +60,7 @@ async function signIn(identifier, Component, ready) {
   setCsrfToken(null);
   const auth = await request("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password: "synthetic-live-pass" }) });
   setCsrfToken(auth.csrf_token);
-  await act(async () => { root = create(React.createElement(Component, { user: auth.user })); });
+  await act(async () => { root = create(React.createElement(ToastProvider, null, React.createElement(Component, { user: auth.user }))); });
   await waitFor(ready);
   return auth;
 }
@@ -93,23 +99,33 @@ async function main() {
 
     // The student books a materialized slot face-to-face through the home modal.
     await signIn(process.env.COUNSELCONNECT_TEST_STUDENT_NUMBER, HomePage,
-      () => Boolean(exactButton("Schedule")));
-    await act(async () => exactButton("Schedule").props.onClick());
+      () => Boolean(button("Start Booking")));
+    await act(async () => button("Start Booking").props.onClick());
+    await waitFor(() => allButtons().some(b =>
+      b.findAllByType("span").some(span => span.children.join("") === "Cora Live")));
+    await act(async () => allButtons()
+      .find(b => b.findAllByType("span").some(span => span.children.join("") === "Cora Live"))
+      .props.onClick());
     await pickBookableDay();
     const timeButton = async () => {
       for (let i = 0; i < 250; i++) {
-        const time = allButtons().find(b => /^\d{2}:\d{2}$/.test(buttonText(b)));
+        const time = allButtons().find(b => /^\d{1,2}:\d{2}\s?(AM|PM)\b/.test(buttonText(b)));
         if (time) return time;
         await act(async () => new Promise(resolve => setTimeout(resolve, 20)));
       }
       throw new Error("No time buttons rendered for the selected day");
     };
     await act(async () => (await timeButton()).props.onClick());
-    await waitFor(() => Boolean(formFor("Confirm booking")));
-    await act(async () => formFor("Confirm booking").findByType("select")
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    await waitFor(() => Boolean(button("Continue")));
+    await act(async () => button("Continue").props.onClick());
+    await waitFor(() => Boolean(root.root.findAllByType("select").length));
+    await act(async () => root.root.findByType("select")
       .props.onChange({ target: { value: "FACE_TO_FACE" } }));
-    await act(async () => formFor("Confirm booking").props.onSubmit({ preventDefault() {} }));
-    await waitFor(() => JSON.stringify(root.toJSON()).includes("Request submitted. Awaiting counselor review."));
+    await act(async () => button("Review appointment").props.onClick());
+    await waitFor(() => Boolean(formFor("Submit request")));
+    await act(async () => formFor("Submit request").props.onSubmit({ preventDefault() {} }));
+    await waitFor(() => JSON.stringify(root.toJSON()).includes("Awaiting counselor review."));
 
     // Counselor reviews the pending request on the Appointment Requests page...
     await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorAppointmentsPage,

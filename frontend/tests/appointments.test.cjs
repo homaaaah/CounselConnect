@@ -341,6 +341,13 @@ test("counselor history search filters records by student name", async t => {
   assert.ok(!rendered.includes("Ana Test"), "non-matching rows are filtered out");
 });
 
+test("Counselor history keeps the status-only Mark completed action", async t => {
+  setup(t, { user: counselor, appointments: [appointment] });
+  const root = await mount(t, React.createElement(CounselorHistoryPage, { user: counselor }));
+  assert.ok(button(root, "Mark completed"), "History completion stays independent of record finalization");
+  assert.ok(button(root, "Mark no-show"));
+});
+
 test("calendar failure does not prevent appointment records from loading", async t => {
   const calls = setup(t, { appointments: [appointment], calendarFailure: true });
   const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
@@ -415,6 +422,17 @@ test("counselor edit mode seeds the form and replaces a weekly schedule", async 
     slot_duration_minutes: 30, delivery_mode: "BOTH",
   });
   assert.equal(calls.some(c => c.method === "DELETE" && c.path.endsWith("/weekly-schedules/3")), false);
+});
+
+test("weekly availability rejects an end time at or before the start", async t => {
+  setup(t, { user: counselor });
+  const root = await mount(t, React.createElement(CounselorSchedulePage, { user: counselor }));
+  const campusSelect = root.root.findAllByType("select")[0];
+  await act(async () => campusSelect.props.onChange({ target: { value: "1" } }));
+  const endTime = root.root.findAllByProps({ type: "time" })[1];
+  await act(async () => endTime.props.onChange({ target: { value: "08:00" } }));
+  assert.ok(JSON.stringify(root.toJSON()).includes("The end time must be after the start time."));
+  assert.equal(button(root, "Add availability").props.disabled, true);
 });
 
 test("counselor accepts a pending request from the Appointment Requests page", async t => {

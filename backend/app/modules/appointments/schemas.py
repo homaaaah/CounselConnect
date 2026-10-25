@@ -263,3 +263,44 @@ class AvailabilityBlockResponse(UTCResponse):
     reason: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class SessionRecordUpdateRequest(BaseModel):
+    """Full replacement of the editable record fields."""
+
+    model_config = ConfigDict(extra="forbid")
+    notepad: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+    presenting_concern: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+    session_summary: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+    intervention: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+    plan: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+    follow_up_on: date | None = None
+
+
+class SessionRecordResponse(UTCResponse):
+    appointment_id: int
+    record_id: int | None
+    status: Literal["DRAFT", "FINAL"]
+    notepad: str | None = None
+    presenting_concern: str | None = None
+    session_summary: str | None = None
+    intervention: str | None = None
+    plan: str | None = None
+    follow_up_on: date | None = None
+    finalized_at: datetime | None = None
+    updated_at: datetime | None = None
+    can_edit: bool
+    can_finalize: bool
+    can_reopen: bool
+
+
+class SessionDocumentResponse(UTCResponse):
+    document_id: int
+    appointment_id: int
+    uploader_user_id: int
+    uploader_name: str
+    original_filename: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime
+    can_delete: bool

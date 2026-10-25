@@ -20,7 +20,8 @@ function WeeklyScheduleEditor({ state }) {
   const [duration, setDuration] = useState("30");
   const [mode, setMode] = useState("ONLINE");
   const minutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  const wholeSlots = (Number(end.slice(0, 2)) * 60 + Number(end.slice(3, 5)) - minutes(start)) % Number(duration) === 0;
+  const periodValid = minutes(end) > minutes(start);
+  const wholeSlots = periodValid && (minutes(end) - minutes(start)) % Number(duration) === 0;
   const campus = state.campuses.find(c => String(c.campus_id) === campusId);
 
   const startEdit = (s) => {
@@ -85,7 +86,7 @@ function WeeklyScheduleEditor({ state }) {
       </select></label>
       <div className="sm:col-span-3">
         {mode !== "ONLINE" && campus && !campus.guidance_office_location && <p role="alert" className="text-sm text-amber-700">This campus has no Guidance Office location. Face-to-face availability needs one first.</p>}
-        {!wholeSlots && <p role="alert" className="text-sm text-amber-700">The time range must contain whole {duration}-minute slots.</p>}
+        {!wholeSlots && <p role="alert" className="text-sm text-amber-700">{periodValid ? `The time range must contain whole ${duration}-minute slots.` : "The end time must be after the start time."}</p>}
         {!editingId && 480 % Number(duration) !== 0 && <p className="text-sm text-slate-500">The 8:00 AM–4:00 PM weekday action needs a slot length that divides 8 hours (15, 20, 30, 60, 120, or 240 minutes).</p>}
         <div className="mt-3 flex flex-wrap gap-2">
           <button className={buttonClass} disabled={state.busy || !campusId || !wholeSlots}>

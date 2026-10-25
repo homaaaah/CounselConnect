@@ -5,17 +5,17 @@ import { useCounselorDashboard } from "../../features/counselor";
 /**
  * Counselor dashboard.
  *
- * Layout mirrors the approved design: a welcome banner with the day's summary,
- * four metric cards, today's appointment list, a weekly volume line chart, a
- * case-distribution donut, and an availability-update action.
+ * Layout: a welcome banner with the day's summary and four metric cards, then
+ * today's appointments beside the case-distribution donut, then the weekly
+ * volume line chart beside the availability-update action.
  *
- * No values are hard-coded. Everything is read from useCounselorDashboard;
- * widgets whose source does not exist yet render an empty state while keeping
- * their container visible, so they populate automatically once data is wired.
+ * The day summary and its counts come from the complete day returned by
+ * useCounselorDashboard; only the rendered rows are capped at five.
  */
 
 const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const CASE_COLORS = ["#1C6B1B", "#409e44", "#a7d7a8", "#cbd5e1"];
+const TODAY_LIMIT = 5;
 
 const STATUS_META = {
   COMPLETED: { label: "Completed", icon: "fa-circle-check", className: "bg-emerald-50 text-emerald-700" },
@@ -90,6 +90,8 @@ function WelcomeBanner({ user, today }) {
 }
 
 function TodayAppointments({ today }) {
+  const visible = today.items.slice(0, TODAY_LIMIT);
+  const hidden = today.items.length - visible.length;
   return <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6">
     <div className="flex items-center justify-between gap-3">
       <h2 className="text-base font-semibold text-slate-900">Today's appointments</h2>
@@ -100,22 +102,28 @@ function TodayAppointments({ today }) {
       ? <p role="status" className="mt-4 text-sm text-slate-500">Loading today's appointments…</p>
       : today.items.length === 0
         ? <div className="mt-4"><EmptyState text="No appointments scheduled for today." /></div>
-        : <ul className="mt-4 space-y-3">
-          {today.items.map((appointment) => <li key={appointment.appointment_id}
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-100 p-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-700">
-              {initials(appointment.student_name)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">{appointment.student_name ?? "—"}</p>
-              <p className="text-xs text-slate-500">{formatSchedule(appointment.starts_at)}</p>
-            </div>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-              {modeLabel(appointment.appointment_mode)}
-            </span>
-            <StatusBadge status={appointment.status} />
-          </li>)}
-        </ul>}
+        : <>
+          <ul className="mt-4 space-y-3">
+            {visible.map((appointment) => <li key={appointment.appointment_id}
+              className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-100 p-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-700">
+                {initials(appointment.student_name)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-900">{appointment.student_name ?? "—"}</p>
+                <p className="text-xs text-slate-500">{formatSchedule(appointment.starts_at)}</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {modeLabel(appointment.appointment_mode)}
+              </span>
+              <StatusBadge status={appointment.status} />
+            </li>)}
+          </ul>
+          {hidden > 0 && <p className="mt-4 text-sm text-slate-500">
+            {`Showing ${visible.length} of ${today.items.length} · `}
+            <a href="#history" className="font-semibold text-emerald-700 hover:underline">View all appointments</a>
+          </p>}
+        </>}
   </section>;
 }
 
@@ -133,23 +141,32 @@ function AvailabilityWidget() {
 }
 
 function WeeklyVolumeChart({ data }) {
-  if (!data || !Array.isArray(data.myCases) || data.myCases.length === 0) {
+  if (data?.loading) {
+    return <p role="status" className="text-sm text-slate-500">Loading weekly appointment volume…</p>;
+  }
+  if (data?.error) {
+    return <p role="alert" className="text-sm text-red-700">{data.error}</p>;
+  }
+  if (!data || !Array.isArray(data.myCases) || data.myCases.length !== WEEK_DAYS.length) {
     return <EmptyState text="No weekly appointment volume yet." />;
   }
   const width = 520, height = 200, pad = 28;
-  const series = [data.myCases, data.centerAverage].filter((values) => Array.isArray(values));
-  const max = Math.max(1, ...series.flat());
-  const stepX = (width - pad * 2) / Math.max(1, data.myCases.length - 1);
-  const toPoints = (values) => values
+  const max = Math.max(1, ...data.myCases);
+  const stepX = (width - pad * 2) / (WEEK_DAYS.length - 1);
+  const points = data.myCases
     .map((value, index) => `${pad + index * stepX},${height - pad - (value / max) * (height - pad * 2)}`)
     .join(" ");
-  return <svg viewBox={`0 0 ${width} ${height}`} className="h-48 w-full" role="img" aria-label="Weekly appointment volume">
-    {Array.isArray(data.centerAverage) && <polyline points={toPoints(data.centerAverage)} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="6 4" />}
-    <polyline points={toPoints(data.myCases)} fill="none" stroke="#1C6B1B" strokeWidth="2.5" />
-    {WEEK_DAYS.slice(0, data.myCases.length).map((day, index) => (
-      <text key={day} x={pad + index * stepX} y={height - 8} textAnchor="middle" fontSize="10" className="fill-slate-400">{day}</text>
-    ))}
-  </svg>;
+  return <>
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-48 w-full" role="img" aria-label="Weekly appointment volume">
+      <polyline points={points} fill="none" stroke="#1C6B1B" strokeWidth="2.5" />
+      {WEEK_DAYS.map((day, index) => (
+        <text key={day} x={pad + index * stepX} y={height - 8} textAnchor="middle" fontSize="10" className="fill-slate-400">{day}</text>
+      ))}
+    </svg>
+    <ul className="sr-only">
+      {WEEK_DAYS.map((day, index) => <li key={day}>{`${day}: ${data.myCases[index]}`}</li>)}
+    </ul>
+  </>;
 }
 
 function CaseDistributionChart({ segments }) {
@@ -214,20 +231,20 @@ export default function CounselorDashboard({ user }) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2"><TodayAppointments today={dash.today} /></div>
-        <div className="lg:col-span-1"><AvailabilityWidget /></div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6 lg:col-span-2">
-          <h2 className="text-base font-semibold text-slate-900">Weekly appointment volume</h2>
-          <p className="mt-1 text-sm text-slate-500">Your cases versus the center average.</p>
-          <div className="mt-4"><WeeklyVolumeChart data={dash.weeklyVolume} /></div>
-        </section>
         <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6 lg:col-span-1">
           <h2 className="text-base font-semibold text-slate-900">Case distribution</h2>
           <p className="mt-1 text-sm text-slate-500">Active cases by primary concern.</p>
           <div className="mt-4"><CaseDistributionChart segments={caseSegments} /></div>
         </section>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="rounded-2xl border border-[#E9EDF1] bg-white p-6 lg:col-span-2">
+          <h2 className="text-base font-semibold text-slate-900">Weekly appointment volume</h2>
+          <p className="mt-1 text-sm text-slate-500">Appointments per day this week (Philippine time).</p>
+          <div className="mt-4"><WeeklyVolumeChart data={dash.weeklyVolume} /></div>
+        </section>
+        <div className="lg:col-span-1"><AvailabilityWidget /></div>
       </div>
     </div>
   </main>;

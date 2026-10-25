@@ -80,7 +80,69 @@ On Windows PowerShell, `<` redirection is not supported — wrap step 1/3 in `cm
 cmd /c "mysql -u your_mysql_user -p counselconnect < ..\db\CounselConnect_Initial_Database_v4.1.sql"
 ```
 
-`dev_seed.sql` inserts the shared demo data (2 campuses, 1 department, 2 programs, hero text, 3 FAQs, 1 announcement, 3 emergency contacts, the dev Counselor and Superadmin). Without it the landing page looks empty and the registration form has no programs to pick.
+`dev_seed.sql` inserts the shared demo data (4 campuses, 1 department, 9 programs, hero text, 3 FAQs, 1 announcement, 3 emergency contacts, the dev Counselor and Superadmin). Without it the landing page looks empty and the registration form has no programs to pick.
+
+### Applying seed changes to an existing database
+
+#### Option A — targeted apply (keep existing data)
+
+`dev_seed.sql` is safe to re-run only for rows that have a unique key (campuses, departments, programs, the `landing_hero` CMS block). FAQ, announcement, and emergency-contact rows have no unique key, so importing the whole file again duplicates them. When only the academic lookups changed, apply just the campus/department/program block instead.
+
+That block is everything from `INSERT INTO campuses` through the programs `ON DUPLICATE KEY UPDATE` statement (currently lines 7–28; adjust if the file header changes). Paste it into MySQL Workbench/phpMyAdmin, or extract it from PowerShell:
+
+```powershell
+(Get-Content .\backend\dev_seed.sql)[6..27] | mysql -u your_mysql_user -p counselconnect
+```
+
+If `mysql` is not on `PATH`, replace it with the full client path, e.g. `& "C:\xampp_new\mysql\bin\mysql.exe"`.
+
+Then hide any placeholder rows left from older seeds. Deactivate rather than delete, because foreign keys are `RESTRICT` and existing student profiles or schedules may reference them:
+
+```sql
+UPDATE campuses SET is_active = 0
+WHERE campus_name IN ('Main Campus', 'Second Campus');
+
+UPDATE programs SET is_active = 0
+WHERE program_code IN ('BSIT-DEV', 'BSED-GEN');
+```
+
+Verify the result:
+
+```sql
+SELECT campus_id, campus_name, is_active FROM campuses ORDER BY campus_id;
+
+SELECT p.program_id, p.program_code, p.program_name, d.department_name
+FROM programs p JOIN departments d USING (department_id)
+ORDER BY p.program_code;
+```
+
+Expected: the four UCC campuses, `Department of Student Affairs`, and nine programs (BSIS, BSIT, BSEMC, BSCS, BSPSY, BSMATH, BAPOLSCI, BACOMM, BPA). No backend restart is needed — `/api/v1/accounts/campuses` and `/api/v1/accounts/programs` read the tables per request.
+
+Notes:
+
+- The upserts are no-ops on collision, so a program that already exists with the same `program_code` keeps its previous `program_name`.
+- COR screening matches a campus/program by case- and punctuation-insensitive exact or substring comparison (`cor_screening/service.py`, `_match_campus` and `_match_program`). Store the long official names; abbreviated COR text such as `UCC South` or `South Campus` falls back to manual selection.
+- If the program insert fails with a `NULL`/FK error, include the `Department of Student Affairs` insert from the same block first.
+
+#### Option B — full reset (destructive)
+
+Use this when the local database is disposable and you want exactly the canonical schema plus the current seed, with no leftover rows. It deletes local accounts, student profiles, messages, appointments, and COR records.
+
+From `backend/` (the paths below assume `alembic.ini` and `.env` are here):
+
+```powershell
+# 1) Drop the database (the schema file recreates it)
+mysql -u your_mysql_user -p -e "DROP DATABASE IF EXISTS counselconnect"
+
+# 2) Load the canonical v4.1 schema, then migrations
+cmd /c "mysql -u your_mysql_user -p < ..\db\CounselConnect_Initial_Database_v4.1.sql"
+alembic upgrade head
+
+# 3) Seed once
+cmd /c "mysql -u your_mysql_user -p counselconnect < dev_seed.sql"
+```
+
+PowerShell does not support `<` redirection, so keep the `cmd /c` wrapper for both imports. If `mysql` is not on `PATH`, use its full path inside the same commands. After this, re-run the verification SELECTs from Option A.
 
 ## 4. Start the backend
 
