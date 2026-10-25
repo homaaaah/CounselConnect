@@ -6,9 +6,12 @@ const assert = require("node:assert/strict");
 const React = require("react");
 const { create, act } = require("react-test-renderer");
 require("./register-app.cjs");
-const AppointmentsPage = require("../src/pages/AppointmentsPage.jsx").default;
+const CounselorAppointmentsPage = require("../src/pages/counselor/CounselorAppointmentsPage.jsx").default;
+const CounselorSchedulePage = require("../src/pages/counselor/CounselorSchedulePage.jsx").default;
+const CounselorHistoryPage = require("../src/pages/counselor/CounselorHistoryPage.jsx").default;
 const HomePage = require("../src/pages/HomePage.jsx").default;
 const { request, setCsrfToken } = require("../src/services/apiClient");
+const { ToastProvider } = require("../src/components/feedback");
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
 assert.ok(base && new URL(base).hostname === "127.0.0.1", "A disposable loopback API is required");
 const nativeFetch = global.fetch;
@@ -37,7 +40,12 @@ async function waitFor(check) {
   }
   throw new Error("Expected scheduling UI state was not reached: " + JSON.stringify(root?.toJSON()));
 }
-const buttonText = (b) => b.children.filter(c => typeof c === "string").join("").trim();
+const buttonText = (b) => {
+  const collect = value => typeof value === "string" ? value
+    : Array.isArray(value) ? value.map(collect).join("")
+      : value && typeof value === "object" ? collect(value.children) : "";
+  return collect(b.children).trim();
+};
 const allButtons = () => root.root.findAllByType("button");
 const button = (label) => allButtons()
   .find(b => buttonText(b) === label || buttonText(b).includes(label));
@@ -52,7 +60,7 @@ async function signIn(identifier, Component, ready) {
   setCsrfToken(null);
   const auth = await request("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password: "synthetic-live-pass" }) });
   setCsrfToken(auth.csrf_token);
-  await act(async () => { root = create(React.createElement(Component, { user: auth.user })); });
+  await act(async () => { root = create(React.createElement(ToastProvider, null, React.createElement(Component, { user: auth.user }))); });
   await waitFor(ready);
   return auth;
 }
@@ -74,9 +82,9 @@ async function pickBookableDay() {
 
 async function main() {
   try {
-    // Counselor saves a recurring weekly schedule through the real editor.
-    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, AppointmentsPage,
-      () => { const refresh = exactButton("Refresh records"); return Boolean(refresh) && !refresh.props.disabled; });
+    // Counselor saves a recurring weekly schedule through the real editor (Schedule page).
+    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorSchedulePage,
+      () => Boolean(formFor("Add availability")));
     await waitFor(() => Boolean(formFor("Add availability")));
     await act(async () => {
       const selects = formFor("Add availability").findAllByType("select");
@@ -91,53 +99,52 @@ async function main() {
 
     // The student books a materialized slot face-to-face through the home modal.
     await signIn(process.env.COUNSELCONNECT_TEST_STUDENT_NUMBER, HomePage,
-      () => Boolean(exactButton("Schedule")));
-    await act(async () => exactButton("Schedule").props.onClick());
+      () => Boolean(button("Start Booking")));
+    await act(async () => button("Start Booking").props.onClick());
+    await waitFor(() => allButtons().some(b =>
+      b.findAllByType("span").some(span => span.children.join("") === "Cora Live")));
+    await act(async () => allButtons()
+      .find(b => b.findAllByType("span").some(span => span.children.join("") === "Cora Live"))
+      .props.onClick());
     await pickBookableDay();
     const timeButton = async () => {
       for (let i = 0; i < 250; i++) {
-        const time = allButtons().find(b => /^\d{2}:\d{2}$/.test(buttonText(b)));
+        const time = allButtons().find(b => /^\d{1,2}:\d{2}\s?(AM|PM)\b/.test(buttonText(b)));
         if (time) return time;
         await act(async () => new Promise(resolve => setTimeout(resolve, 20)));
       }
       throw new Error("No time buttons rendered for the selected day");
     };
     await act(async () => (await timeButton()).props.onClick());
-    await waitFor(() => Boolean(formFor("Confirm booking")));
-    await act(async () => formFor("Confirm booking").findByType("select")
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    await waitFor(() => Boolean(button("Continue")));
+    await act(async () => button("Continue").props.onClick());
+    await waitFor(() => Boolean(root.root.findAllByType("select").length));
+    await act(async () => root.root.findByType("select")
       .props.onChange({ target: { value: "FACE_TO_FACE" } }));
-    await act(async () => formFor("Confirm booking").props.onSubmit({ preventDefault() {} }));
-    await waitFor(() => JSON.stringify(root.toJSON()).includes("Request submitted. Awaiting counselor review."));
+    await act(async () => button("Review appointment").props.onClick());
+    await waitFor(() => Boolean(formFor("Submit request")));
+    await act(async () => formFor("Submit request").props.onSubmit({ preventDefault() {} }));
+    await waitFor(() => JSON.stringify(root.toJSON()).includes("Awaiting counselor review."));
 
-    // Counselor reviews the pending request, confirms, then cancels; the
-    // released slot becomes available again.
-    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, AppointmentsPage,
-      () => { const refresh = exactButton("Refresh records"); return Boolean(refresh) && !refresh.props.disabled; });
-    await act(async () => exactButton("Pending").props.onClick());
-    await waitFor(() => Boolean(exactButton("Confirm")));
-    await act(async () => exactButton("Confirm").props.onClick());
+    // Counselor reviews the pending request on the Appointment Requests page...
+    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorAppointmentsPage,
+      () => Boolean(exactButton("Accept Appointment")));
+    await act(async () => exactButton("Accept Appointment").props.onClick());
     // The pending queue empties once the confirmation and refresh finish.
-    // Gating on the enabled Refresh button proves the confirm-mutate's
-    // finally released the mutating guard; clicking through a still-busy
-    // state would silently drop the later cancel (direct onClick bypasses
-    // the buttons' disabled attribute).
-    await waitFor(() => {
-      const refresh = exactButton("Refresh records");
-      return Boolean(refresh) && !refresh.props.disabled
-        && !exactButton("Confirm") && !exactButton("Reject");
-    });
-    await act(async () => exactButton("Confirmed").props.onClick());
-    await waitFor(() => Boolean(exactButton("Reschedule")));
+    // Gating on the button disappearing proves the confirm-mutate's finally
+    // released the mutating guard; clicking through a still-busy state would
+    // silently drop the later cancel (direct onClick bypasses disabled).
+    await waitFor(() => !exactButton("Accept Appointment") && !exactButton("Reject"));
+
+    // ...then cancels the confirmed record from the History page; the
+    // released slot becomes available again.
+    await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorHistoryPage,
+      () => Boolean(exactButton("Reschedule")));
     await act(async () => exactButton("Cancel appointment").props.onClick());
     await waitFor(() => Boolean(exactButton("Confirm cancellation")));
     await act(async () => exactButton("Confirm cancellation").props.onClick());
-    // The confirmed queue empties after the cancellation and refresh finish
-    // (same busy-guard gating as the confirm step above).
-    await waitFor(() => {
-      const refresh = exactButton("Refresh records");
-      return Boolean(refresh) && !refresh.props.disabled
-        && !exactButton("Cancel appointment") && !exactButton("Reschedule");
-    });
+    await waitFor(() => !exactButton("Cancel appointment") && !exactButton("Reschedule"));
 
     // Verify the released reservation through the real API client.
     const cancelled = await request("/appointments?status=CANCELLED");

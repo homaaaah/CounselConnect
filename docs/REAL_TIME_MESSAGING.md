@@ -10,7 +10,7 @@ Conversation types remain GENERAL, APPOINTMENT, and SOS. A conversation cannot b
 
 - Confirmation does not create a conversation.
 - The launcher/lobby appears 30 minutes before a confirmed ONLINE appointment.
-- At or after start, the first explicit authorized join locks/revalidates the appointment and lazily creates/reuses its single APPOINTMENT conversation.
+- At or after start, the scheduled session page submits the participant's authorized join automatically; the request is still required, and the server revalidates it, locks the appointment, and lazily creates/reuses its single APPOINTMENT conversation. The automatic attempt does not renew idle activity; a failed automatic join shows the error and a manual retry (which is normal user activity).
 - REST is the durable source for ordered messages/history. FastAPI WebSockets deliver committed events; reconnect catches up through REST.
 - The safety deadline is appointment end plus the configured 15-minute grace period.
 - Timeout closes chat without inventing COMPLETED or NO_SHOW; the assigned Counselor records the outcome.
@@ -18,7 +18,7 @@ Conversation types remain GENERAL, APPOINTMENT, and SOS. A conversation cannot b
 
 ## Audio/video relationship
 
-Planned WebRTC audio/video uses the same appointment participants/window but is a separate media/signaling domain described in AUDIO_VIDEO_CALLS.md. Text messages remain durable. Call media, recordings, transcripts, and automatic summaries are never message content or persistent records.
+WebRTC audio/video uses the same appointment participants/window but is a separate media/signaling domain described in AUDIO_VIDEO_CALLS.md (ADR-034). Text messages remain durable. Call media, recordings, transcripts, automatic summaries, SDP/ICE payloads, and call history are never message content or persistent records. Starting or ending a call does not create/join the chat or change the appointment outcome.
 
 ## Counseling-record relationship
 
@@ -34,6 +34,6 @@ Optional AI-assisted observation is consented/session-only and separate from mes
 
 ## Required tests
 
-Participant and multi-Counselor isolation; Superadmin/legacy-role denial; purpose validation; pre-window/unconfirmed/cancelled/face-to-face denial; participant mismatch; unique appointment link; send/retry/idempotency; reconnect/catch-up; timeout/outcome separation; message purge; session expiry; no heartbeat renewal; no clinical notes/media/AI observations in messages.
+Participant and multi-Counselor isolation; Superadmin/legacy-role denial; purpose validation; pre-window/unconfirmed/cancelled/face-to-face denial; participant mismatch; unique appointment link; send/retry/idempotency; reconnect/catch-up; timeout/outcome separation; message purge; session expiry; no heartbeat renewal; no clinical notes/media/AI observations in messages; call signaling isolated from chat persistence.
 
 The process-local WebSocket registry supports one backend process in v1. Messages are text-only with a configurable 4,000-character default. Attachments, delivery/read receipts, and multi-process fan-out are not implemented.

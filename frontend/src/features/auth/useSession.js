@@ -16,6 +16,7 @@ export function useSession() {
     error: null,
   });
   const generation = useRef(0);
+  const refreshing = useRef(false);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -51,6 +52,12 @@ export function useSession() {
     try {
       const auth = await request("/auth/csrf");
       if (generation.current !== current) return;
+      if (!auth) {
+        // No live session (anonymous startup probe): stay signed out.
+        setCsrfToken(null);
+        setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true, error: null });
+        return;
+      }
       accept(auth);
     } catch (err) {
       if (generation.current !== current) return;
@@ -81,5 +88,33 @@ export function useSession() {
     return true;
   }, [accept]);
 
-  return { ...state, accept, restore, logout, continueSession };
+  // Silent revalidation used when the window regains focus: refreshes the
+  // displayed user (e.g. a name edited in the database) without the restore
+  // gate and without ever signing the user out on a transient failure.
+  const refresh = useCallback(async () => {
+    if (refreshing.current) return;
+    refreshing.current = true;
+    const current = generation.current;
+    try {
+      const auth = await request("/auth/csrf", { headers: { "X-Background-Refresh": "1" } });
+      if (generation.current !== current) return;
+      if (!auth) {
+        // The session ended elsewhere: reflect the signed-out state.
+        setCsrfToken(null);
+        setState({ user: null, idleExpiresAt: null, absoluteExpiresAt: null, ready: true, error: null });
+        return;
+      }
+      setCsrfToken(auth.csrf_token);
+      setState((previous) => (previous.user
+        ? { ...previous, user: auth.user, idleExpiresAt: auth.idle_expires_at,
+          absoluteExpiresAt: auth.absolute_expires_at }
+        : previous));
+    } catch {
+      /* A background probe must never disturb the live session. */
+    } finally {
+      refreshing.current = false;
+    }
+  }, []);
+
+  return { ...state, accept, restore, refresh, logout, continueSession };
 }

@@ -9,7 +9,7 @@
 | Identity/academics | `users`, `student_profiles`, `campuses`, `departments`, `programs` |
 | Sessions | `user_sessions` |
 | Enrollment | `cor_screenings`, `cor_screening_files` (ADR-029), `profile_change_requests` (ADR-032). Legacy `enrollment_verifications`, `enrollment_verification_files` are retained for history. |
-| Appointments | `counselor_weekly_schedules`, `counselor_availability_blocks`, `counselor_blocked_dates`, `availability_slots`, `appointments` |
+| Appointments | `counselor_weekly_schedules`, `counselor_availability_blocks`, `counselor_blocked_dates`, `availability_slots`, `appointments`, `session_records`, `session_documents` |
 | Messaging | `conversations`, `messages` |
 | SOS | `sos_cases`, `sos_responses` |
 | Resources | `resource_sources`, `wellness_resources`, `resource_files`, `resource_categories`, `wellness_resource_categories` |
@@ -22,6 +22,7 @@
 - `campuses.guidance_office_location`: Counselor-managed campus-level onsite location; may be null until configured.
 - `availability_slots.delivery_mode`: `ONLINE`, `FACE_TO_FACE`, or `BOTH`.
 - `counselor_weekly_schedules`: active, university-local recurring schedule definitions. `day_of_week` uses ISO values 1 (Monday) through 7 (Sunday); `start_time` and `end_time` are local schedule times, while generated slot timestamps remain UTC.
+- `counselor_weekly_schedules.is_deleted`: soft-delete marker (default `FALSE`, migration `20261024_weekly_sched_softdel`). Deleting a schedule hides it from schedule lists and future slot generation while preserving the row and existing slot/appointment references; recreating the same definition restores the row.
 - `counselor_availability_blocks`: temporary UTC intervals during which the Counselor is unavailable. They retain no appointment changes and may not overlap an active appointment when created through the service layer.
 - `counselor_blocked_dates`: Counselor-owned whole-day calendar overrides; these dates are excluded from the Counselor's bookable calendar.
 - `availability_slots.weekly_schedule_id`: nullable provenance link for slots generated from a weekly schedule. Legacy and concrete one-off slots remain valid with `NULL`.
@@ -29,6 +30,8 @@
 - `appointments.meeting_location`: required booking-time campus-location snapshot for face-to-face appointments; null for online appointments.
 - `appointments.conversation_id`: nullable unique FK to the dedicated scheduled online conversation.
 - `appointments.student_reminder_dispatched_at` / `counselor_reminder_dispatched_at`: nullable markers for successfully queued appointment reminders.
+- `session_records`: one row per appointment (`appointment_id` unique) holding the Counselor's private `notepad` and the assessment fields; `status` is `DRAFT` or `FINAL` (`chk_session_records_status`). The notepad is never returned to a Student; only a finalized assessment is.
+- `session_documents`: appointment-scoped file metadata (uploader, filename, MIME type, size, SHA-256, opaque `storage_key`, soft-delete actor/time). Bytes live outside MySQL under the private session-document store; they are never served from a static path.
 - `conversations.conversation_type`: `GENERAL`, `APPOINTMENT`, or `SOS`.
 - `conversations.appointment_id`: nullable unique reverse link used to enforce one conversation per scheduled appointment; join timestamps, closure reason, and the last sequence number record the chat lifecycle.
 - `messages.sequence_number`: required conversation-local durable order, unique with `conversation_id`; `client_message_id` remains the retry/idempotency key.
@@ -44,6 +47,7 @@ Application services must enforce cross-table rules that a row-local SQL `CHECK`
 - One conversation cannot be linked to both an appointment and SOS case.
 - A Counselor's active weekly periods must not overlap. MySQL checks cannot compare other rows, so overlap detection is a locked service/repository operation.
 - A schedule duration must divide its configured time range without a partial final slot. `FACE_TO_FACE` and `BOTH` schedules require a configured campus Guidance Office location.
+- Session records are writable only while the appointment is `CONFIRMED` or `COMPLETED`; a finalized record is immutable except for a Counselor reopen on a still-`CONFIRMED` appointment. Session files may be uploaded only in those two statuses and are soft-deleted, keeping metadata while bytes are removed. V1 has no automatic retention purge (ADR-P12 pending).
 - Bookable slots exclude inactive schedules, temporary blocks, active appointments, and past times. A block cannot be saved if it overlaps a `PENDING` or `CONFIRMED` appointment; it never cancels, rejects, reschedules, or moves an appointment.
 - Changing recurring availability deactivates the old schedule and inserts a replacement. On materialization, matching future `AVAILABLE` slots adopt the active definition's delivery mode and schedule link; leftover available slots linked to an inactive definition are excluded from calendars and booking. `RESERVED` slots and existing appointments remain unchanged.
 - Only the assigned Counselor may record `COMPLETED` or `NO_SHOW` for a confirmed face-to-face appointment, and that transition must create an `audit_events` entry. The status endpoint is not part of the persistence migration.
@@ -67,4 +71,4 @@ No COR blob/base64, raw camera media, embeddings/biometric templates, observed-e
 
 ## Intentionally absent in V1
 
-No role/permission join model, separate Counselor/admin profiles, recurrence-history or notification tables, conversation participant/read-receipt/transcript tables, SOS question/rule tables, emotion tables, resource review-history/tag tables, assistant history, or CMS version/draft/schedule tables. Recurring availability definitions are stored in `counselor_weekly_schedules`; Student profile edits are stored in `profile_change_requests`.
+No role/permission join model, separate Counselor/admin profiles, recurrence-history or notification tables, conversation participant/read-receipt/transcript or conversation-attachment tables (session files are appointment-scoped), SOS question/rule tables, emotion tables, resource review-history/tag tables, assistant history, or CMS version/draft/schedule tables. Recurring availability definitions are stored in `counselor_weekly_schedules`; Student profile edits are stored in `profile_change_requests`.

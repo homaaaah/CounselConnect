@@ -393,6 +393,168 @@ def test_calendar_counts_real_future_unreserved_times(db_session, actors, monkey
     assert svc.calendar(users[0], today, today)["days"][0]["available_times"] == []
 
 
+def test_calendar_booked_slots_are_counselor_only(db_session, actors, monkeypatch):
+    from datetime import date
+    from app.modules.appointments import service as module
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    monkeypatch.setattr(module, "utcnow", lambda: datetime(2026, 9, 11, 5, 30))
+    today = date(2026, 9, 11)
+    available = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=datetime(2026, 9, 11, 6, 0), ends_at=datetime(2026, 9, 11, 6, 30),
+    )
+    reserved = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="RESERVED",
+        starts_at=datetime(2026, 9, 11, 7, 0), ends_at=datetime(2026, 9, 11, 7, 30),
+    )
+    db_session.add_all([available, reserved])
+    db_session.flush()
+    db_session.add(Appointment(
+        student_user_id=users[2].user_id, counselor_user_id=users[0].user_id,
+        availability_slot_id=reserved.slot_id, appointment_mode="ONLINE", status="CONFIRMED",
+    ))
+    db_session.flush()
+
+    counselor_day = svc.calendar(users[0], today, today)["days"][0]
+    assert counselor_day["available_slots"] == [{"start_time": "14:00", "end_time": "14:30"}]
+    assert counselor_day["booked_slots"] == [
+        {"start_time": "15:00", "end_time": "15:30", "status": "CONFIRMED"}
+    ]
+
+    student_day = svc.calendar(users[2], today, today)["days"][0]
+    assert student_day["available_slots"] == [{"start_time": "14:00", "end_time": "14:30"}]
+    assert student_day["booked_slots"] == []
+
+
+def test_booking_rejects_slots_from_disabled_or_deleted_weekly_schedule(db_session, actors):
+    from datetime import time
+
+    from app.modules.appointments.models import CounselorWeeklySchedule
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3)
+    schedule = CounselorWeeklySchedule(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        day_of_week=1, start_time=time(8), end_time=time(10),
+        slot_duration_minutes=30, delivery_mode="ONLINE",
+    )
+    db_session.add(schedule)
+    db_session.flush()
+    linked = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start, ends_at=start + timedelta(minutes=30),
+        weekly_schedule_id=schedule.weekly_schedule_id,
+    )
+    one_off = AvailabilitySlot(
+        counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="AVAILABLE",
+        starts_at=start + timedelta(hours=2), ends_at=start + timedelta(hours=2, minutes=30),
+    )
+    db_session.add_all([linked, one_off])
+    db_session.flush()
+    request = AppointmentCreateRequest(availability_slot_id=linked.slot_id, appointment_mode="ONLINE")
+
+    schedule.is_active = False
+    db_session.flush()
+    with pytest.raises(AppError) as disabled:
+        svc.book(users[2], request)
+    assert disabled.value.code == "SLOT_UNAVAILABLE"
+
+    # An active-but-soft-deleted definition is still rejected, so the
+    # is_deleted predicate is exercised on its own.
+    schedule.is_active = True
+    schedule.is_deleted = True
+    db_session.flush()
+    with pytest.raises(AppError) as deleted:
+        svc.book(users[2], request)
+    assert deleted.value.code == "SLOT_UNAVAILABLE"
+
+    # Restoring the definition makes the generated slot bookable again.
+    schedule.is_active = True
+    schedule.is_deleted = False
+    db_session.flush()
+    svc.book(users[2], request)
+    # A one-off slot has no schedule and stays bookable regardless.
+    svc.book(users[2], AppointmentCreateRequest(
+        availability_slot_id=one_off.slot_id, appointment_mode="ONLINE"))
+
+
+def test_standard_weekday_batch_is_all_or_nothing(db_session, actors):
+    from datetime import time
+
+    from app.modules.appointments.schemas import StandardWeekdayScheduleRequest
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    existing = svc.create_weekly_schedule(users[0], WeeklyScheduleCreateRequest(
+        campus_id=campus.campus_id, day_of_week=3,
+        start_time=time(9), end_time=time(11),
+        slot_duration_minutes=30, delivery_mode="ONLINE",
+    ))
+    with pytest.raises(AppError) as conflict:
+        svc.create_standard_weekday_schedules(
+            users[0],
+            StandardWeekdayScheduleRequest(
+                campus_id=campus.campus_id, slot_duration_minutes=30, delivery_mode="BOTH"),
+        )
+    assert conflict.value.code == "SCHEDULE_CONFLICT"
+    # The rejected batch must not leave Monday or Tuesday behind.
+    assert [item.weekly_schedule_id for item in svc.list_weekly_schedules(users[0])] == [
+        existing.weekly_schedule_id
+    ]
+
+
+def test_weekly_schedule_enable_and_soft_delete_round_trip(db_session, actors):
+    from datetime import time
+
+    from app.modules.appointments.schemas import StandardWeekdayScheduleRequest
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    data = StandardWeekdayScheduleRequest(
+        campus_id=campus.campus_id, slot_duration_minutes=30, delivery_mode="BOTH")
+    created = svc.create_standard_weekday_schedules(users[0], data)
+    assert [item.day_of_week for item in created] == [1, 2, 3, 4, 5]
+    assert all(item.start_time == time(8) and item.end_time == time(16) for item in created)
+    # Repeating the action restores the same rows instead of duplicating them.
+    restored = svc.create_standard_weekday_schedules(users[0], data)
+    assert [item.weekly_schedule_id for item in restored] == [
+        item.weekly_schedule_id for item in created
+    ]
+
+    monday = created[0]
+    svc.deactivate_weekly_schedule(users[0], monday.weekly_schedule_id)
+    db_session.flush()
+    db_session.refresh(monday)
+    assert monday.is_active is False
+    assert svc.enable_weekly_schedule(users[0], monday.weekly_schedule_id).is_active is True
+
+    svc.delete_weekly_schedule(users[0], monday.weekly_schedule_id)
+    db_session.flush()
+    db_session.refresh(monday)
+    assert monday.is_active is False and monday.is_deleted is True
+    assert monday.weekly_schedule_id not in {
+        item.weekly_schedule_id for item in svc.list_weekly_schedules(users[0])
+    }
+    with pytest.raises(AppError) as missing:
+        svc.enable_weekly_schedule(users[0], monday.weekly_schedule_id)
+    assert missing.value.code == "SCHEDULE_NOT_FOUND"
+
+    recreated = svc.create_weekly_schedule(users[0], WeeklyScheduleCreateRequest(
+        campus_id=campus.campus_id, day_of_week=1,
+        start_time=time(8), end_time=time(16),
+        slot_duration_minutes=30, delivery_mode="BOTH",
+    ))
+    assert recreated.weekly_schedule_id == monday.weekly_schedule_id
+    assert recreated.is_deleted is False and recreated.is_active is True
+
+
 def test_student_booking_reads_can_be_scoped_to_selected_counselor(db_session, actors):
     from zoneinfo import ZoneInfo
 
@@ -414,6 +576,35 @@ def test_student_booking_reads_can_be_scoped_to_selected_counselor(db_session, a
     assert calendar["days"][0]["available_times"] == [manila_start.strftime("%H:%M")]
     slots = svc.list_slots(users[2], counselor_user_id=users[1].user_id)
     assert {item.counselor_user_id for item in slots["items"]} == {users[1].user_id}
+
+
+def test_appointments_range_filter_uses_slot_start_time(db_session, actors):
+    from zoneinfo import ZoneInfo
+
+    users, campus = actors
+    svc = AppointmentsService(db_session)
+    day = datetime(2026, 9, 12, 6, 0, tzinfo=timezone.utc)
+    inside = AvailabilitySlot(counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="RESERVED", starts_at=day,
+        ends_at=day + timedelta(minutes=30))
+    outside = AvailabilitySlot(counselor_user_id=users[0].user_id, campus_id=campus.campus_id,
+        delivery_mode="ONLINE", status="RESERVED", starts_at=day + timedelta(days=2),
+        ends_at=day + timedelta(days=2, minutes=30))
+    db_session.add_all([inside, outside])
+    db_session.flush()
+    for slot in (inside, outside):
+        db_session.add(Appointment(student_user_id=users[2].user_id,
+            counselor_user_id=users[0].user_id, availability_slot_id=slot.slot_id,
+            appointment_mode="ONLINE", status="CONFIRMED"))
+    db_session.flush()
+
+    manila = day.astimezone(ZoneInfo("Asia/Manila"))
+    window_start = manila.replace(hour=0, minute=0, second=0, microsecond=0)
+    window_end = window_start + timedelta(days=1)
+    scoped = svc.list_appointments(users[2], starts_after=window_start, ends_before=window_end)
+    assert [item.availability_slot_id for item in scoped["items"]] == [inside.slot_id]
+    assert scoped["total"] == 1
+    assert svc.list_appointments(users[2])["total"] == 2
 
 
 def test_location_required_at_creation_and_booking(db_session, actors):

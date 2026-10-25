@@ -8,12 +8,15 @@ import CounselorUsersPage from "./pages/counselor/CounselorUsersPage";
 import RegistrationStatusPage from "./pages/student/RegistrationStatusPage";
 import StudentAppointmentsPage from "./pages/student/StudentAppointmentsPage";
 import CounselorAppointmentsPage from "./pages/counselor/CounselorAppointmentsPage";
+import CounselorSchedulePage from "./pages/counselor/CounselorSchedulePage";
+import CounselorHistoryPage from "./pages/counselor/CounselorHistoryPage";
 import { useHealth } from "./hooks/useHealth";
 import { useSession } from "./features/auth";
 import { AppNavBar } from "./components/layout";
 import { ToastProvider, useToast } from "./components/feedback";
 import { setErrorHandler } from "./services/apiClient";
 import ScheduledSessionPage from "./pages/ScheduledSessionPage";
+import SessionRecordPage from "./pages/SessionRecordPage";
 import { ScheduledSessionLauncher } from "./features/messaging";
 
 function SessionExpiryWarning({ session }) {
@@ -73,6 +76,23 @@ function AppShell() {
 
   useEffect(() => { void session.restore(); }, [session.restore]);
 
+  // Re-read the signed-in user when the window regains focus so database
+  // edits (name, status) appear without a full reload.
+  const signedInUserId = session.user?.user_id ?? null;
+  useEffect(() => {
+    if (!signedInUserId) return undefined;
+    const revalidate = () => { void session.refresh(); };
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") revalidate();
+    };
+    window.addEventListener("focus", revalidate);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", revalidate);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [signedInUserId, session.refresh]);
+
   // Surface every failed API request as a visual notification.
   useEffect(() => {
     setErrorHandler((apiError) => toast.error(apiError.message, { title: "Request failed" }));
@@ -104,6 +124,7 @@ function AppShell() {
   }
 
   const sessionAppointmentId = page.startsWith("session/") ? Number(page.slice("session/".length)) : null;
+  const recordAppointmentId = page.startsWith("session-record/") ? Number(page.slice("session-record/".length)) : null;
 
   return (
     <>
@@ -138,12 +159,20 @@ function AppShell() {
         {page === "registration" && (session.user?.role_code === "STUDENT"
           ? <RegistrationStatusPage key={session.user.user_id} user={session.user} onRejected={handleRejected} />
           : <LoginPage onSignedIn={session.accept} />)}
-        {page === "users" && (["COUNSELOR", "SUPERADMIN"].includes(session.user?.role_code)
-          ? <CounselorUsersPage canRecover={session.user.role_code === "SUPERADMIN"} />
+        {page === "schedule" && (session.user?.role_code === "COUNSELOR"
+          ? <CounselorSchedulePage key={session.user.user_id} user={session.user} />
+          : <LoginPage onSignedIn={session.accept} />)}
+        {page === "history" && (session.user?.role_code === "COUNSELOR"
+          ? <CounselorHistoryPage key={session.user.user_id} user={session.user} />
+          : <LoginPage onSignedIn={session.accept} />)}
+        {page === "users" && (session.user?.role_code === "SUPERADMIN"
+          ? <CounselorUsersPage canRecover />
           : <LoginPage onSignedIn={session.accept} />)}
         {sessionAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <ScheduledSessionPage key={`${session.user.user_id}-${sessionAppointmentId}`} user={session.user} appointmentId={sessionAppointmentId} />}
-        {!["login", "staff-login", "register", "registration", "users", "home", "appointments"].includes(page) && !sessionAppointmentId && (
+        {recordAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
+          <SessionRecordPage key={`${session.user.user_id}-record-${recordAppointmentId}`} user={session.user} appointmentId={recordAppointmentId} />}
+        {!["login", "staff-login", "register", "registration", "users", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && !recordAppointmentId && (
           <LandingPage
             onSignedIn={session.accept}
           />

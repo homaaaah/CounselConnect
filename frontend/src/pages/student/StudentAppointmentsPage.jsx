@@ -29,6 +29,9 @@ function AppointmentCard({ appointment: a, state, onReschedule }) {
     {a.status === "PENDING" && <p className="mt-2 text-sm text-amber-700">Awaiting counselor review.</p>}
     {a.status === "CONFIRMED" && a.appointment_mode === "ONLINE" && <p className="mt-2 text-sm text-slate-600">Online appointment confirmed. The session lobby opens 30 minutes before the scheduled start.</p>}
     <div className="mt-4 flex flex-wrap gap-2">
+      {["CONFIRMED", "COMPLETED"].includes(a.status) && (a.status === "COMPLETED"
+        ? <a className={secondaryClass} href={"#session-record/" + a.appointment_id}>Session files</a>
+        : <span aria-disabled="true" title="Available after the session is completed" className={secondaryClass + " cursor-not-allowed opacity-50"}>Session files</span>)}
       {canCancel && <button className={secondaryClass} disabled={state.busy} onClick={() => setCancelling(!cancelling)}>Cancel appointment</button>}
       {canReschedule && <button className={secondaryClass} disabled={state.busy} onClick={() => onReschedule(a.appointment_id)}>Reschedule</button>}
     </div>

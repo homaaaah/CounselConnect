@@ -39,6 +39,7 @@ const failure = (status) => json({ error: { code: "TEST_ERROR", message: "Test e
 
 function environment(t, initialHash = "#home") {
   const events = new EventTarget();
+  const docEvents = new EventTarget();
   let hash = initialHash;
   const location = { reload: t.mock.fn() };
   Object.defineProperty(location, "hash", {
@@ -47,9 +48,16 @@ function environment(t, initialHash = "#home") {
   });
   global.window = { location, open: t.mock.fn(),
     addEventListener: events.addEventListener.bind(events),
-    removeEventListener: events.removeEventListener.bind(events) };
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events) };
+  global.document = { visibilityState: "visible",
+    getElementById: () => null,
+    querySelector: () => null,
+    addEventListener: docEvents.addEventListener.bind(docEvents),
+    removeEventListener: docEvents.removeEventListener.bind(docEvents),
+    dispatchEvent: docEvents.dispatchEvent.bind(docEvents) };
   setCsrfToken(null);
-  t.after(() => { setCsrfToken(null); });
+  t.after(() => { setCsrfToken(null); delete global.document; });
 }
 
 function fakeApi(t, recover = () => json(auth), login = auth) {
@@ -90,7 +98,7 @@ test("student login link opens the staff email form and switches back", async (t
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number or email");
   const staffLink = root.root.findByProps({ href: "#staff-login" });
   await act(async () => { window.location.hash = staffLink.props.href; });
-  assert.equal(root.root.findByType("h1").children.join(""), "Counselor / Staff sign in");
+  assert.equal(root.root.findByType("h1").children.join(""), "Guidance sign in");
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Email");
   assert.equal(root.root.findByProps({ id: "identifier" }).props.type, "email");
   await act(async () => { window.location.hash = "#login"; });
@@ -159,6 +167,62 @@ test("sign out uses recovered CSRF and clears the protected screening page", asy
   assert.doesNotMatch(JSON.stringify(root.toJSON()), /Review your details/);
 });
 
+test("the staff sign-in form rejects a Student account and revokes the session", async (t) => {
+  environment(t, "#staff-login");
+  const calls = fakeApi(t, () => failure(401), studentAuth);
+  const root = await mount(t);
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "student@example.edu" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => { await root.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  assert.equal(window.location.hash, "#staff-login", "no navigation on a mismatched role");
+  assert.equal(getCsrfToken(), null);
+  assert.ok(calls.some((call) => call.path.endsWith("/auth/logout")), "the fresh session is revoked");
+  const message = root.root.findByProps({ className: "form-message error" }).children.join("");
+  assert.match(message, /Incorrect identifier or password/);
+  assert.doesNotMatch(message, /Guidance|Student/, "the message never reveals the account's role");
+});
+
+test("the Student sign-in form rejects a staff account and revokes the session", async (t) => {
+  environment(t, "#login");
+  const calls = fakeApi(t, () => failure(401), auth);
+  const root = await mount(t);
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "20231234-A" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => { await root.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  assert.equal(window.location.hash, "#login", "no navigation on a mismatched role");
+  assert.equal(getCsrfToken(), null);
+  assert.ok(calls.some((call) => call.path.endsWith("/auth/logout")), "the fresh session is revoked");
+  const message = root.root.findByProps({ className: "form-message error" }).children.join("");
+  assert.match(message, /Incorrect identifier or password/);
+  assert.doesNotMatch(message, /Guidance|Student/, "the message never reveals the account's role");
+});
+
+test("the password reveal toggle switches the field between hidden and visible", async (t) => {
+  environment(t, "#login");
+  fakeApi(t, () => failure(401));
+  const root = await mount(t);
+  const passwordInput = () =>
+    root.root.findAllByProps({ id: "password" }).find((node) => typeof node.type === "string");
+  assert.equal(passwordInput().props.type, "password");
+  const toggle = root.root.findByProps({ "aria-label": "Show password" });
+  await act(async () => { toggle.props.onClick(); });
+  assert.equal(passwordInput().props.type, "text");
+  assert.ok(root.root.findByProps({ "aria-label": "Hide password" }), "the toggle flips its label");
+});
+
+test("anonymous /auth/csrf (200 null) leaves the app signed out without an error", async (t) => {
+  environment(t, "#home");
+  fakeApi(t, () => json(null));
+  const root = await mount(t);
+  await waitFor(() => !JSON.stringify(root.toJSON()).includes("Restoring your session"));
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Could not restore your session/);
+  assert.equal(getCsrfToken(), null);
+});
+
 test("a late unauthenticated response cannot erase a newer login token", async (t) => {
   environment(t);
   let resolve;
@@ -168,6 +232,55 @@ test("a late unauthenticated response cannot erase a newer login token", async (
   resolve(failure(401));
   await pending;
   assert.equal(getCsrfToken(), auth.csrf_token);
+});
+
+test("regaining focus refreshes the signed-in user without the restore gate", async (t) => {
+  environment(t, "#home");
+  let firstName = "Cora";
+  const calls = fakeApi(t, () => json({ ...auth, user: { ...auth.user, first_name: firstName } }));
+  const root = await mount(t);
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Cora"));
+
+  firstName = "Marisol";
+  const csrfCalls = () => calls.filter((call) => call.path.endsWith("/auth/csrf")).length;
+  const before = csrfCalls();
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Marisol"));
+
+  assert.equal(csrfCalls(), before + 1, "exactly one background probe");
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Restoring your session/);
+  assert.equal(getCsrfToken(), auth.csrf_token, "the CSRF token is unchanged");
+});
+
+test("background refresh is not user activity and never surfaces errors", async (t) => {
+  environment(t, "#home");
+  let fail = false;
+  const calls = fakeApi(t, () => (fail ? failure(500) : json(auth)));
+  const root = await mount(t);
+  await waitFor(() => JSON.stringify(root.toJSON()).includes("Cora"));
+
+  fail = true;
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  const probe = calls.find((call) => call.path.endsWith("/auth/csrf") && call.headers["X-Background-Refresh"] === "1");
+  assert.ok(probe, "the probe is marked as a background refresh");
+  assert.match(JSON.stringify(root.toJSON()), /Cora/, "a failed probe keeps the user signed in");
+  assert.doesNotMatch(JSON.stringify(root.toJSON()), /Test error/, "no error toast for a silent probe");
+});
+
+test("anonymous visitors do not probe the session on focus", async (t) => {
+  environment(t, "#home");
+  const calls = fakeApi(t, () => json(null));
+  const root = await mount(t);
+  await waitFor(() => !JSON.stringify(root.toJSON()).includes("Restoring your session"));
+
+  const csrfCalls = () => calls.filter((call) => call.path.endsWith("/auth/csrf")).length;
+  const before = csrfCalls();
+  await act(async () => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  assert.equal(csrfCalls(), before, "no focus probe without a session");
 });
 
 test("non-envelope error bodies still throw a safe ApiError", async (t) => {

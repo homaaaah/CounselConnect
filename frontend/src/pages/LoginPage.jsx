@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLogin } from "../features/auth";
+import { useLogin, PasswordInput } from "../features/auth";
 
 /**
  * Sign-in page (ADR-019): opaque session cookie + CSRF. Capstone card styling.
@@ -27,7 +27,8 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const r = await login(identifier, password);
+    setResult(null);
+    const r = await login(identifier, password, audience);
     if (r.ok && r.auth) onSignedIn(r.auth);
     setResult({ ok: r.ok, message: r.message, role: r.auth?.user.role_code });
   }
@@ -41,7 +42,10 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
       )}
 
       <div className="login-header">
-        <h1>{isStudent ? "Student sign in" : "Counselor / Staff sign in"}</h1>
+        <span className="brand-logo" aria-hidden="true">
+          <i className="fa-solid fa-hands-holding-child"></i>
+        </span>
+        <h1>{isStudent ? "Student sign in" : "Guidance sign in"}</h1>
         <p>CounselConnect — Guidance and Counseling Office</p>
       </div>
 
@@ -52,7 +56,9 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
             id="identifier"
             type={isStudent ? "text" : "email"}
             autoComplete="username"
+            autoFocus
             required
+            disabled={submitting}
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             className="form-input"
@@ -60,14 +66,13 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
         </div>
         <div className="form-group">
           <label htmlFor="password">Password</label>
-          <input
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
             required
+            disabled={submitting}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="form-input"
           />
         </div>
         <button type="submit" disabled={submitting} className="btn-submit">
@@ -81,7 +86,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
         <>
           <p className="signup-text">
             <button type="button" className="linklike" onClick={onSwitchAudience}>
-              {isStudent ? "Counselor / Staff sign in" : "Student sign in"}
+              {isStudent ? "Guidance sign in" : "Student sign in"}
             </button>
           </p>
           <p className="signup-text">
@@ -92,7 +97,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
         <>
           <p className="signup-text">
             <a href={isStudent ? "#staff-login" : "#login"}>
-              {isStudent ? "Counselor / Staff sign in" : "Student sign in"}
+              {isStudent ? "Guidance sign in" : "Student sign in"}
             </a>
           </p>
           <p className="signup-text">

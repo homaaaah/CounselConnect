@@ -66,6 +66,7 @@ The v1 table names in `docs/DATABASE.md` are canonical.
   - `POST /cor-screenings/confirm`
   - `POST /cor-screenings/reject`
   - `POST /appointments/{appointment_id}/confirm`
+  - `POST /appointments/{appointment_id}/mark-done`
   - `POST /sos-cases/{sos_case_id}/close`
   - `POST /wellness-resources/{resource_id}/publish`
 - Auth action exceptions use `/auth/login`, `/auth/refresh`, `/auth/logout`.

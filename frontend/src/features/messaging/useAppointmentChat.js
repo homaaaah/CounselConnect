@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "../../services/apiClient";
-import { socketUrl } from "./useScheduledSessions";
+import { socketUrl } from "../../services/realtime";
 
 const clientId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -10,6 +10,7 @@ export function useAppointmentChat(appointmentId) {
   const [connection, setConnection] = useState("idle");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [missingFields, setMissingFields] = useState([]);
   const socket = useRef(null);
   const reconnect = useRef(null);
   const latestSequence = useRef(0);
@@ -77,23 +78,39 @@ export function useAppointmentChat(appointmentId) {
       }
     }).catch(err => setError(err instanceof Error ? err.message : "Could not load the scheduled session."));
     const refresh = setInterval(() => void loadSession(true).catch(() => {}), 15000);
+    // Another tab (or the sessions list) may observe the outcome first; a
+    // background re-read shows completion without renewing idle activity.
+    const onAppointmentUpdated = event => {
+      if (event?.detail?.appointment_id !== appointmentId) return;
+      void loadSession(true).catch(() => {});
+    };
+    window.addEventListener("appointment-updated", onAppointmentUpdated);
     return () => {
       clearInterval(refresh);
       clearTimeout(reconnect.current);
+      window.removeEventListener("appointment-updated", onAppointmentUpdated);
       const active = socket.current;
       socket.current = null;
       active?.close();
     };
   }, [appointmentId, catchUp, connect, loadSession]);
 
-  const join = useCallback(async () => {
+  const join = useCallback(async ({ background = false } = {}) => {
     setBusy(true); setError("");
     try {
-      const conversation = await request(`/appointments/${appointmentId}/session/join`, { method: "POST", body: "{}" });
+      const conversation = await request(`/appointments/${appointmentId}/session/join`, {
+        method: "POST",
+        body: "{}",
+        ...(background ? { headers: { "X-Background-Refresh": "1" } } : {}),
+      });
       await loadSession();
       await catchUp(conversation.conversation_id);
       connect(conversation.conversation_id);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not join the session."); }
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not join the session.");
+      return false;
+    }
     finally { setBusy(false); }
   }, [appointmentId, catchUp, connect, loadSession]);
 
@@ -116,5 +133,21 @@ export function useAppointmentChat(appointmentId) {
     finally { setBusy(false); }
   }, [appointmentId, loadSession]);
 
-  return { session, messages, connection, error, busy, join, send, outcome, loadSession };
+  const markDone = useCallback(async () => {
+    setBusy(true); setError(""); setMissingFields([]);
+    try {
+      const data = await request(`/appointments/${appointmentId}/mark-done`, { method: "POST", body: "{}" });
+      setSession(data);
+      return data;
+    } catch (err) {
+      if (err?.code === "RECORD_INCOMPLETE") {
+        setMissingFields(Array.isArray(err.details?.fields) ? err.details.fields : []);
+      }
+      setError(err instanceof Error ? err.message : "Could not mark the session done.");
+      return null;
+    }
+    finally { setBusy(false); }
+  }, [appointmentId]);
+
+  return { session, messages, connection, error, busy, missingFields, join, send, outcome, markDone, loadSession };
 }

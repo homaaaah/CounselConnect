@@ -63,7 +63,8 @@ test("counselor top bar shows greeting, role chip, active Dashboard, and Appoint
   assert.ok(rendered.includes("Counselor"));
   assert.ok(rendered.includes("Dashboard"));
   assert.ok(rendered.includes("Sessions"));
-  assert.ok(rendered.includes("Schedule"));
+  assert.ok(root.root.findAllByProps({ href: "#schedule" }).length >= 1, "Schedule is a real route");
+  assert.ok(root.root.findAllByProps({ href: "#history" }).length >= 1, "History is a real route");
   // Dashboard (#home) is the current page with the role label.
   const active = root.root.findAllByProps({ "aria-current": "page" });
   assert.ok(active.length >= 1);
@@ -74,11 +75,18 @@ test("counselor top bar shows greeting, role chip, active Dashboard, and Appoint
   assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
   assert.equal(root.root.findAllByProps({ href: "#review" }).length, 0, "the reviewer console route is gone");
   assert.ok(root.root.findAllByType("button").some((b) => b.children.includes("Sign out")));
+  // Navbar UI Spec: green active underline, notification bell, text-only identity.
+  const nav = root.root.findByProps({ "aria-label": "App navigation" });
+  assert.equal(nav.findAllByType("img").length, 0, "no avatar/image placeholder in the navbar");
+  assert.ok(nav.findAllByType("button").some((b) => (b.props["aria-label"] || "").startsWith("Notifications")),
+    "counselor navbar shows the notification bell");
+  assert.ok(active.some((node) => String(node.props.className).includes("border-[#207524]")),
+    "the active counselor link uses the green underline");
   // Sessions/Schedule/History have no routes yet — disabled placeholders.
   const soon = root.root.findAllByProps({ "aria-disabled": "true" })
     .filter((node) => node.props.title === "Coming soon");
   const soonLabels = soon.map((node) => node.children.map((c) => (typeof c === "string" ? c : "")).join("").trim());
-  for (const label of ["Sessions", "Schedule", "History"]) {
+  for (const label of ["Sessions"]) {
     assert.ok(soonLabels.some((entry) => entry.includes(label)), label + " is a coming-soon entry");
   }
   for (const node of soon) assert.equal(node.props.href, undefined);

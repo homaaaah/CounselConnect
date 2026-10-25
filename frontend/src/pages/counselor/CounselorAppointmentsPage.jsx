@@ -1,8 +1,16 @@
-import { useState } from "react";
-import { useAppointments, formatSchedule, manilaInputToUTC, manilaLocalInput, manilaToday } from "../../features/appointments";
-import { buttonClass, secondaryClass, inputClass, modeLabel, dayLabel, timeLabel } from "../../components/appointments/ui.js";
-import CalendarGrid from "../../components/appointments/CalendarGrid.jsx";
-import BookingModal from "../../components/appointments/BookingModal.jsx";
+import { useEffect, useRef, useState } from "react";
+import { useAppointments } from "../../features/appointments";
+import { buttonClass, secondaryClass, inputClass } from "../../components/appointments/ui";
+
+const MANILA = "Asia/Manila";
+const dateLabel = (value) => new Intl.DateTimeFormat("en-PH", { timeZone: MANILA, month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+const timeLabelOf = (value) => new Intl.DateTimeFormat("en-PH", { timeZone: MANILA, hour: "numeric", minute: "2-digit" }).format(new Date(value));
+const modeLabelOf = (mode) => mode === "ONLINE" ? "Online Call" : "Face-to-face";
+const initialsOf = (name) => (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0].toUpperCase()).join("");
+const durationLabel = (a) => {
+  const minutes = Math.round((new Date(a.ends_at) - new Date(a.starts_at)) / 60000);
+  return minutes > 0 ? ` (${minutes}m)` : "";
+};
 
 function Pagination({ page, total, onChange, disabled }) {
   return <div className="mt-4 flex items-center justify-between gap-3 text-sm">
@@ -12,283 +20,124 @@ function Pagination({ page, total, onChange, disabled }) {
   </div>;
 }
 
-function AppointmentCard({ appointment: a, state, counselor, onReschedule }) {
-  const [rejecting, setRejecting] = useState(false);
-  const [note, setNote] = useState("");
-  const [cancelling, setCancelling] = useState(false);
-  const action = (name, body) => state.mutate("/appointments/" + a.appointment_id + "/" + name, body);
-  const active = a.status === "PENDING" || a.status === "CONFIRMED";
-  const started = new Date(a.starts_at).getTime() <= Date.now();
-  const canCancel = a.can_cancel ?? active;
-  const canReschedule = a.can_reschedule ?? (a.status === "CONFIRMED" && a.conversation_id === null);
-  const canChangeMode = a.can_change_mode ?? false;
-  return <li className="rounded-lg border border-slate-200 p-5">
-    <div className="flex flex-wrap justify-between gap-2">
-      <h3 className="font-semibold">{formatSchedule(a.starts_at)}</h3>
-      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">{a.status.replaceAll("_", " ")}</span>
-    </div>
-    <p className="text-sm text-slate-500">Until {formatSchedule(a.ends_at)} · {a.campus_name}</p>
-    <p className="mt-3 text-sm">{counselor ? "Student: " + a.student_name : "Counselor: " + a.counselor_name}</p>
-    <p className="text-sm">{modeLabel(a.appointment_mode)}</p>
-    {a.meeting_location && <p className="mt-1 text-sm">Guidance Office: {a.meeting_location}</p>}
-    {a.rejection_note && <p className="mt-2 text-sm text-slate-600">Counselor note: {a.rejection_note}</p>}
-    {a.status === "PENDING" && <p className="mt-2 text-sm text-amber-700">Awaiting counselor review.</p>}
-    {a.status === "CONFIRMED" && a.appointment_mode === "ONLINE" && <p className="mt-2 text-sm text-slate-600">Online appointment confirmed. The session lobby opens 30 minutes before the scheduled start.</p>}
-    <div className="mt-4 flex flex-wrap gap-2">
-      {counselor && a.status === "PENDING" && <>
-        <button className={buttonClass} disabled={state.busy || started} onClick={() => void action("confirm")}>Confirm</button>
-        <button className={secondaryClass} disabled={state.busy} onClick={() => setRejecting(!rejecting)}>Reject</button>
-      </>}
-      {canCancel && <button className={secondaryClass} disabled={state.busy} onClick={() => setCancelling(!cancelling)}>Cancel appointment</button>}
-      {canReschedule && <button className={secondaryClass} disabled={state.busy} onClick={() => onReschedule(a.appointment_id)}>Reschedule</button>}
-      {canChangeMode && <button className={secondaryClass} disabled={state.busy} onClick={() => void action("change-mode", { appointment_mode: a.appointment_mode === "ONLINE" ? "FACE_TO_FACE" : "ONLINE" })}>Change to {a.appointment_mode === "ONLINE" ? "face-to-face" : "online"}</button>}
-      {counselor && a.status === "CONFIRMED" && <>
-        <button className={buttonClass} disabled={state.busy || !started} onClick={() => void action("complete")}>Mark completed</button>
-        <button className={secondaryClass} disabled={state.busy || !started} onClick={() => void action("no-show")}>Mark no-show</button>
-      </>}
-    </div>
-    {cancelling && canCancel && <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm">
-      <p>Cancel this appointment and release the slot?</p>
-      <button className={secondaryClass + " mt-2"} disabled={state.busy} onClick={async () => { if (await action("cancel")) setCancelling(false); }}>Confirm cancellation</button>
-    </div>}
-    {rejecting && a.status === "PENDING" && <form className="mt-3" onSubmit={async e => {
-      e.preventDefault(); if (await action("reject", { rejection_note: note.trim() || null })) setRejecting(false);
-    }}>
-      <label className="text-sm">Reason (optional)<textarea className={inputClass} maxLength={500} value={note} onChange={e => setNote(e.target.value)} /></label>
-      <button className={secondaryClass} disabled={state.busy}>Reject request</button>
-    </form>}
-  </li>;
-}
-
-function RecordsTabs({ state }) {
-  const recordsTabs = [
-    ["CONFIRMED", "Confirmed"],
-    ["PENDING", "Pending"],
-    ["COMPLETED", "Completed"],
-    ["NO_SHOW", "No-show"],
-    ["CANCELLED", "Cancelled"],
-    ["REJECTED", "Rejected"],
-  ];
-  return <div role="tablist" aria-label="Filter records by status" className="flex flex-wrap gap-2">
-    {recordsTabs.map(([status, label]) => <button key={status} type="button" role="tab" aria-selected={state.status === status}
-      className={state.status === status
-        ? "rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white"
-        : "rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"}
-      onClick={() => { state.setStatus(status); state.setAppointmentPage(1); }}>{label}</button>)}
+function MetadataColumn({ icon, label, value }) {
+  return <div className="flex items-center gap-2">
+    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-[#207524] shadow-sm">
+      <i className={"fa-solid " + icon} aria-hidden="true"></i>
+    </span>
+    <span className="min-w-0">
+      <span className="block text-[10px] font-semibold uppercase tracking-wide text-[#7B8493]">{label}</span>
+      <span className="block truncate text-sm font-semibold text-slate-700">{value}</span>
+    </span>
   </div>;
 }
 
-function BlockDateForm({ state }) {
-  const [date, setDate] = useState(""); const [reason, setReason] = useState("");
-  return <form className="mt-5 border-t border-slate-200 pt-5" onSubmit={async event => { event.preventDefault(); if (await state.mutate("/calendar/blocks", { blocked_date: date, reason: reason.trim() || null }, "POST", "Date blocked. Students can no longer request it.")) { setDate(""); setReason(""); } }}>
-    <h3 className="font-medium">Block a whole date</h3><p className="mt-1 text-sm text-slate-500">Default face-to-face hours are Monday-Friday, 8:00 AM-4:00 PM.</p>
-    <div className="mt-3 flex flex-wrap items-end gap-3"><label className="text-sm">Date<input className={inputClass} type="date" required min={manilaToday()} value={date} onChange={e => setDate(e.target.value)} /></label><label className="text-sm">Reason (optional)<input className={inputClass} maxLength={255} value={reason} onChange={e => setReason(e.target.value)} /></label><button className={buttonClass} disabled={state.busy}>Block date</button></div>
-  </form>;
-}
-
-function WeeklyScheduleEditor({ state }) {
-  const [editingId, setEditingId] = useState(null);
-  const [campusId, setCampusId] = useState("");
-  const [day, setDay] = useState("1");
-  const [start, setStart] = useState("08:00");
-  const [end, setEnd] = useState("16:00");
-  const [duration, setDuration] = useState("30");
-  const [mode, setMode] = useState("ONLINE");
-  const minutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  const wholeSlots = (Number(end.slice(0, 2)) * 60 + Number(end.slice(3, 5)) - minutes(start)) % Number(duration) === 0;
-  const campus = state.campuses.find(c => String(c.campus_id) === campusId);
-
-  const startEdit = (s) => {
-    setEditingId(s.weekly_schedule_id);
-    setCampusId(String(s.campus_id));
-    setDay(String(s.day_of_week));
-    setStart(s.start_time.slice(0, 5));
-    setEnd(s.end_time.slice(0, 5));
-    setDuration(String(s.slot_duration_minutes));
-    setMode(s.delivery_mode);
-  };
-
-  const submit = async (event, replacingId = null) => {
-    event.preventDefault();
-    const path = replacingId
-      ? "/weekly-schedules/" + replacingId + "/replace"
-      : "/weekly-schedules";
-    const saved = await state.mutate(path, {
-      campus_id: Number(campusId), day_of_week: Number(day), start_time: start + ":00", end_time: end + ":00",
-      slot_duration_minutes: Number(duration), delivery_mode: mode,
-    }, "POST", replacingId ? "Availability updated." : "Weekly schedule saved.");
-    if (saved) { setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("16:00"); setDuration("30"); setMode("ONLINE"); }
-  };
-
-  const resetEditor = () => {
-    setEditingId(null); setCampusId(""); setDay("1"); setStart("08:00"); setEnd("16:00"); setDuration("30"); setMode("ONLINE");
-  };
-
-  const deleteSchedule = async (schedule) => {
-    const confirmed = window.confirm(
-      "Delete this weekly schedule? It will stop creating future availability. Existing appointments will stay unchanged."
-    );
-    if (!confirmed) return;
-    const deleted = await state.mutate(
-      "/weekly-schedules/" + schedule.weekly_schedule_id + "/remove",
-      undefined,
-      "DELETE",
-      "Weekly schedule deleted. Existing appointments were preserved."
-    );
-    if (deleted && editingId === schedule.weekly_schedule_id) resetEditor();
-  };
-
-  const activeSchedules = Array.isArray(state.weeklySchedules) ? state.weeklySchedules : (state.weeklySchedules?.items ?? []);
-  return <section className="rounded-xl border border-slate-200 bg-white p-6">
-    <h2 className="text-lg font-semibold">Your weekly availability</h2>
-    <p className="mt-1 text-sm text-slate-500">Manage your recurring days and times in Philippine time. Use the weekday action to set Monday–Friday to 8:00 AM–4:00 PM, or add a custom schedule for one day. Only saved, enabled availability is shown to students. Enable restores a disabled schedule; Delete removes it from future availability. Existing appointments stay unchanged.</p>
-
-    <form className="mt-4 grid gap-3 sm:grid-cols-3" onSubmit={(e) => submit(e, editingId)}>
-      <label className="text-sm">Campus<select className={inputClass} required disabled={state.busy} value={campusId} onChange={e => setCampusId(e.target.value)}>
-        <option value="">Select a campus</option>{state.campuses.map(c => <option key={c.campus_id} value={c.campus_id}>{c.campus_name}</option>)}
-      </select></label>
-      <label className="text-sm">Day<select className={inputClass} required disabled={state.busy} value={day} onChange={e => setDay(e.target.value)}>
-        {[1, 2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{dayLabel(d)}</option>)}
-      </select></label>
-      <label className="text-sm">Mode<select className={inputClass} required disabled={state.busy} value={mode} onChange={e => setMode(e.target.value)}>
-        <option value="ONLINE">Online only</option><option value="FACE_TO_FACE">Face-to-face only</option><option value="BOTH">Both</option>
-      </select></label>
-      <label className="text-sm">Start time<input className={inputClass} type="time" required step={60} disabled={state.busy} value={start} onChange={e => setStart(e.target.value)} /></label>
-      <label className="text-sm">End time<input className={inputClass} type="time" required disabled={state.busy} value={end} onChange={e => setEnd(e.target.value)} /></label>
-      <label className="text-sm">Slot minutes<select className={inputClass} required disabled={state.busy} value={duration} onChange={e => setDuration(e.target.value)}>
-        {[15, 20, 30, 45, 60, 90, 120, 240].map(m => <option key={m} value={m}>{m}</option>)}
-      </select></label>
-      <div className="sm:col-span-3">
-        {mode !== "ONLINE" && campus && !campus.guidance_office_location && <p role="alert" className="text-sm text-amber-700">This campus has no Guidance Office location. Face-to-face availability needs one first.</p>}
-        {!wholeSlots && <p role="alert" className="text-sm text-amber-700">The time range must contain whole {duration}-minute slots.</p>}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button className={buttonClass} disabled={state.busy || !campusId || !wholeSlots}>
-            {editingId ? "Save changes" : "Add availability"}
-          </button>
-          {!editingId && <button type="button" className={secondaryClass}
-            disabled={state.busy || !campusId || !wholeSlots}
-            onClick={() => void state.mutate("/weekly-schedules/standard-weekdays", {
-              campus_id: Number(campusId), slot_duration_minutes: Number(duration), delivery_mode: mode,
-            }, "POST", "Standard weekday availability saved for Monday–Friday, 8:00 AM–4:00 PM.")}>
-            Set weekdays to 8:00 AM–4:00 PM
-          </button>}
-          {editingId && <button type="button" className={secondaryClass} disabled={state.busy} onClick={resetEditor}>Cancel edit</button>}
+function PendingRequestCard({ appointment: a, state, open, onToggle }) {
+  const [rejecting, setRejecting] = useState(false);
+  const [note, setNote] = useState("");
+  const action = (name, body) => state.mutate("/appointments/" + a.appointment_id + "/" + name, body);
+  const started = new Date(a.starts_at).getTime() <= Date.now();
+  const detailsId = `request-details-${a.appointment_id}`;
+  return <li className={"rounded-2xl border bg-white p-4 " + (open ? "border-[#21812B]" : "border-[#E9EDF1]")}>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-sm font-semibold text-[#207524]">{initialsOf(a.student_name)}</span>
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-bold text-slate-800">{a.student_name ?? "—"}</h3>
+          <p className="text-xs text-[#7B8493]">{a.campus_name}</p>
         </div>
       </div>
-    </form>
+      <span className="rounded-full bg-[#FFFAEB] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[#D97724]">Pending review</span>
+    </div>
 
-    {activeSchedules.length === 0
-      ? <p className="mt-5 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No weekly availability yet. Add your available campus, days, and times above — students will see open slots immediately.</p>
-      : <ul className="mt-5 space-y-2" data-testid="weekly-availability-list">
-        {activeSchedules.map(s => {
-          const editing = editingId === s.weekly_schedule_id;
-          return <li key={s.weekly_schedule_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm">
-            <span>
-              <span className="font-medium">{state.campuses.find(c => c.campus_id === s.campus_id)?.campus_name || "Campus " + s.campus_id}</span>
-              {" · "}{dayLabel(s.day_of_week)}
-              {" · "}{timeLabel(s.start_time)}–{timeLabel(s.end_time)}
-              {" · "}{s.slot_duration_minutes}-minute slots
-              {" · "}{modeLabel(s.delivery_mode)}
-              <span className={"ml-2 rounded-full px-2 py-0.5 text-xs font-medium " + (s.is_active ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600")}>
-                {s.is_active ? "Enabled" : "Disabled"}
-              </span>
-            </span>
-            <span className="flex gap-2">
-              {s.is_active && !editing && <button className={secondaryClass} disabled={state.busy} onClick={() => startEdit(s)}>Edit</button>}
-              {s.is_active && <button className={secondaryClass} disabled={state.busy} onClick={() => void state.mutate("/weekly-schedules/" + s.weekly_schedule_id, undefined, "DELETE", "Weekly schedule disabled.")}>Disable</button>}
-              {!s.is_active && <button className={secondaryClass} disabled={state.busy} onClick={() => void state.mutate("/weekly-schedules/" + s.weekly_schedule_id + "/enable", {}, "POST", "Weekly schedule enabled.")}>Enable</button>}
-              <button type="button" className={secondaryClass} disabled={state.busy} onClick={() => void deleteSchedule(s)}>Delete</button>
-            </span>
-          </li>;
-        })}
-      </ul>}
-  </section>;
-}
+    <div className="mt-3 flex items-center gap-3 rounded-xl bg-[#F8FAFB] px-3 py-2">
+      <div className="grid flex-1 gap-2 sm:grid-cols-3">
+        <MetadataColumn icon="fa-calendar" label="Date" value={dateLabel(a.starts_at)} />
+        <MetadataColumn icon="fa-clock" label="Time" value={timeLabelOf(a.starts_at) + durationLabel(a)} />
+        <MetadataColumn icon="fa-location-dot" label="Mode" value={modeLabelOf(a.appointment_mode)} />
+      </div>
+      <button type="button" aria-expanded={open} aria-controls={detailsId}
+        aria-label={(open ? "Collapse" : "Expand") + " request from " + (a.student_name ?? "student")}
+        className="rounded-md p-2 text-[#207524] hover:bg-white" onClick={onToggle}>
+        <i className={"fa-solid " + (open ? "fa-chevron-up" : "fa-chevron-down")} aria-hidden="true"></i>
+      </button>
+    </div>
 
-function AvailabilityBlocksSection({ state }) {
-  const [rangeStart, setRangeStart] = useState("");
-  const [rangeEnd, setRangeEnd] = useState("");
-  const [reason, setReason] = useState("");
-  const [blocking, setBlocking] = useState(false);
-  const minLocal = manilaLocalInput(new Date(Date.now() + 60 * 60 * 1000));
-  return <section className="rounded-xl border border-slate-200 bg-white p-6">
-    <h2 className="text-lg font-semibold">Temporary unavailable time</h2>
-    <p className="mt-1 text-sm text-slate-500">Blocks hide future slots without changing your weekly schedule. A block cannot overlap a pending or confirmed appointment.</p>
-    {blocking
-      ? <form className="mt-4" onSubmit={async event => {
-        event.preventDefault();
-        if (await state.mutate("/availability-blocks", {
-          starts_at: manilaInputToUTC(rangeStart), ends_at: manilaInputToUTC(rangeEnd),
-          is_all_day: false, reason: reason.trim() || null,
-        }, "POST", "Unavailable time saved.")) { setBlocking(false); setRangeStart(""); setRangeEnd(""); setReason(""); }
+    <div id={detailsId} hidden={!open} className="mt-3 space-y-3">
+      <div className="rounded-xl border-l-4 border-[#D8EAD8] bg-[#F8FAFB] p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7B8493]">Request</p>
+        <p className="text-sm text-slate-600">
+          Requested {a.appointment_mode === "ONLINE" ? "an online call" : "a face-to-face session"} at {a.campus_name}.
+          {a.meeting_location ? " Guidance Office: " + a.meeting_location + "." : ""}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button className={buttonClass} disabled={state.busy || started} onClick={() => void action("confirm")}>
+          <i className="fa-solid fa-check mr-2" aria-hidden="true"></i>Accept Appointment
+        </button>
+        <button className={secondaryClass + " ml-auto"} disabled={state.busy} onClick={() => setRejecting(!rejecting)}>Reject</button>
+      </div>
+      {rejecting && <form className="rounded-lg bg-slate-50 p-3" onSubmit={async e => {
+        e.preventDefault(); if (await action("reject", { rejection_note: note.trim() || null })) { setRejecting(false); setNote(""); }
       }}>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm">Starts<input className={inputClass} type="datetime-local" required min={minLocal} disabled={state.busy} value={rangeStart} onChange={e => setRangeStart(e.target.value)} /></label>
-          <label className="text-sm">Ends<input className={inputClass} type="datetime-local" required disabled={state.busy} value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} /></label>
-          <label className="text-sm">Reason (optional)<input className={inputClass} maxLength={255} disabled={state.busy} value={reason} onChange={e => setReason(e.target.value)} /></label>
-        </div>
-        {rangeStart && rangeEnd && new Date(rangeEnd) <= new Date(rangeStart) && <p role="alert" className="mt-2 text-sm text-amber-700">The end must be after the start.</p>}
-        <div className="mt-3 flex gap-2">
-          <button className={buttonClass} disabled={state.busy || !rangeStart || !rangeEnd || new Date(rangeEnd) <= new Date(rangeStart)}>Save unavailable time</button>
-          <button type="button" className={secondaryClass} disabled={state.busy} onClick={() => setBlocking(false)}>Cancel</button>
-        </div>
-      </form>
-      : <button className={buttonClass + " mt-4"} disabled={state.busy} onClick={() => setBlocking(true)}>Block unavailable time</button>}
-    {state.availabilityBlocksError && <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-      <p>{state.availabilityBlocksError}</p>
-      <button type="button" className={secondaryClass + " mt-2"} disabled={state.busy || state.availabilityBlocksLoading} onClick={() => void state.refresh()}>Retry unavailable times</button>
-    </div>}
-    {state.availabilityBlocksLoading && state.availabilityBlocks.length === 0 && <p role="status" className="mt-4 text-sm text-slate-500">Loading unavailable times…</p>}
-    {!state.availabilityBlocksLoading && !state.availabilityBlocksError && state.availabilityBlocks.length === 0 && <p className="mt-4 text-sm text-slate-500">No temporary unavailable times.</p>}
-    {Array.isArray(state.availabilityBlocks) && state.availabilityBlocks.length > 0 && <ul className="mt-5 space-y-2">
-      {state.availabilityBlocks.map(b => <li key={b.availability_block_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm">
-        <span>{formatSchedule(b.starts_at)} – {formatSchedule(b.ends_at)}{b.reason ? " · " + b.reason : ""}</span>
-        <button className={secondaryClass} disabled={state.busy} onClick={() => void state.mutate("/availability-blocks/" + b.availability_block_id, undefined, "DELETE", "Unavailable time removed.")}>Remove</button>
-      </li>)}
-    </ul>}
-  </section>;
+        <label className="text-sm">Reason (optional)<textarea className={inputClass} maxLength={500} value={note} onChange={e => setNote(e.target.value)} /></label>
+        <button className={secondaryClass + " mt-2"} disabled={state.busy}>Reject request</button>
+      </form>}
+    </div>
+  </li>;
 }
 
+/**
+ * Counselor "Appointment Requests" page — reviews pending student booking
+ * requests and accepts or rejects them. Availability configuration lives on
+ * the Schedule page; other counseling records live on the History page.
+ * (design/CounselConnect_Appointment_Requests_UI_Spec.md)
+ */
 export default function CounselorAppointmentsPage({ user }) {
   const state = useAppointments(user.role_code, "PENDING");
-  const [rescheduleId, setRescheduleId] = useState(null);
-  return <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-800 sm:px-6">
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState(null);
+  const seeded = useRef(false);
+  const items = state.appointments.items;
+
+  useEffect(() => {
+    if (!seeded.current && items.length) { seeded.current = true; setOpenId(items[0].appointment_id); }
+  }, [items]);
+
+  const term = query.trim().toLowerCase();
+  const visible = term ? items.filter(a => (a.student_name ?? "").toLowerCase().includes(term)) : items;
+
+  return <main className="min-h-screen bg-[#F7F9FB] px-4 py-8 text-slate-800 sm:px-6">
     <div className="mx-auto max-w-5xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">Student appointments</h1>
-        <p className="mt-1 text-sm text-slate-500">Review requests and manage your availability. Philippine time (Asia/Manila).</p>
-        <button className={secondaryClass + " mt-3"} disabled={state.busy || state.loading} onClick={() => void state.refresh()}>Refresh records</button>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[#207524]">Appointment Requests</h1>
+          <p className="mt-1 text-sm text-slate-500">Review and manage incoming booking requests from your students.</p>
+        </div>
+        <label className="flex items-center gap-2 rounded-lg border border-[#E9EDF1] bg-white px-3 py-2 text-sm">
+          <i className="fa-solid fa-magnifying-glass text-[#B1B8C2]" aria-hidden="true"></i>
+          <span className="sr-only">Search appointment requests</span>
+          <input className="w-40 bg-transparent outline-none" placeholder="Search" value={query} onChange={e => setQuery(e.target.value)} />
+        </label>
       </header>
+
       {state.error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-700">{state.error}</p>}
       {state.message && <p role="status" className="rounded-lg bg-emerald-50 p-4 text-emerald-800">{state.message}</p>}
-      {state.busy && <p role="status">Saving…</p>}
+      {state.busy && <p role="status">Saving...</p>}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold">Student records</h2>
-          <RecordsTabs state={state} />
-        </div>
-        {state.recordsError && <p role="alert" className="mt-4 text-sm text-red-700">{state.recordsError}</p>}
-        {!state.recordsLoading && <ul className="mt-4 space-y-4">{state.appointments.items.map(a =>
-          <AppointmentCard key={a.appointment_id} appointment={a} state={state} counselor={true} onReschedule={setRescheduleId} />)}</ul>}
-        {!state.recordsLoading && !state.recordsError && state.appointments.items.length === 0 &&
-          <p className="mt-4 text-sm text-slate-500">No {state.status ? state.status.replaceAll("_", " ").toLowerCase() : ""} student appointments yet.</p>}
-        <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.recordsLoading} />
-      </section>
+      {state.recordsError && <p role="alert" className="text-sm text-red-700">{state.recordsError}</p>}
+      {state.recordsLoading
+        ? <p role="status" className="text-sm text-slate-500">Loading requests...</p>
+        : <ul className="space-y-2">
+          {visible.map(a => <PendingRequestCard key={a.appointment_id} appointment={a} state={state}
+            open={openId === a.appointment_id} onToggle={() => setOpenId(openId === a.appointment_id ? null : a.appointment_id)} />)}
+        </ul>}
+      {!state.recordsLoading && !state.recordsError && visible.length === 0 &&
+        <p className="rounded-xl border border-[#E9EDF1] bg-white p-6 text-sm text-slate-500">
+          {term ? "No requests match your search." : "No pending appointment requests right now."}
+        </p>}
 
-      <BookingModal open={rescheduleId !== null} onClose={() => setRescheduleId(null)} state={state} rescheduleId={rescheduleId} />
-
-      <WeeklyScheduleEditor state={state} />
-
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold">Your availability calendar</h2>
-        <p className="mt-1 text-sm text-slate-500">An amber dot marks dates with pending or confirmed appointments. Select a date to see its booked times below the calendar; manage availability and blocks in the sections below.</p>
-        <div className="mt-4"><CalendarGrid counselorView calendar={state.calendar} month={state.calendarMonth}
-          loading={state.loading} onRetry={state.refresh} onMonthChange={state.setCalendarMonth} /></div>
-        <BlockDateForm state={state} />
-      </section>
-
-      <AvailabilityBlocksSection state={state} />
+      <Pagination page={state.appointmentPage} total={state.appointments.total} onChange={state.setAppointmentPage} disabled={state.busy || state.recordsLoading} />
     </div>
   </main>;
 }

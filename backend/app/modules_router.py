@@ -14,6 +14,7 @@ from app.modules.appointments.router import router as appointments_router
 from app.modules.assistant.router import router as assistant_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
+from app.modules.calls.router import router as calls_router
 from app.modules.content.router import router as content_router
 from app.modules.cor_screening.router import router as cor_screening_router
 from app.modules.messaging.router import router as messaging_router
@@ -30,6 +31,7 @@ api_router.include_router(cor_screening_router)
 api_router.include_router(profile_change_router)
 api_router.include_router(appointments_router)
 api_router.include_router(messaging_router)
+api_router.include_router(calls_router)
 api_router.include_router(sos_router)
 api_router.include_router(wellness_resources_router)
 api_router.include_router(assistant_router)

@@ -4,6 +4,16 @@ import { request } from "../../services/apiClient";
 import BookingModal from "../../components/appointments/BookingModal.jsx";
 import { useToast } from "../../components/feedback";
 
+const STATUS_BADGES = {
+  PENDING: "bg-amber-100 text-amber-800",
+  CONFIRMED: "bg-emerald-100 text-emerald-800",
+  COMPLETED: "bg-slate-100 text-slate-700",
+  CANCELLED: "bg-red-100 text-red-700",
+  REJECTED: "bg-red-100 text-red-700",
+  NO_SHOW: "bg-slate-100 text-slate-700",
+};
+const statusBadge = (status) => STATUS_BADGES[status] ?? "bg-slate-100 text-slate-700";
+
 /**
  * One-shot recent-session fetch. Unlike useAppointments this does not load the
  * availability calendar/campuses/slots or poll — the homepage only shows the
@@ -59,7 +69,7 @@ export default function StudentHomePage({ user }) {
             </p>
           </div>
           <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-10 hidden md:block pointer-events-none">
-            <i className="fa-solid fa-heart-pulse text-9xl"></i>
+            <i className="fa-solid fa-heart-pulse text-9xl" aria-hidden="true"></i>
           </div>
         </section>
 
@@ -68,7 +78,7 @@ export default function StudentHomePage({ user }) {
           {/* Left Column (2 span on lg): Book a Schedule & Recent Sessions */}
           <div className="lg:col-span-2 space-y-6">
             {/* Book a Schedule Card */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-6">
               <div className="space-y-3">
                 <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 text-xl font-bold">
                   <i className="fa-solid fa-calendar-plus" aria-hidden="true"></i>
@@ -99,7 +109,7 @@ export default function StudentHomePage({ user }) {
                 )}
               </div>
               <div className="shrink-0 hidden sm:flex h-36 w-36 items-center justify-center rounded-2xl bg-emerald-50/70 text-emerald-600 text-5xl">
-                <i className="fa-regular fa-calendar-days"></i>
+                <i className="fa-regular fa-calendar-days" aria-hidden="true"></i>
               </div>
             </div>
 
@@ -116,20 +126,20 @@ export default function StudentHomePage({ user }) {
                   <table className="min-w-full divide-y divide-slate-100 text-sm">
                     <thead>
                       <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <th className="pb-3">Counselor</th>
-                        <th className="pb-3">Date & Time</th>
-                        <th className="pb-3">Mode</th>
-                        <th className="pb-3">Status</th>
+                        <th className="pb-3 pr-4 whitespace-nowrap">Counselor</th>
+                        <th className="pb-3 pr-4 whitespace-nowrap">Date &amp; Time</th>
+                        <th className="pb-3 pr-4 whitespace-nowrap">Mode</th>
+                        <th className="pb-3 whitespace-nowrap">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {recentItems.slice(0, 4).map(a => (
-                        <tr key={a.appointment_id}>
-                          <td className="py-3 font-medium text-slate-800">{a.counselor_name || "Assigned Counselor"}</td>
-                          <td className="py-3 text-slate-600">{formatSchedule(a.starts_at)}</td>
-                          <td className="py-3 text-slate-600">{a.appointment_mode}</td>
-                          <td className="py-3">
-                            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                        <tr key={a.appointment_id} className="transition-colors hover:bg-slate-50/70">
+                          <td className="py-3 pr-4 font-medium text-slate-800 whitespace-nowrap">{a.counselor_name || "Assigned Counselor"}</td>
+                          <td className="py-3 pr-4 text-slate-600 whitespace-nowrap">{formatSchedule(a.starts_at)}</td>
+                          <td className="py-3 pr-4 text-slate-600 whitespace-nowrap">{a.appointment_mode}</td>
+                          <td className="py-3 whitespace-nowrap">
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(a.status)}`}>
                               {a.status}
                             </span>
                           </td>

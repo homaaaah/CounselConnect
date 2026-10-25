@@ -11,6 +11,8 @@ from app.modules.appointments.models import (
     CounselorAvailabilityBlock,
     CounselorBlockedDate,
     CounselorWeeklySchedule,
+    SessionDocument,
+    SessionRecord,
 )
 from app.modules.accounts.models import User
 
@@ -65,6 +67,24 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         schedule.is_active = False
         schedule.is_deleted = True
         return schedule
+
+    def slot_schedule_is_active(self, slot):
+        """One-off slots are always bookable; generated slots follow their definition.
+
+        Locks the definition row so the booking transaction cannot act on a
+        snapshot taken before a concurrent disable/delete commit.
+        """
+        if slot.weekly_schedule_id is None:
+            return True
+        return self.session.scalar(
+            select(CounselorWeeklySchedule.weekly_schedule_id)
+            .where(
+                CounselorWeeklySchedule.weekly_schedule_id == slot.weekly_schedule_id,
+                CounselorWeeklySchedule.is_active.is_(True),
+                CounselorWeeklySchedule.is_deleted.is_(False),
+            )
+            .with_for_update()
+        ) is not None
 
     def lock_weekly_schedule(self, counselor_id, weekly_schedule_id):
         return self.session.scalar(
@@ -370,7 +390,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             page_size,
         )
 
-    def appointments(self, actor, status, page, page_size):
+    def appointments(self, actor, status, page, page_size, starts_after=None, ends_before=None):
         scope = (
             Appointment.student_user_id
             if actor.role_code == "STUDENT"
@@ -379,6 +399,14 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         stmt = select(Appointment).where(scope == actor.user_id)
         if status:
             stmt = stmt.where(Appointment.status == status)
+        # Appointment start time lives on the joined slot; range filters use the
+        # documented inclusive starts_after / exclusive ends_before semantics.
+        if starts_after is not None or ends_before is not None:
+            stmt = stmt.join(AvailabilitySlot, Appointment.availability_slot_id == AvailabilitySlot.slot_id)
+            if starts_after is not None:
+                stmt = stmt.where(AvailabilitySlot.starts_at >= starts_after)
+            if ends_before is not None:
+                stmt = stmt.where(AvailabilitySlot.starts_at < ends_before)
         return self.page(
             stmt.order_by(
                 Appointment.created_at.desc(), Appointment.appointment_id.desc()
@@ -436,3 +464,31 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             .order_by(AvailabilitySlot.ends_at, Appointment.appointment_id)
             .limit(100)
         ))
+
+    # ------------------------------------------------- session records/files
+
+    def session_record(self, appointment_id, *, lock=False):
+        stmt = select(SessionRecord).where(SessionRecord.appointment_id == appointment_id)
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt)
+
+    def session_documents(self, appointment_id):
+        return list(self.session.execute(
+            select(SessionDocument, User.first_name, User.last_name)
+            .join(User, User.user_id == SessionDocument.uploader_user_id)
+            .where(
+                SessionDocument.appointment_id == appointment_id,
+                SessionDocument.deleted_at.is_(None),
+            )
+            .order_by(SessionDocument.created_at.desc(), SessionDocument.document_id.desc())
+        ))
+
+    def session_document(self, appointment_id, document_id, *, lock=False):
+        stmt = select(SessionDocument).where(
+            SessionDocument.document_id == document_id,
+            SessionDocument.appointment_id == appointment_id,
+        )
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt)

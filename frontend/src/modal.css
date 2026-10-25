@@ -1,7 +1,7 @@
 /* ============================================
    Modal Styles (Auth & Booking Modals)
-   Matches photo reference: white card, logo placeholder,
-   centered headers, clean inputs, and primary action button.
+   White card, brand logo mark, centered headers,
+   clean inputs, and primary action button.
    ============================================ */
 
 .modal-card,
@@ -36,6 +36,23 @@
 .signup-card .form-select:focus-visible {
   outline: 2px solid var(--counseling-active-focus);
   outline-offset: 2px;
+}
+
+/* Registration modal spacing: a steadier vertical rhythm than the shared
+   defaults give the fields, COR upload, and review actions. */
+.signup-card .form-group.full-width,
+.signup-card .form-row {
+  margin-bottom: 1.15rem;
+}
+
+.signup-card .form-actions {
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 601px) {
+  .signup-card .form-row .form-group {
+    margin-bottom: 0;
+  }
 }
 
 /* Auth modal overlay */
@@ -92,24 +109,26 @@
   color: #18181b;
 }
 
-/* Modal header matching screenshot: Logo placeholder, title, subtitle */
+/* Modal header: brand logo mark, title, subtitle */
 .login-header,
 .signup-header {
   text-align: center;
   margin-bottom: 2rem;
 }
 
-/* Logo placeholder inside modal headers */
-.login-header::before,
-.signup-header::before {
-  content: "";
-  display: block;
+/* Brand logo mark inside modal headers (matches the landing-page badge) */
+.brand-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 56px;
   height: 56px;
   margin: 0 auto 1rem auto;
   background: #e8f5e9;
-  border: 2px solid #c8e6c9;
+  border: 2px solid #1C6B1B;
   border-radius: 50%;
+  color: #1C6B1B;
+  font-size: 1.35rem;
 }
 
 .login-header h1,

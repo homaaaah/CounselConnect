@@ -8,6 +8,8 @@
  *   in the X-CSRF-Token header (stored in memory only — NOT localStorage).
  * - JSON fields travel as snake_case; do NOT convert case globally.
  * - Errors use the standard envelope: { "error": { code, message, details } }.
+ * - `X-Background-Refresh: 1` marks a silent probe (session revalidation):
+ *   it is neither session activity nor a user-facing error.
  */
 
 export const API_BASE_URL =
@@ -81,6 +83,9 @@ export async function request(path, init = {}) {
   const sentCsrfToken = csrfToken;
   const isFormData = init.body instanceof FormData;
   const headers = { ...init.headers };
+  // Background probes (session revalidation) must not be announced as user
+  // activity or surfaced as errors.
+  const isBackgroundRefresh = headers["X-Background-Refresh"] === "1";
   if (!isFormData) {
     headers["Content-Type"] = "application/json";
   }
@@ -107,14 +112,16 @@ export async function request(path, init = {}) {
         message: "Cannot reach the server. Check your connection and try again.",
       },
     });
-    try {
-      errorHandler?.(networkError);
-    } catch {
-      /* a failing observer must never mask the real error */
+    if (!isBackgroundRefresh) {
+      try {
+        errorHandler?.(networkError);
+      } catch {
+        /* a failing observer must never mask the real error */
+      }
     }
     throw networkError;
   }
-  if (response.status !== 401 && sentCsrfToken && headers["X-Background-Refresh"] !== "1") {
+  if (response.status !== 401 && sentCsrfToken && !isBackgroundRefresh) {
     sessionActivityHandler?.();
   }
   if (!response.ok) {
@@ -127,7 +134,7 @@ export async function request(path, init = {}) {
       error: { code: "NETWORK_ERROR", message: "Request failed." },
     });
     // Session expiry is handled by the auth flow; notify for everything else.
-    if (apiError.status !== 401) {
+    if (apiError.status !== 401 && !isBackgroundRefresh) {
       try {
         errorHandler?.(apiError);
       } catch {

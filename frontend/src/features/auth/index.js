@@ -4,3 +4,4 @@
  */
 export { useLogin } from "./useLogin";
 export { useSession } from "./useSession";
+export { default as PasswordInput } from "./PasswordInput";

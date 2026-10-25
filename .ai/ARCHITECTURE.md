@@ -14,7 +14,7 @@ JavaScript React/Vite/Tailwind (+ Capacitor)
  private filesystem/object-storage abstraction
 ```
 
-REST remains the durable source of truth. Native WebSockets deliver committed chat/session events and planned WebRTC signaling. WebRTC carries live one-to-one audio/video; the application does not record or store media.
+REST remains the durable source of truth. Native WebSockets deliver committed chat/session events and appointment call signaling. WebRTC carries live one-to-one audio/video; the application does not record or store media, SDP, ICE candidates, or call history.
 
 ## Target modules
 

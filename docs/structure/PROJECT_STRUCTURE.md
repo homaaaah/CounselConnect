@@ -14,6 +14,8 @@ This document describes the repository layout and intended home for new files. E
 
 Avoid feature code at repository root.
 
+An earlier `CounselConnect-test-Registration_Fix/` reference snapshot of a sibling branch's registration and appointment work was merged into this tree and then removed. Its changes now live in `backend/` and `frontend/`; the applied delta remains in history on branch `merge/snapshot-fix` (commit `de76c4d`).
+
 ## Backend
 
 Request flow remains router → schema → service → repository → model. Business rules belong in services and authorization stays server-side.
