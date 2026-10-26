@@ -78,6 +78,13 @@ def run_management_workflows(mysql_test_engine, committed_correction, *, script=
                 worker.join(timeout=10)
     finally:
         with Session(mysql_test_engine) as db:
+            created_counselors = list(db.scalars(select(AuditEvent.target_id).where(
+                AuditEvent.actor_user_id.in_(data["reviewers"]), AuditEvent.target_type == "user",
+                AuditEvent.event_type == "counselor_account_created")))
+            db.execute(delete(AuditEvent).where(AuditEvent.actor_user_id.in_(data["reviewers"]),
+                AuditEvent.event_type.in_(["counselor_account_created", "counselor_account_updated"])))
+            if created_counselors:
+                db.execute(delete(User).where(User.user_id.in_(created_counselors), User.role_code == "COUNSELOR"))
             children = list(db.scalars(select(ProfileChangeRequest).where(ProfileChangeRequest.student_user_id == data["student"],
                 ProfileChangeRequest.change_request_id != data["request"]).order_by(ProfileChangeRequest.change_request_id.desc())))
             for child in children:

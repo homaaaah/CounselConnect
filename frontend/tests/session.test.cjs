@@ -184,6 +184,73 @@ test("the staff sign-in form rejects a Student account and revokes the session",
   assert.doesNotMatch(message, /Guidance|Student/, "the message never reveals the account's role");
 });
 
+for (const role of ["STUDENT", "COUNSELOR", "GUIDANCE_STAFF"]) test(`Superadmin sign-in rejects ${role} and revokes the fresh session`, async t => {
+  environment(t, "#superadmin-login");
+  const calls = fakeApi(t, () => json(null), { ...auth, user: { ...auth.user, role_code: role } });
+  const root = await mount(t);
+  assert.equal(root.root.findByType("h1").children.join(""), "Superadmin sign in");
+  assert.equal(root.root.findByProps({ id: "identifier" }).props.type, "email");
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "synthetic@example.edu" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => root.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  assert.equal(window.location.hash, "#superadmin-login");
+  assert.equal(getCsrfToken(), null);
+  assert.ok(calls.some(call => call.path.endsWith("/auth/logout") && call.headers["X-CSRF-Token"] === auth.csrf_token));
+  assert.match(JSON.stringify(root.toJSON()), /Incorrect identifier or password/);
+});
+
+test("dedicated Superadmin sign-in accepts SUPERADMIN and reaches Users with CSRF intact", async t => {
+  environment(t, "#superadmin-login");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const calls = fakeApi(t, () => json(null), { ...auth, user: { ...auth.user, role_code: "SUPERADMIN" } });
+  const root = await mount(t);
+  assert.equal(root.root.findAllByProps({ href: "#register" }).length, 0);
+  assert.equal(root.root.findAllByProps({ href: "#login" }).length, 0);
+  assert.equal(root.root.findAllByProps({ href: "#staff-login" }).length, 0);
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "super@example.edu" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => root.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  await act(async () => t.mock.timers.tick(701));
+  assert.equal(window.location.hash, "#home");
+  assert.equal(getCsrfToken(), auth.csrf_token);
+  assert.equal(calls.some(call => call.path.endsWith("/auth/logout")), false);
+  assert.equal(root.root.findByType("h1").children.join(""), "Users");
+});
+
+test("Guidance sign-in rejects Superadmin and exposes the separate entry", async t => {
+  environment(t, "#staff-login");
+  const calls = fakeApi(t, () => json(null), { ...auth, user: { ...auth.user, role_code: "SUPERADMIN" } });
+  const root = await mount(t);
+  assert.ok(root.root.findByProps({ href: "#superadmin-login" }));
+  await act(async () => {
+    root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "super@example.edu" } });
+    root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });
+  });
+  await act(async () => root.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  assert.ok(calls.some(call => call.path.endsWith("/auth/logout")));
+  assert.equal(getCsrfToken(), null);
+  assert.equal(window.location.hash, "#staff-login");
+});
+
+test("landing footer opens a Superadmin-only modal without other sign-in switches", async t => {
+  environment(t, "#landing");
+  fakeApi(t, () => json(null));
+  const root = await mount(t);
+  const open = root.root.findAllByType("button").find(node => node.children.join("") === "Superadmin sign in");
+  await act(async () => open.props.onClick());
+  const dialog = root.root.findByProps({ role: "dialog" });
+  assert.equal(dialog.findByType("h1").children.join(""), "Superadmin sign in");
+  assert.equal(root.root.findAllByType("button").filter(node => node.children.join("") === "Register").length, 0);
+  for (const label of ["Student sign in", "Guidance sign in", "Register"]) {
+    assert.equal(dialog.findAllByType("button").filter(node => node.children.join("") === label).length, 0);
+  }
+  assert.ok(dialog.findByProps({ "aria-label": "Close" }));
+});
+
 test("the Student sign-in form rejects a staff account and revokes the session", async (t) => {
   environment(t, "#login");
   const calls = fakeApi(t, () => failure(401), auth);

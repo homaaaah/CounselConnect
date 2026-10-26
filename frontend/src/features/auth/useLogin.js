@@ -6,7 +6,8 @@
  * lives only in the HttpOnly cookie.
  *
  * Audience gate: the Student form accepts only STUDENT accounts and the
- * Guidance form accepts only staff roles. A mismatched sign-in revokes the
+ * Guidance form accepts Counselors/Guidance Staff; the separate Superadmin
+ * form accepts only SUPERADMIN. A mismatched sign-in revokes the
  * session it just created instead of letting the wrong role through. The
  * rejection message is deliberately generic so it never reveals which
  * account type the credentials belong to.
@@ -14,10 +15,12 @@
 import { useCallback, useState } from "react";
 import { request, ApiError, setCsrfToken } from "../../services/apiClient";
 
-const STAFF_ROLES = ["COUNSELOR", "GUIDANCE_STAFF", "SUPERADMIN"];
-
-const roleMatchesAudience = (role, audience) =>
-  audience === "student" ? role === "STUDENT" : STAFF_ROLES.includes(role);
+const AUDIENCE_ROLES = {
+  student: ["STUDENT"],
+  staff: ["COUNSELOR", "GUIDANCE_STAFF"],
+  superadmin: ["SUPERADMIN"],
+};
+const roleMatchesAudience = (role, audience) => AUDIENCE_ROLES[audience]?.includes(role) === true;
 
 export function useLogin() {
   const [submitting, setSubmitting] = useState(false);

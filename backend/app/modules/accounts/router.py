@@ -21,6 +21,8 @@ from app.modules.accounts.schemas import (
     UserStatusRequest,
     RoleCode,
     AccountStatus,
+    CounselorAccountCreateRequest,
+    CounselorAccountUpdateRequest,
 )
 from app.modules.accounts.service import AccountsService, get_accounts_service
 from app.modules.cor_screening.schemas import (
@@ -38,6 +40,18 @@ from app.shared.private_routes import PrivateRoute
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 users_router = APIRouter(prefix="/users", route_class=PrivateRoute)
+
+
+@users_router.post("", response_model=ManagedUserDetail, status_code=201)
+def create_counselor(data: CounselorAccountCreateRequest, actor: CurrentUser,
+    service: AccountsService = Depends(get_accounts_service)):
+    return service.create_counselor(actor, data)
+
+
+@users_router.patch("/{user_id}", response_model=ManagedUserDetail)
+def update_counselor(user_id: int, data: CounselorAccountUpdateRequest, actor: CurrentUser,
+    service: AccountsService = Depends(get_accounts_service)):
+    return service.update_counselor(actor, user_id, data)
 
 
 @users_router.get("", response_model=ListEnvelope[ManagedUserSummary])

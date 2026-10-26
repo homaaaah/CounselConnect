@@ -7,9 +7,11 @@ read or modify clinical records.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.core.exceptions import AppError
 from app.core.security import hash_password
@@ -82,6 +84,89 @@ class AccountsService(BaseService[User]):
         except DBAPIError:
             db.rollback()
             raise AppError(code="INTERNAL_ERROR", message="An unexpected error occurred.", status_code=500) from None
+        except Exception:
+            db.rollback()
+            raise
+        return self.managed_user(reviewer, user_id)
+
+    def _lock_user_manager(self, actor):
+        self._require_user_manager(actor)
+        reviewer = self.repository.lock_user(actor.user_id)
+        if reviewer is None:
+            raise AppError(code="FORBIDDEN_ROLE", message="Active Superadmin access is required.", status_code=403)
+        self._require_user_manager(reviewer)
+        return reviewer
+
+    def _require_available_counselor_email(self, email, *, user_id=None):
+        owner = self.repository.find_user_by_email(email)
+        if owner is not None and owner.user_id != user_id:
+            raise AppError(code="EMAIL_ALREADY_REGISTERED", message="This email is already registered.", status_code=409)
+        # Staff email must not shadow a Student's existing login identifier.
+        if self.repository.find_student_profile_by_number(email) is not None:
+            raise AppError(code="ACCOUNT_IDENTIFIER_CONFLICT", message="This email cannot be used as an account identifier.", status_code=409)
+
+    @staticmethod
+    def _counselor_write_error(exc):
+        args = getattr(exc.orig, "args", ())
+        if isinstance(exc, IntegrityError) and args and args[0] == 1062 and "uq_users_email" in str(args[1] if len(args) > 1 else ""):
+            return AppError(code="EMAIL_ALREADY_REGISTERED", message="This email is already registered.", status_code=409)
+        return AppError(code="INTERNAL_ERROR", message="An unexpected error occurred.", status_code=500)
+
+    def create_counselor(self, actor, data):
+        from app.modules.audit.service import AuditService
+        db = self.repository.session
+        try:
+            reviewer = self._lock_user_manager(actor)
+            self._require_available_counselor_email(str(data.email))
+            user = User(email=str(data.email), password_hash=hash_password(data.password.get_secret_value()),
+                role_code="COUNSELOR", account_status="ACTIVE", is_deactivated=False,
+                first_name=data.first_name, middle_name=data.middle_name, last_name=data.last_name)
+            db.add(user)
+            db.flush()
+            AuditService(db).record(reviewer.user_id, "counselor_account_created", "user", user.user_id,
+                metadata={"role_code": "COUNSELOR", "account_status": "ACTIVE"})
+            db.flush()
+            user_id = user.user_id
+            db.commit()
+        except DBAPIError as exc:
+            db.rollback()
+            raise self._counselor_write_error(exc) from None
+        except Exception:
+            db.rollback()
+            raise
+        return self.managed_user(reviewer, user_id)
+
+    def update_counselor(self, actor, user_id, data):
+        from app.modules.auth.repository import AuthRepository
+        from app.modules.audit.service import AuditService
+        db = self.repository.session
+        try:
+            reviewer = self._lock_user_manager(actor)
+            user = self.ensure_found(self.repository.lock_user(user_id), "USER_NOT_FOUND", "User not found.")
+            if user.role_code != "COUNSELOR" or user.user_id == reviewer.user_id:
+                raise AppError(code="COUNSELOR_EDIT_FORBIDDEN", message="Only Counselor accounts can be edited here.", status_code=403)
+            updated_at = user.updated_at
+            current = updated_at.replace(tzinfo=timezone.utc) if updated_at.tzinfo is None else updated_at.astimezone(timezone.utc)
+            if current != data.expected_updated_at.astimezone(timezone.utc):
+                raise AppError(code="USER_EDIT_CONFLICT", message="This account has changed. Reload its details before saving.", status_code=409)
+            self._require_available_counselor_email(str(data.email), user_id=user_id)
+            values = {field: getattr(data, field) for field in ("email", "first_name", "middle_name", "last_name")}
+            changed = [field for field, value in values.items() if value != getattr(user, field)]
+            if changed:
+                for field in changed:
+                    setattr(user, field, values[field])
+                if "email" in changed:
+                    AuthRepository(db).revoke_all_sessions_for_user(user_id, "ACCOUNT_UPDATED")
+                # Keep timestamp-based conflict detection monotonic even for
+                # rapid successive edits or a database clock ahead of this host.
+                user.updated_at = max(datetime.now(timezone.utc), current + timedelta(microseconds=1))
+                AuditService(db).record(reviewer.user_id, "counselor_account_updated", "user", user_id,
+                    metadata={"changed_fields": changed, "sessions_revoked": "email" in changed})
+                db.flush()
+            db.commit()
+        except DBAPIError as exc:
+            db.rollback()
+            raise self._counselor_write_error(exc) from None
         except Exception:
             db.rollback()
             raise

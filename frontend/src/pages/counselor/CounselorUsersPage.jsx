@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useUserDirectory, useProfileChangeRequests } from "../../features/accounts";
 import { useToast } from "../../components/feedback";
 import { request } from "../../services/apiClient";
+import { ManagementHeader, ManagementDialog, ManagementBadge } from "../../features/accounts/SuperadminLayout";
+import { dateText } from "../../features/accounts/management";
 
 const SCREENING_STATUSES = [
   "AWAITING_CONFIRMATION",
@@ -25,7 +27,8 @@ const ACCOUNT_STYLES = {
   VERIFICATION_EXPIRED: "bg-slate-200 text-slate-700",
 };
 
-function Badge({ value, styles }) {
+function Badge({ value, styles, polished = false }) {
+  if (polished) return <ManagementBadge value={value} />;
   if (!value) return <span className="text-slate-500">—</span>;
   return (
     <span className={"rounded-full px-2 py-0.5 text-xs font-semibold " + (styles[value] ?? "bg-slate-100 text-slate-700")}>
@@ -44,43 +47,26 @@ function formatDateTime(value) {
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-slate-100 py-2 sm:flex-row sm:items-baseline sm:gap-3">
+    <div className="directory-detail-row flex flex-col gap-0.5 border-b border-slate-100 py-2 sm:flex-row sm:items-baseline sm:gap-3">
       <dt className="w-48 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
       <dd className="break-words text-sm text-slate-800">{value}</dd>
     </div>
   );
 }
 
-function StudentDetailModal({ item, campusName, programName, onClose }) {
+function StudentDetailModal({ item, campusName, programName, onClose, polished = false }) {
   const { user, profile, screening } = item;
   const fullName = [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(" ") || "—";
-  return (
-    <div
-      className="modal-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Student details"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-    >
-      <div className="signup-card" style={{ maxWidth: "720px" }}>
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">{fullName}</h2>
-            <p className="text-sm text-slate-600">{text(user.email)} · Student #{text(profile?.student_number)}</p>
-          </div>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-            <i className="fa-solid fa-xmark" aria-hidden="true"></i>
-          </button>
-        </div>
-
+  const displayDateTime = polished ? dateText : formatDateTime;
+  const details = <>
         <section className="mb-4">
           <h3 className="mb-1 text-sm font-bold text-slate-700">Account</h3>
           <dl>
             <DetailRow label="User ID" value={text(user.user_id)} />
             <DetailRow label="Role" value={text(user.role_code)} />
-            <DetailRow label="Account status" value={<Badge value={user.account_status} styles={ACCOUNT_STYLES} />} />
-            <DetailRow label="Registered" value={formatDateTime(user.created_at)} />
-            <DetailRow label="Last updated" value={formatDateTime(user.updated_at)} />
+            <DetailRow label="Account status" value={<Badge polished={polished} value={user.account_status} styles={ACCOUNT_STYLES} />} />
+            <DetailRow label="Registered" value={displayDateTime(user.created_at)} />
+            <DetailRow label="Last updated" value={displayDateTime(user.updated_at)} />
           </dl>
         </section>
 
@@ -103,7 +89,7 @@ function StudentDetailModal({ item, campusName, programName, onClose }) {
           <h3 className="mb-1 text-sm font-bold text-slate-700">Latest COR screening</h3>
           {screening ? (
             <dl>
-              <DetailRow label="Status" value={<Badge value={screening.status} styles={STATUS_STYLES} />} />
+              <DetailRow label="Status" value={<Badge polished={polished} value={screening.status} styles={STATUS_STYLES} />} />
               <DetailRow label="Failure code" value={text(screening.failure_reason_code)} />
               <DetailRow label="Template version" value={text(screening.format_template_version)} />
               <DetailRow label="Format score" value={text(screening.format_match_score)} />
@@ -116,14 +102,38 @@ function StudentDetailModal({ item, campusName, programName, onClose }) {
               <DetailRow label="Extracted year / section" value={`${text(screening.extracted_year_level)} / ${text(screening.extracted_section)}`} />
               <DetailRow label="Extracted academic period" value={text(screening.extracted_academic_period)} />
               <DetailRow label="Enrollment valid until" value={text(screening.valid_until)} />
-              <DetailRow label="Submitted" value={formatDateTime(screening.submitted_at)} />
-              <DetailRow label="Processed" value={formatDateTime(screening.processed_at)} />
-              <DetailRow label="Confirmed" value={formatDateTime(screening.confirmed_at)} />
+              <DetailRow label="Submitted" value={displayDateTime(screening.submitted_at)} />
+              <DetailRow label="Processed" value={displayDateTime(screening.processed_at)} />
+              <DetailRow label="Confirmed" value={displayDateTime(screening.confirmed_at)} />
             </dl>
           ) : (
             <p className="py-2 text-sm text-slate-600">No COR screening recorded.</p>
           )}
         </section>
+  </>;
+  if (polished) return <ManagementDialog label="Student details" title={fullName} subtitle={text(user.email) + " · Student #" + text(profile?.student_number)} onClose={onClose}>
+    <div className="management-recovery-detail">{details}</div>
+  </ManagementDialog>;
+  return (
+    <div
+      className="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Student details"
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <div className="signup-card" style={{ maxWidth: "720px" }}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">{fullName}</h2>
+            <p className="text-sm text-slate-600">{text(user.email)} · Student #{text(profile?.student_number)}</p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            <i className="fa-solid fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        {details}
       </div>
     </div>
   );
@@ -316,9 +326,11 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
   }
 
   return (
-    <main className="home-page">
-      <section className="px-4 pt-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-6xl">
+    <main className={canRecover ? "superadmin-page" : "home-page"}>
+      <section className={canRecover ? "management-workspace" : "px-4 pt-8 sm:px-6 lg:px-8"}>
+        {canRecover && <ManagementHeader title="Student Directory" icon="recovery" description="View registration records and help eligible Students begin a fresh COR submission."><a href="#users" className="management-button">Back to Users</a></ManagementHeader>}
+        <div className={canRecover ? "management-panel" : "mx-auto max-w-6xl"}>
+          {canRecover ? <header className="management-panel-header"><div><h2>Registration & account recovery</h2><p>Recovery is available for non-active accounts. Existing sign-in restrictions still apply.</p></div>{!loading && !error && <span className="management-count"><strong>{total}</strong> students</span>}</header> : <>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Users</h1>
@@ -328,17 +340,18 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
             </div>
             <p className="text-sm text-slate-600">{total} student{total === 1 ? "" : "s"}</p>
           </div>
+          </>}
 
           {canRecover && showCorrections && <PendingEditRequests />}
 
           <form
-            className="mt-5 flex flex-wrap items-center gap-3"
+            className={canRecover ? "management-recovery-filters" : "mt-5 flex flex-wrap items-center gap-3"}
             onSubmit={(event) => {
               event.preventDefault();
               search(term);
             }}
           >
-            <label className="sr-only" htmlFor="user-search">Search users</label>
+            <label className={canRecover ? "management-field" : "sr-only"} htmlFor="user-search">Search users</label>
             <input
               id="user-search"
               type="search"
@@ -347,7 +360,7 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
               placeholder="Search student number, name, or email"
               className="form-input w-full max-w-md"
             />
-            <label className="sr-only" htmlFor="user-status">Screening status</label>
+            <label className={canRecover ? "management-field" : "sr-only"} htmlFor="user-status">Screening status</label>
             <select
               id="user-status"
               value={status}
@@ -359,7 +372,7 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
                 <option key={value} value={value}>{value.replaceAll("_", " ")}</option>
               ))}
             </select>
-            <button type="submit" className="btn-submit btn-success">Search</button>
+            <button type="submit" className={canRecover ? "management-button management-button--primary" : "btn-submit btn-success"}>Search</button>
           </form>
 
           {error && (
@@ -369,8 +382,8 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
             </div>
           )}
 
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <div className={canRecover ? "management-table-scroll" : "mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white"}>
+            <table className={canRecover ? "management-table" : "min-w-full divide-y divide-slate-200 text-sm"}>
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Student #</th>
@@ -416,10 +429,10 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
                         {profile ? `${profile.year_level} · ${profile.section}` : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge value={user.account_status} styles={ACCOUNT_STYLES} />
+                        <Badge polished={canRecover} value={user.account_status} styles={ACCOUNT_STYLES} />
                       </td>
                       <td className="px-4 py-3">
-                        <Badge value={screening?.status} styles={STATUS_STYLES} />
+                        <Badge polished={canRecover} value={screening?.status} styles={STATUS_STYLES} />
                         {screening?.failure_reason_code && (
                           <div className="mt-1 text-xs text-slate-600">
                             {screening.failure_reason_code.replaceAll("_", " ").toLowerCase()}
@@ -436,7 +449,7 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            className="rounded-md border border-blue-300 px-2.5 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-50"
+                            className={canRecover ? "management-button" : "rounded-md border border-blue-300 px-2.5 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-50"}
                             onClick={() => setSelected(item)}
                           >
                             View
@@ -445,7 +458,7 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
                             <button
                               type="button"
                               disabled={recovering === user.user_id}
-                              className="rounded-md border border-amber-400 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-60"
+                              className="management-button management-button--quiet"
                               onClick={() => handleRecover(user)}
                             >
                               {recovering === user.user_id ? "Recovering…" : "Recover"}
@@ -460,7 +473,7 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
             </table>
           </div>
 
-          <div className="mt-4 flex items-center justify-between">
+          <div className={canRecover ? "management-pagination" : "mt-4 flex items-center justify-between"}>
             <button
               type="button"
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
@@ -484,6 +497,7 @@ export default function CounselorUsersPage({ canRecover = false, showCorrections
 
       {selected && (
         <StudentDetailModal
+          polished={canRecover}
           item={selected}
           campusName={campusName}
           programName={programName}

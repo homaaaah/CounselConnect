@@ -58,6 +58,10 @@ Status values: `APPROVED`, `PENDING`, `SUPERSEDED`.
 
 The completed registration-correction and Users Management work is governed by [Registration Information Corrections and Users Management](../docs/REGISTRATION_CORRECTIONS.md). Exact pending-correction COR evidence remains private and temporary until approval, return, replacement, or its original seven-day upload deadline. Operational deactivation is independent of enrollment and revokes sessions. Superadmin never validates University issuance and gains no clinical or counseling permissions.
 
+## Counselor account operations (ADR-035, approved 2026-10-26)
+
+The user explicitly authorized Superadmin creation/editing of Counselor accounts and selected a Superadmin-entered initial password. This supersedes the developer-only/no-provisioning restriction narrowly for Counselor creation and names/email editing. New accounts are server-fixed COUNSELOR/ACTIVE/enabled, with existing Argon2id hashing and no automatic password delivery. Only active non-deactivated Superadmins may mutate them, with CSRF, fresh locks, safe projections, atomic minimal audit and displayed-timestamp stale-edit protection. Email edits revoke all sessions and concurrent login must recheck identity after its User lock; name-only edits preserve sessions. No password reset, arbitrary role/status editing, Student/other-staff profile editing, clinical access or changes to assignments/scheduling are granted. The owning implemented contract is `docs/REGISTRATION_CORRECTIONS.md`.
+
 ## Pending
 
 | ID | Decision needed |

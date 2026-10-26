@@ -58,7 +58,7 @@ export function LoadState({ state, empty = "No records on this page." }) {
 
 export function Pagination({ state, name = "Records" }) {
   const pages = Math.max(1, Math.ceil(state.total / 20));
-  return <nav aria-label={`${name} pages`} className="my-4 flex flex-wrap items-center gap-3">
+  return <nav aria-label={`${name} pages`} className="management-pagination my-4 flex flex-wrap items-center gap-3">
     <button className={buttonClass} disabled={state.loading || state.page <= 1} onClick={() => state.setPage(state.page - 1)}>Previous</button>
     <span className="text-sm text-slate-600">{state.loading ? `Loading page ${state.page}…` : state.error ? `Page ${state.page} unavailable` : `Page ${state.page} of ${pages} · ${state.total} records`}</span>
     <button className={buttonClass} disabled={state.loading || Boolean(state.error) || state.page >= pages} onClick={() => state.setPage(state.page + 1)}>Next</button>
@@ -74,21 +74,21 @@ export function Comparison({ detail, reviewer = false }) {
     : values[field] === null ? (field === "middle_name" ? "None" : "Unavailable") : valueText(values[field]);
   return <div className="overflow-x-auto">
     {detail.changed_fields === null && <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Historical comparison unavailable. Stored proposals are shown without an inferred difference.</p>}
-    <table className="min-w-full divide-y divide-slate-200 text-sm"><caption className="text-left text-sm font-semibold text-slate-700">Registration comparison</caption>
+    <table className="comparison-table min-w-full divide-y divide-slate-200 text-sm"><caption className="text-left text-sm font-semibold text-slate-700">Registration comparison</caption>
       <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600"><tr>{["Field", ...(reviewer ? ["COR extraction"] : []), "Registered at submission", "Current registered", "Proposed", "Difference"].map((title) => <th key={title} className="px-4 py-3">{title}</th>)}</tr></thead>
-      <tbody className="divide-y divide-slate-100">{EDIT_FIELDS.map((field) => <tr key={field}>
+      <tbody className="divide-y divide-slate-100">{EDIT_FIELDS.map((field) => <tr key={field} className={detail.changed_fields?.includes(field) ? "comparison-changed" : undefined}>
         <th className="px-4 py-3 font-medium text-slate-700">{label(field)}</th>
         {reviewer && <td className="px-4 py-3">{show(detail.extracted_values, field)}</td>}
         <td className="px-4 py-3">{show(baseline, field)}</td><td className="px-4 py-3">{show(current, field)}</td>
         <td className="px-4 py-3">{show({ [field]: row[`requested_${field}`] }, field)}</td>
         <td className="px-4 py-3">{detail.changed_fields === null ? "Unknown" : detail.changed_fields?.includes(field) ? "Changed" : "Unchanged"}</td>
       </tr>)}</tbody></table>
-    {reviewer && <table className="my-4 min-w-full divide-y divide-slate-200 text-sm"><caption className="text-left text-sm font-semibold text-slate-700">Read-only enrollment context</caption><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600"><tr>{["Field", "COR extraction", "Registered at submission", "Current registered"].map((title) => <th key={title} className="px-4 py-3">{title}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{["student_number", "campus_id", "program_id", "academic_period", "valid_until"].map((field) =>
+    {reviewer && <table className="comparison-table my-4 min-w-full divide-y divide-slate-200 text-sm"><caption className="text-left text-sm font-semibold text-slate-700">Read-only enrollment context</caption><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600"><tr>{["Field", "COR extraction", "Registered at submission", "Current registered"].map((title) => <th key={title} className="px-4 py-3">{title}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{["student_number", "campus_id", "program_id", "academic_period", "valid_until"].map((field) =>
       <tr key={field}><th className="px-4 py-3 font-medium text-slate-700">{label(field)}</th><td className="px-4 py-3">{show(detail.extracted_values, field)}</td><td className="px-4 py-3">{show(baseline, field)}</td><td className="px-4 py-3">{show(current, field)}</td></tr>)}</tbody></table>}
   </div>;
 }
 
-export function PrivateCorPreview({ id, evidence }) {
+export function PrivateCorPreview({ id, evidence, polished = false }) {
   const [url, setUrl] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -118,9 +118,9 @@ export function PrivateCorPreview({ id, evidence }) {
     } catch (failure) { if (generation === live.current) setError(failure.message); }
     finally { if (generation === live.current) setBusy(false); }
   }
-  return <section className="my-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">Evidence: {evidence?.availability || "UNAVAILABLE"} · Deadline: {dateText(evidence?.expires_at)}</p>
-    <button className={buttonClass} disabled={busy || evidence?.availability !== "AVAILABLE" || !Number.isFinite(deadline) || Date.now() >= deadline} onClick={preview}>{busy ? "Loading preview…" : "Preview current COR"}</button>
+  return <section className="management-preview my-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4"><h3 className="management-section-title">Submitted COR</h3><p className="text-sm text-slate-600">Evidence: {evidence?.availability || "UNAVAILABLE"} · Deadline: {dateText(evidence?.expires_at)}</p>
+    <button className={polished ? "management-button" : buttonClass} disabled={busy || evidence?.availability !== "AVAILABLE" || !Number.isFinite(deadline) || Date.now() >= deadline} onClick={preview}>{busy ? "Loading preview…" : "Preview current COR"}</button>
     {error && <p role="alert" className="form-message error">{error}</p>}
-    {url && <><button className={buttonClass} onClick={release}>Close preview</button><iframe title="Current correction COR" src={url} className="h-96 w-full rounded-lg border" /></>}
+    {url && <><button className={polished ? "management-button" : buttonClass} onClick={release}>Close preview</button><iframe title="Current correction COR" src={url} className="h-96 w-full rounded-lg border" /></>}
   </section>;
 }

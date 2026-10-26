@@ -171,7 +171,7 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 2. **Confirm** — the confirmation step appears inline on the same form; review the extracted fields (read-only) and click **Confirm details** (sent in the `X-COR-Token` header). Success = "Account activated. You can now sign in with your email or student number."
    - A COR whose barcode is missing/unreadable, or whose details cannot be read, asks for a re-upload instead (Poppler/Tesseract required); rejecting/re-uploading also stays inline.
 3. **Counselor view** — `#staff-login` with the seeded counselor `counselor@ucc.edu.ph` / `counselor-dev-2026` → **Users** lists students and their screening status (read-only; click **View** for the full profile).
-4. **Superadmin view** — `#staff-login` with the seeded superadmin `superadmin@ucc.edu.ph` / `superadmin-dev-2026` → **Users** with a **Recover** action for non-active students.
+4. **Superadmin view** — `#superadmin-login` (also available in the landing footer) with the seeded superadmin `superadmin@ucc.edu.ph` / `superadmin-dev-2026` → **Users**. Account Recovery is a separate navigation entry; Guidance sign-in is for Counselor/Guidance Staff accounts.
    - Seeded staff come from `dev_seed.sql` (developer-created per ADR-005). Rotate these dev passwords before any real deployment.
 
 ## Common problems
@@ -212,5 +212,5 @@ The backend automatically runs COR expiry/deletion retries while serving request
 ## Quick reference
 
 - Backend: http://localhost:8000 · API docs: http://localhost:8000/docs · Health: `/api/v1/health`
-- Frontend: http://localhost:5173 · Sign in: `#login` (student number or email) / `#staff-login` (staff email) · Seeded staff: `counselor@ucc.edu.ph` / `counselor-dev-2026`, `superadmin@ucc.edu.ph` / `superadmin-dev-2026` · Users directory: `#users`
+- Frontend: http://localhost:5173 · Sign in: `#login` (Student number or email), `#staff-login` (Counselor/Guidance Staff email), `#superadmin-login` (Superadmin email) · Seeded staff: `counselor@ucc.edu.ph` / `counselor-dev-2026`, `superadmin@ucc.edu.ph` / `superadmin-dev-2026` · Users directory: `#users`
 - Repo: https://github.com/jekjek29/CounselConnect

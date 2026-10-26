@@ -62,7 +62,7 @@ function roleNav(user) {
     ];
   }
   if (user.role_code === "SUPERADMIN") {
-    return [{ label: "Users", href: "#users" }, { label: "Registration Corrections", href: "#corrections" }];
+    return [{ label: "Users", href: "#users" }, { label: "Registration Corrections", href: "#corrections" }, { label: "Account Recovery", href: "#student-directory" }];
   }
   if (user.role_code === "GUIDANCE_STAFF") {
     return [{ label: "Home", href: "#home" }];
@@ -95,6 +95,7 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
   const items = roleNav(user);
   const isStudent = user.role_code === "STUDENT";
   const isCounselor = user.role_code === "COUNSELOR";
+  const isSuperadmin = user.role_code === "SUPERADMIN";
   // Superadmin shares the counselor's green active-link treatment.
   const isGreen = isCounselor || user.role_code === "SUPERADMIN";
 
@@ -105,8 +106,9 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
     return () => window.removeEventListener("keydown", onKey);
   }, [profileOpen]);
 
+  const isCurrent = href => href === "#" + page || (isSuperadmin && page === "home" && href === "#users");
   const linkClass = (href) => {
-    const current = href === "#" + page;
+    const current = isCurrent(href);
     // Counselor reference state: green text with a thin green underline.
     const active = isGreen
       ? "border-b-2 border-[#207524] text-[#207524]"
@@ -127,19 +129,19 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+      <header className={"sticky top-0 z-40 border-b border-slate-200 bg-white" + (isSuperadmin ? " superadmin-nav" : "")}>
         <nav aria-label="App navigation" className="mx-auto flex max-w-6xl items-center gap-4 px-4 sm:px-6">
-          <a href="#home" className="flex items-center gap-2 py-2 text-base font-semibold tracking-tight text-slate-700">
+          <a href="#home" className={"flex items-center gap-2 py-2 text-base font-semibold tracking-tight text-slate-700" + (isSuperadmin ? " superadmin-brand" : "")}>
             {/* Same brand mark as the login/register modal header (modal.css .brand-logo). */}
             <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-[#1C6B1B] bg-[#e8f5e9] text-xs text-[#1C6B1B]">
-              <i className="fa-solid fa-hands-holding-child"></i>
+              {isSuperadmin ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11ZM9 12l2 2 4-4" /></svg> : <i className="fa-solid fa-hands-holding-child"></i>}
             </span>
             CounselConnect
           </a>
-          <div className="hidden items-center gap-5 md:flex">
+          <div className={"hidden items-center gap-5 " + (isSuperadmin ? "lg:flex" : "md:flex")}>
             {items.map((link) => link.href ? (
               <a key={link.href} href={link.href} className={linkClass(link.href)}
-                {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
+                {...(isCurrent(link.href) ? { "aria-current": "page" } : {})}
                 onClick={() => setMenuOpen(false)}>{link.label}</a>
             ) : (
               <span key={link.label} aria-disabled="true" title="Coming soon"
@@ -228,7 +230,7 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
                 </button>
               </>
             )}
-            <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md md:hidden" aria-expanded={menuOpen} aria-controls="app-nav-links"
+            <button type="button" className={"flex h-11 w-11 shrink-0 items-center justify-center rounded-md " + (isSuperadmin ? "lg:hidden" : "md:hidden")} aria-expanded={menuOpen} aria-controls="app-nav-links"
               aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen(!menuOpen)}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d={menuOpen ? "M6 6l12 12M6 18L18 6" : "M4 6h16M4 12h16M4 18h16"} />
@@ -237,13 +239,13 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
           </div>
         </nav>
         <div id="app-nav-links" hidden={!menuOpen}
-          className="border-t border-slate-200 bg-white px-4 pb-3 md:hidden">
+          className={"border-t border-slate-200 bg-white px-4 pb-3 " + (isSuperadmin ? "lg:hidden" : "md:hidden")}>
           {items.map((link) => link.href ? (
             <a key={link.href} href={link.href} className={"block py-2.5 text-sm font-medium " +
-              (link.href === "#" + page
+              (isCurrent(link.href)
                 ? (isGreen ? "text-[#207524]" : "text-counseling-active-focus")
                 : "text-zinc-900 " + (isGreen ? "hover:text-[#207524]" : "hover:text-counseling-active-focus"))}
-              {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
+              {...(isCurrent(link.href) ? { "aria-current": "page" } : {})}
               onClick={() => setMenuOpen(false)}>{link.label}</a>
           ) : (
             <span key={link.label} aria-disabled="true" title="Coming soon"

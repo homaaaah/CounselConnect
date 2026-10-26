@@ -109,6 +109,11 @@
   color: #18181b;
 }
 
+.superadmin-signin-card { border: 1px solid #dce7df; border-top: 4px solid #277341; }
+.superadmin-signin-card .brand-logo { background: #edf6ef; color: #277341; }
+.superadmin-signin-card .btn-submit { background: #277341; }
+.superadmin-signin-card .btn-submit:hover:not(:disabled) { background: #1d5c33; }
+
 /* Modal header: brand logo mark, title, subtitle */
 .login-header,
 .signup-header {
