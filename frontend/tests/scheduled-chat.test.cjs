@@ -343,7 +343,6 @@ test("scheduled session shows the appointment call panel without requesting medi
   );
   assert.ok(joinCall, "the call panel offers an explicit join action");
   assert.equal(mediaCalls.length, 0, "mounting the session must not open the camera");
-  assert.ok(JSON.stringify(root.toJSON()).includes("Peer-to-peer and not recorded"));
 });
 
 function markDoneHarness(t, { onMarkDone, initialRecord = "DRAFT", recordFailure = false } = {}) {

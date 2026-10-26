@@ -129,16 +129,17 @@ function AppShell() {
   return (
     <>
       {session.error && <p role="alert" className="p-3 text-red-700">{session.error}</p>}
-      {session.user && (
-        <AppNavBar
-          user={session.user}
-          page={page}
-          onSignOut={async () => {
-            if (await session.logout()) window.location.hash = "landing";
-          }}
-        />
-      )}
-      <div>
+      <div className="flex h-[100dvh] flex-col">
+        {session.user && (
+          <AppNavBar
+            user={session.user}
+            page={page}
+            onSignOut={async () => {
+              if (await session.logout()) window.location.hash = "landing";
+            }}
+          />
+        )}
+        <div className="min-h-0 flex-1">
         {page === "login" && <LoginPage onSignedIn={session.accept} />}
         {page === "staff-login" && <LoginPage audience="staff" onSignedIn={session.accept} />}
         {page === "register" && <RegisterPage />}
@@ -178,7 +179,8 @@ function AppShell() {
           />
         )}
       </div>
-      {session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
+      </div>
+      {session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) && !sessionAppointmentId &&
         <ScheduledSessionLauncher key={session.user.user_id} user={session.user} />}
       <SessionExpiryWarning session={session} />
       <p className="fixed bottom-2 right-3 text-[10px] text-slate-600">

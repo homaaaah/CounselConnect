@@ -94,7 +94,6 @@ export default function ScheduledSessionPage({ user, appointmentId }) {
   const workspaceAppointment = {
     ...(appointment || {}), appointment_id: appointmentId, status: session.status,
   };
-  const peerName = isCounselor ? appointment?.student_name : appointment?.counselor_name;
   const selfName = isCounselor ? appointment?.counselor_name : appointment?.student_name;
   const sessionStarted = Date.now() >= new Date(session.starts_at).getTime();
   const beforeStart = Date.now() < new Date(session.messaging_opens_at).getTime();
@@ -112,11 +111,11 @@ export default function ScheduledSessionPage({ user, appointmentId }) {
     if (!result) setTab("record");
   };
 
-  return <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-800 lg:h-[100dvh] lg:overflow-hidden">
+  return <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-800 lg:h-full lg:min-h-0 lg:overflow-hidden">
     <div className="mx-auto max-w-7xl lg:flex lg:h-full lg:flex-col">
       <a href="#appointments" className="shrink-0 text-sm font-medium text-emerald-700">← Back to appointments</a>
       <div className="mt-3 grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:min-h-0 lg:overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold">Live session</h1>
@@ -140,7 +139,6 @@ export default function ScheduledSessionPage({ user, appointmentId }) {
             appointmentMode={session.appointment_mode}
             status={session.status}
             now={Date.now()}
-            peerName={peerName}
             selfName={selfName}
           />
           {chat.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-red-700">{chat.error}</p>}

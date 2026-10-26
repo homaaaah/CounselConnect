@@ -14,16 +14,6 @@ const primaryButton = "rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold
 const controlButton = "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-slate-800/80 text-lg text-white backdrop-blur transition-colors hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
 const endCallButton = "flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-lg text-white transition-colors hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
 
-function elapsedText(now, startsAt) {
-  const start = new Date(startsAt).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(now)) return "";
-  const total = Math.max(0, Math.floor((now - start) / 1000));
-  const hours = Math.floor(total / 3600);
-  return [hours, Math.floor(total / 60) % 60, total % 60]
-    .map(part => String(part).padStart(2, "0"))
-    .join(":");
-}
-
 function VideoTile({ videoRef, stream, label, muted, emptyText, className = "", children }) {
   useEffect(() => {
     const video = videoRef.current;
@@ -63,7 +53,6 @@ export default function AppointmentCallPanel({
   appointmentMode = "ONLINE",
   status = "CONFIRMED",
   now: nowProp,
-  peerName,
   selfName,
 }) {
   const call = useAppointmentCall({ appointmentId, canCall });
@@ -102,7 +91,6 @@ export default function AppointmentCallPanel({
   const afterWindow = callableAppointment && Number.isFinite(deadline) && now >= deadline;
   const inCall = call.active || ["connected", "negotiating"].includes(call.phase);
   const otherLabel = call.peerRole === "COUNSELOR" ? "Counselor" : call.peerRole === "STUDENT" ? "Student" : "Other participant";
-  const participantLabel = peerName || otherLabel;
 
   async function playRemote() {
     try {
@@ -115,19 +103,7 @@ export default function AppointmentCallPanel({
 
   return (
     <section aria-labelledby="call-heading" className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="call-heading" className="font-semibold">Video call</h2>
-        {call.phase === "connected" && (
-          <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true"></span>
-            <span>Live session: {participantLabel}</span>
-            <span className="rounded bg-slate-100 px-2 py-0.5 font-mono font-normal text-slate-600">{elapsedText(now, startsAt)}</span>
-          </p>
-        )}
-      </div>
-      <p className="mt-1 text-xs text-slate-500">
-        Peer-to-peer and not recorded. Your network address may be visible to the other participant.
-      </p>
+      <h2 id="call-heading" className="sr-only">Video call</h2>
 
       {!canCall && (
         <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
@@ -157,7 +133,7 @@ export default function AppointmentCallPanel({
               {call.error}
             </p>
           )}
-          <p role="status" className="text-sm text-slate-600">
+          <p role="status" className="sr-only">
             {callStatusText(call.phase, call.endReason)}
           </p>
 
