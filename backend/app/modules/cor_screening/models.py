@@ -45,6 +45,10 @@ class CorScreening(Base):
             name="chk_cor_screenings_status",
         ),
         CheckConstraint(
+            "purpose IN ('REGISTRATION', 'CORRECTION')",
+            name="chk_cor_screenings_purpose",
+        ),
+        CheckConstraint(
             "format_match_score IS NULL OR format_match_score BETWEEN 0.0000 AND 1.0000",
             name="chk_cor_screenings_format_score",
         ),
@@ -81,6 +85,10 @@ class CorScreening(Base):
         nullable=False,
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False, server_default="PROCESSING")
+    # Existing creation paths remain registration-only until workflow isolation is implemented.
+    purpose: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="REGISTRATION", insert_default="REGISTRATION"
+    )
     format_template_version: Mapped[str] = mapped_column(String(50), nullable=False)
     format_match_score: Mapped[float | None] = mapped_column(Numeric(5, 4))
     extraction_confidence: Mapped[float | None] = mapped_column(Numeric(5, 4))

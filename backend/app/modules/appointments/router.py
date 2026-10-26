@@ -1,6 +1,7 @@
 """Thin scheduling HTTP transport with session/CSRF authorization."""
 
 import asyncio
+from time import monotonic
 from datetime import date, timedelta, datetime
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -556,11 +557,15 @@ async def appointment_session_events(websocket: WebSocket):
     channel = f"user:{identity.user_id}"
     connection = await registry.add(channel, websocket, identity.session_id)
     raw = websocket.cookies.get("counselconnect_session")
+    last_revalidated = monotonic()
     try:
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                await asyncio.wait_for(websocket.receive_text(), timeout=max(0.01, 30 - (monotonic() - last_revalidated)))
             except asyncio.TimeoutError:
+                pass
+            if monotonic() - last_revalidated >= 30:
+                last_revalidated = monotonic()
                 refreshed = await asyncio.to_thread(authenticate_socket, raw)
                 if refreshed.session_id != identity.session_id or refreshed.account_status != "ACTIVE":
                     break

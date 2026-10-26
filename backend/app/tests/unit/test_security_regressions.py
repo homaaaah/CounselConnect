@@ -195,7 +195,7 @@ def test_session_recovery_does_not_renew_idle_activity():
     service.repository = Mock()
     service.repository.find_session_by_token_hash.return_value = row
     service.accounts = Mock()
-    service.accounts.get.return_value = SimpleNamespace(account_status="ACTIVE")
+    service.accounts.get.return_value = SimpleNamespace(account_status="ACTIVE", is_deactivated=False)
     service.authenticate_request(
         "credential", None, is_safe_method=True, record_activity=False
     )

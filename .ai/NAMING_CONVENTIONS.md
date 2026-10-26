@@ -69,6 +69,7 @@ Keep API DTO fields `snake_case`; use `camelCase` only inside UI logic. Do not a
   - `POST /assessment-correction-requests/{request_id}/resolve`
   - `POST /sos-cases/{sos_case_id}/close`
 - Auth actions use `/auth/login`, `/auth/logout`, and the documented password-reset endpoints. There is no JWT refresh route for opaque sessions.
+- The one-time COR verification credential uses the `X-COR-Token` request header; session CSRF remains in `X-CSRF-Token`.
 - Do not duplicate routes by role when authorization can govern one resource.
 
 ## Payloads and errors
@@ -83,8 +84,10 @@ Keep API DTO fields `snake_case`; use `camelCase` only inside UI logic. Do not a
 
 | Domain | Values |
 |---|---|
-| Account | `PENDING_VERIFICATION`, `ACTIVE`, `VERIFICATION_EXPIRED` |
+| Account | `PENDING_VERIFICATION`, `ACTIVE`, `VERIFICATION_EXPIRED`; `is_deactivated` is independent of enrollment status. |
 | COR screening | `PROCESSING`, `AWAITING_CONFIRMATION`, `PASSED`, `NEEDS_RESUBMISSION`, `FAILED` |
+| Profile change request | `PENDING`, `APPROVED`, `RETURNED`, `REJECTED` (historical) |
+| COR screening purpose | `REGISTRATION`, `CORRECTION` |
 | COR barcode | `NOT_PROCESSED`, `NOT_FOUND`, `UNREADABLE`, `INVALID_FORMAT`, `DECODED`, `MISMATCH` |
 | Availability status | `AVAILABLE`, `RESERVED` |
 | Availability delivery mode | `ONLINE`, `FACE_TO_FACE`, `BOTH` |

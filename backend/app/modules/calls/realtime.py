@@ -32,6 +32,7 @@ class CallPeer:
     websocket: WebSocket
     session_id: int
     queue: asyncio.Queue
+    loop: asyncio.AbstractEventLoop | None = None
     writer: asyncio.Task | None = None
     ready: bool = False
     window_started: float = 0.0
@@ -88,6 +89,7 @@ class CallRoomRegistry:
             websocket=websocket,
             session_id=identity.session_id,
             queue=asyncio.Queue(maxsize=QUEUE_SIZE),
+            loop=asyncio.get_running_loop(),
         )
         peer.writer = asyncio.create_task(self._writer(peer))
         replaced = None
@@ -162,18 +164,34 @@ class CallRoomRegistry:
                 other = next((item for user_id, item in room.items() if user_id != peer.user_id), None)
                 if not room:
                     self._rooms.pop(appointment_id, None)
-        await self._close(peer)
         if removed and other is not None:
+            # A disconnect can cancel this task at the next await. Notify the
+            # remaining peer before awaiting cleanup so peer-left is not lost.
             self.send_to(other, {"type": "peer-left"})
+        await self._close(peer)
 
     def send_to(self, peer: CallPeer, event: dict) -> None:
+        def deliver():
+            try:
+                peer.queue.put_nowait(event)
+            except asyncio.QueueFull:
+                asyncio.create_task(self.leave(peer.appointment_id, peer))
         try:
-            peer.queue.put_nowait(event)
-        except asyncio.QueueFull:
-            asyncio.create_task(self.leave(peer.appointment_id, peer))
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if peer.loop is not None and current is not peer.loop:
+            if not peer.loop.is_closed():
+                peer.loop.call_soon_threadsafe(deliver)
+        else:
+            deliver()
 
     async def send_terminal(self, peer: CallPeer, event: dict) -> None:
         """Stop the writer, then send one final event without concurrent sends."""
+        if peer.loop is not None and asyncio.get_running_loop() is not peer.loop:
+            if not peer.loop.is_closed():
+                await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(self.send_terminal(peer, event), peer.loop))
+            return
         writer = peer.writer
         peer.writer = None
         if writer is not None and not writer.done():
@@ -208,6 +226,10 @@ class CallRoomRegistry:
 
     @staticmethod
     async def _close(peer: CallPeer, *, code: int = 1008, reason: str = "Call ended") -> None:
+        if peer.loop is not None and asyncio.get_running_loop() is not peer.loop:
+            if not peer.loop.is_closed():
+                await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(CallRoomRegistry._close(peer, code=code, reason=reason), peer.loop))
+            return
         writer = peer.writer
         peer.writer = None
         if writer is not None:

@@ -8,7 +8,7 @@
  * year level, section, and an unmapped campus/program selection). The parent
  * supplies the wrapping <form> and the action buttons.
  */
-export const YEAR_LEVELS = [1, 2, 3, 4, 5, 6];
+export const YEAR_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 function isSet(value) {
   return value !== "" && value !== null && value !== undefined;

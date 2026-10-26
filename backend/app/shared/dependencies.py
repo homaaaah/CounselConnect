@@ -47,6 +47,10 @@ def get_current_user(
         is_safe_method=request.method.upper() in _SAFE_METHODS,
         record_activity=request.headers.get("X-Background-Refresh") != "1",
     )
+    # Finish authentication/activity before domain locks. In particular, a
+    # Counselor's auth lock must not invert sorted clinical participant locks.
+    # Domain operations retain their own authorization and lock discipline.
+    auth_service.repository.session.commit()
     return user
 
 
@@ -98,6 +102,7 @@ def require_counselor(
             message="Only a Guidance Counselor may perform this action.",
             status_code=403,
         )
+    auth_service.repository.session.commit()
     return user
 
 
@@ -142,4 +147,5 @@ def get_screening_actor(
             message="You do not have permission to perform this action.",
             status_code=403,
         )
+    auth_service.repository.session.commit()
     return ScreeningActor(user=user)

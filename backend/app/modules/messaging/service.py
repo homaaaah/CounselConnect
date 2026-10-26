@@ -110,7 +110,7 @@ class MessagingService(BaseService[Conversation]):
     def _authorize_actor(actor):
         if actor.role_code not in ("STUDENT", "COUNSELOR"):
             raise AppError("FORBIDDEN_ROLE", "You do not have access to appointment chat.", status_code=403)
-        if actor.account_status != "ACTIVE":
+        if (actor.account_status != "ACTIVE" or getattr(actor, "is_deactivated", False)):
             raise AppError("ACCOUNT_NOT_ACTIVE", "An active verified account is required.", status_code=403)
 
     def join_appointment(self, actor, appointment_id):

@@ -715,6 +715,380 @@
         }
       }
     },
+    "/api/v1/accounts/users": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Managed Users",
+        "operationId": "managed_users_api_v1_accounts_users_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 320
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "role_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "STUDENT",
+                    "GUIDANCE_STAFF",
+                    "COUNSELOR",
+                    "SUPERADMIN"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role Code"
+            }
+          },
+          {
+            "name": "account_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PENDING_VERIFICATION",
+                    "ACTIVE",
+                    "VERIFICATION_EXPIRED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Status"
+            }
+          },
+          {
+            "name": "is_deactivated",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Deactivated"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListEnvelope_ManagedUserSummary_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Managed Users Api V1 Accounts Users Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/users/{user_id}": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Managed User",
+        "operationId": "managed_user_api_v1_accounts_users__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Managed User Api V1 Accounts Users  User Id  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/users/{user_id}/deactivate": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Deactivate User",
+        "operationId": "deactivate_user_api_v1_accounts_users__user_id__deactivate_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Deactivate User Api V1 Accounts Users  User Id  Deactivate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/accounts/users/{user_id}/reactivate": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Reactivate User",
+        "operationId": "reactivate_user_api_v1_accounts_users__user_id__reactivate_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Reactivate User Api V1 Accounts Users  User Id  Reactivate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cor-screenings/me": {
       "get": {
         "tags": [
@@ -1241,17 +1615,27 @@
         }
       }
     },
-    "/api/v1/profile-change-requests": {
-      "get": {
+    "/api/v1/profile-change-requests/{change_request_id}/resubmit": {
+      "post": {
         "tags": [
           "profile_change"
         ],
-        "summary": "Superadmin: list profile edit requests (ADR-032)",
-        "operationId": "list_change_requests_api_v1_profile_change_requests_get",
+        "summary": "Student: resubmit a returned correction with a fresh current COR",
+        "description": "Session and CSRF required. Exactly one of each multipart field; no extra parts. Use literal null only for a legacy unknown submission version.",
+        "operationId": "resubmit_change_request_api_v1_profile_change_requests__change_request_id__resubmit_post",
         "parameters": [
           {
-            "name": "status",
-            "in": "query",
+            "name": "change_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Request Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
             "required": false,
             "schema": {
               "anyOf": [
@@ -1262,7 +1646,79 @@
                   "type": "null"
                 }
               ],
-              "default": "PENDING",
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_resubmit_change_request_api_v1_profile_change_requests__change_request_id__resubmit_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentProfileChangeRequestItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Resubmit Change Request Api V1 Profile Change Requests  Change Request Id  Resubmit Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests": {
+      "get": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "List correction requests (own Student status or Superadmin queue)",
+        "operationId": "list_change_requests_api_v1_profile_change_requests_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PENDING",
+                    "APPROVED",
+                    "REJECTED",
+                    "RETURNED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Status"
             }
           },
@@ -1290,6 +1746,24 @@
             }
           },
           {
+            "name": "root_change_request_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 18446744073709551615,
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Change Request Id"
+            }
+          },
+          {
             "name": "counselconnect_session",
             "in": "cookie",
             "required": false,
@@ -1312,7 +1786,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListEnvelope_ProfileChangeRequestItem_"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope_ProfileChangeRequestItem_"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ListEnvelope_StudentProfileChangeRequestItem_"
+                    }
+                  ],
+                  "title": "Response List Change Requests Api V1 Profile Change Requests Get"
                 }
               }
             }
@@ -1331,6 +1813,80 @@
                     }
                   ],
                   "title": "Response 422 List Change Requests Api V1 Profile Change Requests Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests/{change_request_id}": {
+      "get": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "Read own Student status or Superadmin correction review detail",
+        "operationId": "get_student_change_request_api_v1_profile_change_requests__change_request_id__get",
+        "parameters": [
+          {
+            "name": "change_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Request Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StudentProfileChangeRequestItem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReviewProfileChangeRequestDetail"
+                    }
+                  ],
+                  "title": "Response Get Student Change Request Api V1 Profile Change Requests  Change Request Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Get Student Change Request Api V1 Profile Change Requests  Change Request Id  Get"
                 }
               }
             }
@@ -1372,13 +1928,23 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveChangeRequestRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+                  "$ref": "#/components/schemas/ReviewProfileChangeRequestDetail"
                 }
               }
             }
@@ -1404,13 +1970,13 @@
         }
       }
     },
-    "/api/v1/profile-change-requests/{change_request_id}/reject": {
+    "/api/v1/profile-change-requests/{change_request_id}/return": {
       "post": {
         "tags": [
           "profile_change"
         ],
-        "summary": "Superadmin: reject a profile edit request (ADR-032)",
-        "operationId": "reject_change_request_api_v1_profile_change_requests__change_request_id__reject_post",
+        "summary": "Superadmin: return the whole correction version with a reason",
+        "operationId": "return_change_request_api_v1_profile_change_requests__change_request_id__return_post",
         "parameters": [
           {
             "name": "change_request_id",
@@ -1443,7 +2009,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RejectChangeRequestRequest"
+                "$ref": "#/components/schemas/ReturnChangeRequestRequest"
               }
             }
           }
@@ -1454,7 +2020,84 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+                  "$ref": "#/components/schemas/ReviewProfileChangeRequestDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Return Change Request Api V1 Profile Change Requests  Change Request Id  Return Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests/{change_request_id}/reject": {
+      "post": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "Superadmin: compatibility alias for version-bound correction return",
+        "operationId": "reject_change_request_api_v1_profile_change_requests__change_request_id__reject_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "change_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Request Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnChangeRequestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewProfileChangeRequestDetail"
                 }
               }
             }
@@ -1476,6 +2119,82 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/profile-change-requests/{change_request_id}/cor": {
+      "get": {
+        "tags": [
+          "profile_change"
+        ],
+        "summary": "Superadmin: retrieve the exact pending correction COR privately",
+        "operationId": "get_change_request_cor_api_v1_profile_change_requests__change_request_id__cor_get",
+        "parameters": [
+          {
+            "name": "change_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Request Id"
+            }
+          },
+          {
+            "name": "counselconnect_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Counselconnect Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Sanitized validation or business-rule errors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Get Change Request Cor Api V1 Profile Change Requests  Change Request Id  Cor Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Reviewer access denied"
+          },
+          "404": {
+            "description": "Change request not found"
+          },
+          "409": {
+            "description": "Exact evidence unavailable"
           }
         }
       }
@@ -6847,6 +7566,22 @@
         ],
         "title": "AppointmentSessionResponse"
       },
+      "ApproveChangeRequestRequest": {
+        "properties": {
+          "submission_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Submission Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "submission_version"
+        ],
+        "title": "ApproveChangeRequestRequest",
+        "description": "Approve only the exact version displayed to the reviewer."
+      },
       "AuthResponse": {
         "properties": {
           "user": {
@@ -7118,6 +7853,35 @@
           "file"
         ],
         "title": "Body_register_student_with_cor_api_v1_accounts_register_student_with_cor_post"
+      },
+      "Body_resubmit_change_request_api_v1_profile_change_requests__change_request_id__resubmit_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Fresh current COR PDF"
+          },
+          "submission_version": {
+            "type": "string",
+            "maxLength": 20,
+            "pattern": "^(null|[1-9][0-9]*)$",
+            "title": "Submission Version"
+          },
+          "proposed_changes": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Proposed Changes",
+            "description": "JSON object limited to first_name, middle_name, last_name, year_level and section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "submission_version",
+          "proposed_changes"
+        ],
+        "title": "Body_resubmit_change_request_api_v1_profile_change_requests__change_request_id__resubmit_post"
       },
       "Body_resubmit_cor_api_v1_cor_screenings_resubmit_post": {
         "properties": {
@@ -7553,6 +8317,7 @@
             "title": "Academic Period"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "student_number",
@@ -8078,6 +8843,163 @@
         "title": "CorScreeningResponse",
         "description": "Screening result plus the extracted (unconfirmed) academic fields."
       },
+      "CorrectionEvidenceStatus": {
+        "properties": {
+          "availability": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "UNAVAILABLE",
+              "EXPIRED",
+              "REPLACED",
+              "CORRUPT",
+              "RESOLVED",
+              "LEGACY_UNKNOWN"
+            ],
+            "title": "Availability"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "availability",
+          "expires_at"
+        ],
+        "title": "CorrectionEvidenceStatus"
+      },
+      "CorrectionHistoryEntry": {
+        "properties": {
+          "change_request_id": {
+            "type": "integer",
+            "title": "Change Request Id"
+          },
+          "submission_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "RETURNED"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By User Id"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request_id",
+          "submission_version",
+          "status",
+          "created_at",
+          "reviewed_at",
+          "reviewed_by_user_id",
+          "decision_reason"
+        ],
+        "title": "CorrectionHistoryEntry"
+      },
+      "CorrectionRegisteredValues": {
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "year_level": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Year Level"
+          },
+          "section": {
+            "type": "string",
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first_name",
+          "middle_name",
+          "last_name",
+          "year_level",
+          "section"
+        ],
+        "title": "CorrectionRegisteredValues",
+        "description": "Allowlisted comparison fields; never serialize the stored JSON directly."
+      },
       "CounselorBookingOption": {
         "properties": {
           "counselor_user_id": {
@@ -8396,6 +9318,37 @@
         ],
         "title": "ListEnvelope[EmergencyContactResponse]"
       },
+      "ListEnvelope_ManagedUserSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedUserSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[ManagedUserSummary]"
+      },
       "ListEnvelope_ProfileChangeRequestItem_": {
         "properties": {
           "items": {
@@ -8489,6 +9442,37 @@
         ],
         "title": "ListEnvelope[StudentDirectoryItem]"
       },
+      "ListEnvelope_StudentProfileChangeRequestItem_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StudentProfileChangeRequestItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ListEnvelope[StudentProfileChangeRequestItem]"
+      },
       "LoginRequest": {
         "properties": {
           "identifier": {
@@ -8510,6 +9494,291 @@
           "password"
         ],
         "title": "LoginRequest"
+      },
+      "ManagedStudentProfile": {
+        "properties": {
+          "student_number": {
+            "type": "string",
+            "title": "Student Number"
+          },
+          "campus_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Program Id"
+          },
+          "year_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Level"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_number",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section"
+        ],
+        "title": "ManagedStudentProfile"
+      },
+      "ManagedUserDetail": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "role_code": {
+            "type": "string",
+            "enum": [
+              "STUDENT",
+              "GUIDANCE_STAFF",
+              "COUNSELOR",
+              "SUPERADMIN"
+            ],
+            "title": "Role Code"
+          },
+          "account_status": {
+            "type": "string",
+            "enum": [
+              "PENDING_VERIFICATION",
+              "ACTIVE",
+              "VERIFICATION_EXPIRED"
+            ],
+            "title": "Account Status"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "is_deactivated": {
+            "type": "boolean",
+            "title": "Is Deactivated"
+          },
+          "student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Number"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagedStudentProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "campus_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Name"
+          },
+          "program_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Program Name"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "role_code",
+          "account_status",
+          "first_name",
+          "middle_name",
+          "last_name",
+          "created_at",
+          "updated_at",
+          "is_deactivated"
+        ],
+        "title": "ManagedUserDetail"
+      },
+      "ManagedUserSummary": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "role_code": {
+            "type": "string",
+            "enum": [
+              "STUDENT",
+              "GUIDANCE_STAFF",
+              "COUNSELOR",
+              "SUPERADMIN"
+            ],
+            "title": "Role Code"
+          },
+          "account_status": {
+            "type": "string",
+            "enum": [
+              "PENDING_VERIFICATION",
+              "ACTIVE",
+              "VERIFICATION_EXPIRED"
+            ],
+            "title": "Account Status"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "is_deactivated": {
+            "type": "boolean",
+            "title": "Is Deactivated"
+          },
+          "student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "email",
+          "role_code",
+          "account_status",
+          "first_name",
+          "middle_name",
+          "last_name",
+          "created_at",
+          "updated_at",
+          "is_deactivated"
+        ],
+        "title": "ManagedUserSummary"
       },
       "MessageCreateRequest": {
         "properties": {
@@ -8638,7 +9907,7 @@
       "ProfileChangeRequestItem": {
         "properties": {
           "change_request": {
-            "$ref": "#/components/schemas/ProfileChangeRequestResponse"
+            "$ref": "#/components/schemas/ReviewProfileChangeRequestResponse"
           },
           "student": {
             "$ref": "#/components/schemas/ChangeRequestStudentSummary"
@@ -8683,6 +9952,27 @@
               }
             ],
             "title": "Current Section"
+          },
+          "changed_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "first_name",
+                    "middle_name",
+                    "last_name",
+                    "year_level",
+                    "section"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed Fields"
           }
         },
         "type": "object",
@@ -8717,7 +10007,8 @@
             "enum": [
               "PENDING",
               "APPROVED",
-              "REJECTED"
+              "REJECTED",
+              "RETURNED"
             ],
             "title": "Status"
           },
@@ -8862,6 +10153,140 @@
         "title": "RegistrationResultResponse",
         "description": "Result of student self-registration (always PENDING_VERIFICATION)."
       },
+      "RegistrationSnapshot": {
+        "properties": {
+          "student_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Number"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Middle Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "campus_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Id"
+          },
+          "program_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Program Id"
+          },
+          "year_level": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Level"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "academic_period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Academic Period"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_number",
+          "first_name",
+          "middle_name",
+          "last_name",
+          "campus_id",
+          "program_id",
+          "year_level",
+          "section",
+          "academic_period",
+          "valid_until"
+        ],
+        "title": "RegistrationSnapshot",
+        "description": "Complete structured context only; all keys required, explicit nulls kept."
+      },
       "RegistrationWithCorResponse": {
         "properties": {
           "user": {
@@ -8910,22 +10335,6 @@
         ],
         "title": "RegistrationWithCorResponse",
         "description": "Result of the atomic COR registration (account is PENDING_VERIFICATION)."
-      },
-      "RejectChangeRequestRequest": {
-        "properties": {
-          "reason": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "required": [
-          "reason"
-        ],
-        "title": "RejectChangeRequestRequest",
-        "description": "A rejection must record the reviewer's reason (ADR-024 precedent)."
       },
       "RequestEditRequest": {
         "properties": {
@@ -8994,6 +10403,7 @@
             "title": "Academic Period"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "student_number",
@@ -9060,6 +10470,292 @@
           "screening"
         ],
         "title": "ResubmitResponse"
+      },
+      "ReturnChangeRequestRequest": {
+        "properties": {
+          "submission_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Reason",
+            "description": "Trimmed nonblank reason explaining what to fix"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "submission_version",
+          "reason"
+        ],
+        "title": "ReturnChangeRequestRequest",
+        "description": "Explicit version (null for legacy) and purpose-bound return reason."
+      },
+      "ReviewProfileChangeRequestDetail": {
+        "properties": {
+          "change_request": {
+            "$ref": "#/components/schemas/ReviewProfileChangeRequestResponse"
+          },
+          "student": {
+            "$ref": "#/components/schemas/ChangeRequestStudentSummary"
+          },
+          "extracted_values": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegistrationSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "registered_values_at_submission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegistrationSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_registered_values": {
+            "$ref": "#/components/schemas/RegistrationSnapshot"
+          },
+          "proposed_changes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "first_name",
+                "middle_name",
+                "last_name",
+                "year_level",
+                "section"
+              ]
+            },
+            "type": "object",
+            "title": "Proposed Changes"
+          },
+          "changed_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "first_name",
+                    "middle_name",
+                    "last_name",
+                    "year_level",
+                    "section"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed Fields"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/CorrectionHistoryEntry"
+            },
+            "type": "array",
+            "title": "History"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/CorrectionEvidenceStatus"
+          },
+          "can_resubmit": {
+            "type": "boolean",
+            "const": false,
+            "title": "Can Resubmit",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request",
+          "student",
+          "extracted_values",
+          "registered_values_at_submission",
+          "current_registered_values",
+          "proposed_changes",
+          "changed_fields",
+          "history",
+          "evidence"
+        ],
+        "title": "ReviewProfileChangeRequestDetail",
+        "description": "Superadmin structured review context; private evidence access is separate."
+      },
+      "ReviewProfileChangeRequestResponse": {
+        "properties": {
+          "change_request_id": {
+            "type": "integer",
+            "title": "Change Request Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "cor_screening_id": {
+            "type": "integer",
+            "title": "Cor Screening Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "RETURNED"
+            ],
+            "title": "Status"
+          },
+          "requested_first_name": {
+            "type": "string",
+            "title": "Requested First Name"
+          },
+          "requested_middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Middle Name"
+          },
+          "requested_last_name": {
+            "type": "string",
+            "title": "Requested Last Name"
+          },
+          "requested_year_level": {
+            "type": "integer",
+            "title": "Requested Year Level"
+          },
+          "requested_section": {
+            "type": "string",
+            "title": "Requested Section"
+          },
+          "reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By User Id"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "submission_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Version"
+          },
+          "previous_change_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Change Request Id"
+          },
+          "root_change_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Change Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request_id",
+          "student_user_id",
+          "cor_screening_id",
+          "status",
+          "requested_first_name",
+          "requested_middle_name",
+          "requested_last_name",
+          "requested_year_level",
+          "requested_section",
+          "reviewed_by_user_id",
+          "reviewed_at",
+          "decision_reason",
+          "created_at",
+          "submission_version",
+          "previous_change_request_id",
+          "root_change_request_id"
+        ],
+        "title": "ReviewProfileChangeRequestResponse",
+        "description": "Review-list version links; legacy unknown versions remain null."
       },
       "ScreeningStudentSummary": {
         "properties": {
@@ -9392,6 +11088,11 @@
       },
       "SessionUser": {
         "properties": {
+          "is_deactivated": {
+            "type": "boolean",
+            "title": "Is Deactivated",
+            "default": false
+          },
           "user_id": {
             "type": "integer",
             "title": "User Id"
@@ -9492,6 +11193,236 @@
         ],
         "title": "StudentDirectoryItem",
         "description": "One Student row in the Counselor directory (profile + latest screening)."
+      },
+      "StudentProfileChangeRequestItem": {
+        "properties": {
+          "can_resubmit": {
+            "type": "boolean",
+            "title": "Can Resubmit",
+            "default": false
+          },
+          "change_request": {
+            "$ref": "#/components/schemas/StudentProfileChangeRequestResponse"
+          },
+          "current_first_name": {
+            "type": "string",
+            "title": "Current First Name"
+          },
+          "current_middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Middle Name"
+          },
+          "current_last_name": {
+            "type": "string",
+            "title": "Current Last Name"
+          },
+          "current_year_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Year Level"
+          },
+          "current_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Section"
+          },
+          "registered_values_at_submission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorrectionRegisteredValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changed_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "first_name",
+                    "middle_name",
+                    "last_name",
+                    "year_level",
+                    "section"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request",
+          "current_first_name",
+          "current_middle_name",
+          "current_last_name",
+          "current_year_level",
+          "current_section",
+          "registered_values_at_submission",
+          "changed_fields"
+        ],
+        "title": "StudentProfileChangeRequestItem"
+      },
+      "StudentProfileChangeRequestResponse": {
+        "properties": {
+          "change_request_id": {
+            "type": "integer",
+            "title": "Change Request Id"
+          },
+          "student_user_id": {
+            "type": "integer",
+            "title": "Student User Id"
+          },
+          "cor_screening_id": {
+            "type": "integer",
+            "title": "Cor Screening Id"
+          },
+          "submission_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Version"
+          },
+          "previous_change_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Change Request Id"
+          },
+          "root_change_request_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Change Request Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "RETURNED"
+            ],
+            "title": "Status"
+          },
+          "requested_first_name": {
+            "type": "string",
+            "title": "Requested First Name"
+          },
+          "requested_middle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Middle Name"
+          },
+          "requested_last_name": {
+            "type": "string",
+            "title": "Requested Last Name"
+          },
+          "requested_year_level": {
+            "type": "integer",
+            "title": "Requested Year Level"
+          },
+          "requested_section": {
+            "type": "string",
+            "title": "Requested Section"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_request_id",
+          "student_user_id",
+          "cor_screening_id",
+          "submission_version",
+          "previous_change_request_id",
+          "root_change_request_id",
+          "status",
+          "requested_first_name",
+          "requested_middle_name",
+          "requested_last_name",
+          "requested_year_level",
+          "requested_section",
+          "reviewed_at",
+          "decision_reason",
+          "created_at"
+        ],
+        "title": "StudentProfileChangeRequestResponse",
+        "description": "Own request and outcome, without reviewer IDs or private evidence metadata."
       },
       "StudentProfileResponse": {
         "properties": {
@@ -9685,6 +11616,12 @@
           "updated_at"
         ],
         "title": "UserResponse"
+      },
+      "UserStatusRequest": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UserStatusRequest"
       },
       "ValidationDetails": {
         "properties": {
