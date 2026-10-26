@@ -54,6 +54,10 @@ AGREED target, not implemented: [Registration Information Corrections and Users 
 
 The user explicitly approved keeping an exact pending-correction COR only until approval/return, replacement, or its original seven-day upload deadline. No-change confirmation still deletes immediately; failed/deleted/expired evidence cannot be approved, and a returned revision requires fresh passing evidence. Student confirmation still grants eligible enrollment access independently of correction review. Superadmin approves consistency with the document, never University issuance. New decisions use `RETURNED`; preserve historical `REJECTED` and unknown snapshots. Operational deactivation is a separate boolean and revokes sessions without changing enrollment status. No broader provisioning/configuration/clinical permissions are granted.
 
+## Counselor account operations (ADR-035, approved 2026-10-26)
+
+The user explicitly authorized Superadmin creation/editing of Counselor accounts and selected a Superadmin-entered initial password. This supersedes the developer-only/no-provisioning restriction narrowly for Counselor creation and names/email editing. New accounts are server-fixed COUNSELOR/ACTIVE/enabled, with existing Argon2id hashing and no automatic password delivery. Only active non-deactivated Superadmins may mutate them, with CSRF, fresh locks, safe projections, atomic minimal audit and displayed-timestamp stale-edit protection. Email edits revoke all sessions and concurrent login must recheck identity after its User lock; name-only edits preserve sessions. No password reset, arbitrary role/status editing, Student/other-staff profile editing, clinical access or changes to assignments/scheduling are granted. The owning implemented contract is `docs/REGISTRATION_CORRECTIONS.md`.
+
 ## Pending
 
 | ID | Decision needed |

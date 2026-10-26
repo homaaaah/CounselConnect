@@ -7,8 +7,9 @@ import { useLogin, PasswordInput } from "../features/auth";
  * audience/register switches and a close button (landing overlay).
  */
 export default function LoginPage({ onSignedIn, audience = "student", inModal = false,
-  onClose, onSwitchAudience, onSwitchToRegister }) {
+  onClose, onSwitchAudience, onSwitchToRegister, onSwitchToSuperadmin }) {
   const isStudent = audience === "student";
+  const isSuperadmin = audience === "superadmin";
   const { login, submitting } = useLogin();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +35,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
   }
 
   const card = (
-    <div className="modal-card">
+    <div className={"modal-card" + (isSuperadmin ? " superadmin-signin-card" : "")}>
       {inModal && (
         <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
           <i className="fa-solid fa-xmark"></i>
@@ -43,10 +44,10 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
 
       <div className="login-header">
         <span className="brand-logo" aria-hidden="true">
-          <i className="fa-solid fa-hands-holding-child"></i>
+          {isSuperadmin ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11ZM9 12l2 2 4-4" /></svg> : <i className="fa-solid fa-hands-holding-child"></i>}
         </span>
-        <h1>{isStudent ? "Student sign in" : "Guidance sign in"}</h1>
-        <p>CounselConnect — Guidance and Counseling Office</p>
+        <h1>{isSuperadmin ? "Superadmin sign in" : isStudent ? "Student sign in" : "Guidance sign in"}</h1>
+        <p>{isSuperadmin ? "CounselConnect — Account operations" : "CounselConnect — Guidance and Counseling Office"}</p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -82,7 +83,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
 
       {result && <div className={`form-message ${result.ok ? "success" : "error"}`} role="status">{result.message}</div>}
 
-      {inModal ? (
+      {!isSuperadmin && (inModal ? (
         <>
           <p className="signup-text">
             <button type="button" className="linklike" onClick={onSwitchAudience}>
@@ -92,6 +93,7 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
           <p className="signup-text">
             No account yet? <button type="button" className="linklike" onClick={onSwitchToRegister}>Register</button>
           </p>
+          {!isSuperadmin && <p className="signup-text"><button type="button" className="linklike" onClick={onSwitchToSuperadmin}>Superadmin sign in</button></p>}
         </>
       ) : (
         <>
@@ -103,11 +105,12 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
           <p className="signup-text">
             No account yet? <a href="#register">Register</a>
           </p>
-          <p className="footer-link" style={{ textAlign: "center" }}>
-            <a href="#landing">Back to landing page</a>
-          </p>
+          {!isSuperadmin && <p className="signup-text"><a href="#superadmin-login">Superadmin sign in</a></p>}
         </>
-      )}
+      ))}
+      {!inModal && <p className="footer-link" style={{ textAlign: "center" }}>
+        <a href="#landing">Back to landing page</a>
+      </p>}
     </div>
   );
 

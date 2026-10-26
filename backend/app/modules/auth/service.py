@@ -141,8 +141,11 @@ class AuthService(BaseService[User]):
                 status_code=401,
             )
         verified_hash = user.password_hash
+        # A Counselor email edit may commit while this login waits on User.
+        # Reject the old lookup identity before issuing/replacing any session.
+        verified_email = user.email
         user = self.accounts.lock_user(user.user_id)
-        if user is None or (user.password_hash != verified_hash and not verify_password(password, user.password_hash)):
+        if user is None or user.email != verified_email or (user.password_hash != verified_hash and not verify_password(password, user.password_hash)):
             raise AppError(code="INVALID_CREDENTIALS", message="Incorrect identifier or password.", status_code=401)
         if user.is_deactivated:
             raise AppError(code="ACCOUNT_DEACTIVATED", message="This account is deactivated.", status_code=403)

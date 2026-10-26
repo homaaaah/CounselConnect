@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
 RoleCode = Literal["STUDENT", "GUIDANCE_STAFF", "COUNSELOR", "SUPERADMIN"]
 AccountStatus = Literal["PENDING_VERIFICATION", "ACTIVE", "VERIFICATION_EXPIRED"]
@@ -75,6 +75,44 @@ class ManagedUserDetail(ManagedUserSummary):
 
 class UserStatusRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class CounselorAccountFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    first_name: str = Field(strict=True, min_length=1, max_length=100)
+    middle_name: str | None = Field(default=None, strict=True, max_length=100)
+    last_name: str = Field(strict=True, min_length=1, max_length=100)
+
+    @field_validator("first_name", "middle_name", "last_name", mode="before")
+    @classmethod
+    def normalize_name(cls, value, info):
+        if isinstance(value, str):
+            value = " ".join(value.split())
+            return None if info.field_name == "middle_name" and not value else value
+        return value
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def trim_email(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class CounselorAccountCreateRequest(CounselorAccountFields):
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+
+class CounselorAccountUpdateRequest(CounselorAccountFields):
+    middle_name: str | None = Field(strict=True, max_length=100)
+    expected_updated_at: AwareDatetime
+
+    @field_validator("expected_updated_at", mode="before")
+    @classmethod
+    def require_timestamp(cls, value):
+        if not isinstance(value, (str, datetime)):
+            raise ValueError("A timezone-aware timestamp is required.")
+        return value
 
 
 class CampusResponse(BaseModel):

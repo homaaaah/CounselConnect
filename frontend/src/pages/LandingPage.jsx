@@ -302,6 +302,7 @@ export default function LandingPage({ onSignedIn }) {
 
           <div className="footer-bottom">
             <div>&copy; {new Date().getFullYear()} CounselConnect</div>
+            <button type="button" className="linklike" onClick={() => openLogin("superadmin")}>Superadmin sign in</button>
             <a href="#landing" className={showBackToTop ? "back-to-top show" : "back-to-top"}>
               <i className="fa-solid fa-arrow-up"></i>
             </a>
@@ -327,6 +328,7 @@ export default function LandingPage({ onSignedIn }) {
               onSignedIn={onSignedIn}
               onClose={() => setModal(null)}
               onSwitchAudience={() => openLogin(modal.audience === "student" ? "staff" : "student")}
+              onSwitchToSuperadmin={() => openLogin("superadmin")}
               onSwitchToRegister={() => setModal({ kind: "register", audience: "student" })}
             />
           ) : (
