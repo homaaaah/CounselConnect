@@ -78,6 +78,7 @@ export function setErrorHandler(handler) {
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export async function request(path, init = {}) {
+  const { responseType, ...fetchInit } = init;
   const sentCsrfToken = csrfToken;
   const isFormData = init.body instanceof FormData;
   const headers = { ...init.headers };
@@ -94,7 +95,7 @@ export async function request(path, init = {}) {
   let response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
+      ...fetchInit,
       headers,
       credentials: "include",
     });
@@ -139,5 +140,6 @@ export async function request(path, init = {}) {
   if (response.status === 204) {
     return undefined;
   }
+  if (responseType === "blob") return await response.blob();
   return await response.json();
 }

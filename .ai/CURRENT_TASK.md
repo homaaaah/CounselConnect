@@ -1,3 +1,51 @@
+# Current work: Registration Corrections and Users Management
+
+**Status: Implementation, milestones 1-4, rehearsal and authorized local application migration complete (2026-10-26).** No feature implementation is knowingly outstanding. The user authorized stopping the local backend and applying the three migrations, reserving functional testing for themselves. Backend remains stopped. No staging/production deployment or commit was performed.
+
+**Local login repair (2026-10-26):** Diagnosed the shared login 500 as code/schema mismatch: application DB was at `20261024_weekly_sched_softdel` without `users.is_deactivated` or other release columns. On explicit user authorization, stopped the Uvicorn supervisor and spawned worker, confirmed port 8000 closed, created a Windows-current-user DPAPI-encrypted SQL backup and verified its isolated restore against all table row counts. Rechecked duplicate pending owners with backend stopped: zero. Applied the three existing Alembic migrations to `20261025_pending_correction`. Verified release columns, generated unique guard, preserved table/status counts, false deactivation/REGISTRATION defaults and unknown legacy context. Backend was not restarted and login/functional testing was not performed, per the user's instruction.
+
+**Backup:** Ignored `backend/var/backups/pre_registration_release_20261026T011840Z.sql.dpapi` with adjacent manifest; encrypted for the current Windows user. No plaintext SQL dump or private COR bytes were persisted. Temporary restore schema and helper script were removed. Retain this recovery backup outside the commit until the user completes testing and the recovery window closes.
+
+**Local development account (2026-10-26):** User's subsequent Superadmin login returned 401 because no SUPERADMIN account existed in the local application database. Added only the documented `superadmin@ucc.edu.ph` development seed account, ACTIVE/non-deactivated, with Argon2id credentials matching `backend/dev_seed.sql`. No existing account was overwritten and no HTTP login test was performed; user will test through Guidance sign in. The earlier pre-migration backup predates this seed insertion.
+
+## Contracts and release references
+
+- Owning behavior/privacy contract: [REGISTRATION_CORRECTIONS.md](../docs/REGISTRATION_CORRECTIONS.md).
+- Final verification and remaining checks: [REGISTRATION_CORRECTIONS_HANDOFF.md](../docs/REGISTRATION_CORRECTIONS_HANDOFF.md).
+- Pinned migration, backup, rollback and smoke-check plan: [REGISTRATION_CORRECTIONS_DEPLOYMENT.md](../docs/REGISTRATION_CORRECTIONS_DEPLOYMENT.md).
+- Preserve registered baselines separately from proposals, immutable version lineage, exact selected IDs/displayed versions (including legacy null), complete pagination and unknown legacy values.
+- Review permissions remain Superadmin-only; Student reads/revisions are owner-scoped. Users status actions target only Students/Counselors, revoke sessions atomically and preserve enrollment restrictions. Backend authorization is authoritative.
+- Exact COR evidence stays private and temporary, bounded by decision/replacement or original seven-day upload deadline. Preview blob URLs are revoked on close/navigation/expiry/decision. No clinical authority or data is added.
+- Mobile menu fix preserves role-scoped links/hash routes/open-close/aria-expanded behavior. Inline SVG and a fixed touch target remove the external icon-font dependency; no API or permission changes.
+
+## Verification retained
+
+| Check | Result |
+|---|---|
+| Combined relevant backend/security/migration selection | Initial 946 passed, 10 failed; affected rerun 259 passed with only the appointment harness still failing; repaired appointment flow passed separately. All 956 distinct selected tests have passing results across runs, not a single clean 956-test or full-backend-suite result. |
+| Frontend integration milestone | 129 tests passed, including 13 management cases; two real React/API/disposable-MySQL management workflows passed. |
+| Actual Alembic runner rehearsal | 1 passed: disposable pre-release schema upgraded through all three release migrations, row/default/legacy preservation, pending unique guard and no-op retry verified. |
+| Real Chrome browser rehearsal | 4 desktop/mobile-sized core cases and 2 stale-decision/session-revocation follow-ups passed across both proof purposes. Uses real Vite/FastAPI/disposable MySQL, synthetic data, stubbed extraction and blocked external resources. |
+| Checks after mobile menu/shared harness changes | 10 navbar tests and 2 existing renderer/API workflows passed. |
+| Production build | Latest build passed, 87 modules; approved escalation resolved the existing esbuild ancestor-directory sandbox read restriction. |
+| Consistency | OpenAPI matches; single Alembic head `20261025_pending_correction`; changed/new Python and Node harness parsing and whitespace checks passed. Graphify inactive. |
+
+Existing TestClient and Alembic path-separator deprecation warnings remain. Test suites and reusable harnesses are release assets; retain them.
+
+## Remaining manual/deployment work
+
+Native PDF reader visual rendering, actual mobile/Capacitor, genuine approved synthetic COR through PDF/barcode/OCR tools and camera/TURN/device behavior remain unverified. PDF response/frame/blob checks and mobile-sized desktop Chrome do not establish native-reader or physical-device behavior.
+
+The local application migration and protected backup/isolated restore are now complete. User will restart the backend and perform functional testing. Future migrations/other targets still require their own confirmed target, protected backup/restore, stopped writers and the pinned upgrade/guarded recovery procedure. Never load clean-install SQL into an existing database or force a lossy downgrade.
+
+## Pre-commit cleanup
+
+Removed the three generated synthetic rehearsal screenshots from ignored `backend/var/rehearsal/` and condensed duplicated incremental progress/obsolete resume instructions in this file and the handoff. Preserved implementation, migrations, tests, dependencies, build output, environment files, private stores and unrelated work. No commit or staging action was performed. Do not resume historical implementation increments or repeat unchanged coverage solely because documentation was condensed.
+
+---
+
+The following is the previous completed task record, retained for context.
+
 # CounselConnect - Current Task
 
 **Status:** COMPLETED

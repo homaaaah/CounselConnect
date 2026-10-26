@@ -6,6 +6,7 @@ import {
   failureReasonText,
 } from "../../features/accounts";
 import ScreeningFields from "../../features/accounts/ScreeningFields";
+import StudentCorrections from "../../features/accounts/StudentCorrections";
 
 const STATUS_LABELS = {
   AWAITING_CONFIRMATION: "Confirm your details",
@@ -22,7 +23,7 @@ const STATUS_LABELS = {
  * program selectors), a Confirm button that activates the account, and — for
  * NEEDS_RESUBMISSION/FAILED — a COR re-upload form.
  */
-export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedProgramName, onRejected }) {
+export default function RegistrationStatusPage({ user, unmatchedCampusName, unmatchedProgramName, onRejected, onEnrollmentChanged }) {
   const state = useCorScreening();
   const [form, setForm] = useState(null);
   const [file, setFile] = useState(null);
@@ -38,14 +39,17 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
   async function handleConfirm(e) {
     e.preventDefault();
     if (hasEdits) {
-      await state.requestEdit(form);
+      const result = await state.requestEdit(form);
+      if (result.success) await onEnrollmentChanged?.();
       return;
     }
-    await state.confirm(form);
+    const result = await state.confirm(form);
+    if (result.success) await onEnrollmentChanged?.();
   }
 
   async function handleRequestEdit() {
-    await state.requestEdit(form);
+    const result = await state.requestEdit(form);
+    if (result.success) await onEnrollmentChanged?.();
   }
 
   async function handleRejectAccount() {
@@ -67,7 +71,7 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
 
   const screening = state.screening;
   const confirmable = screening?.status === "AWAITING_CONFIRMATION";
-  const rejectable = !screening || screening.status !== "PASSED";
+  const rejectable = (!user || user.account_status === "PENDING_VERIFICATION") && (!screening || screening.status !== "PASSED");
   const canResubmit = !state.loading
     && (!screening || ["NEEDS_RESUBMISSION", "FAILED"].includes(screening.status));
   const editDiffs = form && confirmable ? editedEditableFields(screening, form) : [];
@@ -183,7 +187,7 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
               <div className="upload-title">Registration form (COR) — re-upload</div>
               <div className="upload-desc">
                 Upload a clearer PDF of your current Certificate of Registration. PDF only,
-                max 10 MB. Stored privately and deleted after your account is activated.
+                max 10 MB. Stored privately. Deleted after activation unless corrections await review; then deleted after a decision, replacement, or the original seven-day upload deadline.
               </div>
               <input
                 id="resubmit-cor"
@@ -221,6 +225,7 @@ export default function RegistrationStatusPage({ unmatchedCampusName, unmatchedP
           </div>
         )}
 
+        {user?.role_code === "STUDENT" && <StudentCorrections key={`${user.user_id}-${screening?.status}`} user={user} />}
         <p className="footer-link" style={{ textAlign: "center" }}>
           <a href="#home">Back to home</a>
         </p>

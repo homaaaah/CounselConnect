@@ -9,7 +9,7 @@
  *     directory is Superadmin-only for now (deferred counselor feature).
  *     Active link is green with a thin underline, and the right side shows a
  *     notification bell plus a text-only identity block (Navbar UI Spec).
- *   - Superadmin (ADR-030): Users only.
+ *   - Superadmin: Users and Registration Corrections.
  *   - Guidance Staff: Home only.
  *   - Student: Home (#home), Appointments (#appointments); History and
  *     Session render as non-navigable "coming soon" placeholders.
@@ -62,7 +62,7 @@ function roleNav(user) {
     ];
   }
   if (user.role_code === "SUPERADMIN") {
-    return [{ label: "Users", href: "#users" }];
+    return [{ label: "Users", href: "#users" }, { label: "Registration Corrections", href: "#corrections" }];
   }
   if (user.role_code === "GUIDANCE_STAFF") {
     return [{ label: "Home", href: "#home" }];
@@ -95,6 +95,8 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
   const items = roleNav(user);
   const isStudent = user.role_code === "STUDENT";
   const isCounselor = user.role_code === "COUNSELOR";
+  // Superadmin shares the counselor's green active-link treatment.
+  const isGreen = isCounselor || user.role_code === "SUPERADMIN";
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -106,10 +108,10 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
   const linkClass = (href) => {
     const current = href === "#" + page;
     // Counselor reference state: green text with a thin green underline.
-    const active = isCounselor
+    const active = isGreen
       ? "border-b-2 border-[#207524] text-[#207524]"
       : "border-b-2 border-counseling-active-focus text-zinc-900";
-    const hover = isCounselor ? "hover:text-[#207524]" : "hover:text-counseling-active-focus";
+    const hover = isGreen ? "hover:text-[#207524]" : "hover:text-counseling-active-focus";
     return "px-1 py-4 text-sm font-medium transition-colors " +
       (current
         ? active
@@ -146,10 +148,10 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
                 {link.badge !== false && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>}
               </span>
             ))}
-            {isStudent && user.account_status !== "ACTIVE" && (
+            {isStudent && (
               <a href="#registration" className={linkClass("#registration")}
                 {...(page === "registration" ? { "aria-current": "page" } : {})}>
-                Verify enrollment
+                {user.account_status === "ACTIVE" ? "Registration" : "Verify enrollment"}
               </a>
             )}
           </div>
@@ -226,9 +228,11 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
                 </button>
               </>
             )}
-            <button type="button" className="md:hidden" aria-expanded={menuOpen} aria-controls="app-nav-links"
+            <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md md:hidden" aria-expanded={menuOpen} aria-controls="app-nav-links"
               aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen(!menuOpen)}>
-              <i className={menuOpen ? "fa-solid fa-xmark" : "fa-solid fa-bars"} aria-hidden="true"></i>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d={menuOpen ? "M6 6l12 12M6 18L18 6" : "M4 6h16M4 12h16M4 18h16"} />
+              </svg>
             </button>
           </div>
         </nav>
@@ -237,8 +241,8 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
           {items.map((link) => link.href ? (
             <a key={link.href} href={link.href} className={"block py-2.5 text-sm font-medium " +
               (link.href === "#" + page
-                ? (isCounselor ? "text-[#207524]" : "text-counseling-active-focus")
-                : "text-zinc-900 " + (isCounselor ? "hover:text-[#207524]" : "hover:text-counseling-active-focus"))}
+                ? (isGreen ? "text-[#207524]" : "text-counseling-active-focus")
+                : "text-zinc-900 " + (isGreen ? "hover:text-[#207524]" : "hover:text-counseling-active-focus"))}
               {...(link.href === "#" + page ? { "aria-current": "page" } : {})}
               onClick={() => setMenuOpen(false)}>{link.label}</a>
           ) : (
@@ -248,12 +252,12 @@ function TopBarNav({ user, page, onSignOut, menuOpen, setMenuOpen, notificationC
               {link.badge !== false && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">soon</span>}
             </span>
           ))}
-          {user.role_code === "STUDENT" && user.account_status !== "ACTIVE" && (
+          {user.role_code === "STUDENT" && (
             <a href="#registration" onClick={() => setMenuOpen(false)}
               className={"block py-2.5 text-sm font-medium " +
                 (page === "registration" ? "text-counseling-active-focus" : "text-zinc-900")}
               {...(page === "registration" ? { "aria-current": "page" } : {})}>
-              Verify enrollment
+              {user.account_status === "ACTIVE" ? "Registration" : "Verify enrollment"}
             </a>
           )}
           {user.role_code === "STUDENT" && user.account_status !== "ACTIVE" && (

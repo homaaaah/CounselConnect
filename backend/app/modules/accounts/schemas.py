@@ -5,10 +5,10 @@ snake_case DTO fields; SCREAMING_SNAKE_CASE enum values (NAMING_CONVENTIONS.md).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 RoleCode = Literal["STUDENT", "GUIDANCE_STAFF", "COUNSELOR", "SUPERADMIN"]
 AccountStatus = Literal["PENDING_VERIFICATION", "ACTIVE", "VERIFICATION_EXPIRED"]
@@ -46,6 +46,35 @@ class UserResponse(BaseModel):
     last_name: str
     created_at: datetime
     updated_at: datetime
+
+
+class ManagedUserSummary(UserResponse):
+    is_deactivated: bool
+    student_number: str | None = None
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def utc_timestamp(cls, value):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+class ManagedStudentProfile(BaseModel):
+    student_number: str
+    campus_id: int | None
+    program_id: int | None
+    year_level: int | None
+    section: str | None
+
+
+class ManagedUserDetail(ManagedUserSummary):
+    profile: ManagedStudentProfile | None = None
+    campus_name: str | None = None
+    program_name: str | None = None
+    valid_until: date | None = None
+
+
+class UserStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class CampusResponse(BaseModel):

@@ -103,7 +103,7 @@ test("superadmin sees pending edit requests and approves one", async (t) => {
   setCsrfToken(null);
 });
 
-test("superadmin rejects with a required reason", async (t) => {
+test("superadmin returns with a required reason", async (t) => {
   setCsrfToken("synthetic-csrf");
   const calls = setup(t);
   const root = await mount(t);
@@ -117,8 +117,8 @@ test("superadmin rejects with a required reason", async (t) => {
     await root.root.findByProps({ id: "edit-reject-confirm-7" }).props.onClick();
   });
 
-  const reject = calls.find((call) => call.path === "/api/v1/profile-change-requests/7/reject");
-  assert.ok(reject, "reject posts to the reject endpoint");
+  const reject = calls.find((call) => call.path === "/api/v1/profile-change-requests/7/return");
+  assert.ok(reject, "return posts to the version-bound return endpoint");
   assert.equal(JSON.parse(reject.body).reason, "Blurry COR");
   setCsrfToken(null);
 });

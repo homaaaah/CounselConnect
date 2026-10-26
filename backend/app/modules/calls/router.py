@@ -72,7 +72,7 @@ async def call_socket(websocket: WebSocket, appointment_id: int):
 
             # Revalidate by wall clock, not by message inactivity, so a client
             # that keeps sending messages cannot outlive its authorization.
-            if monotonic() - last_revalidated >= call_realtime.SOCKET_REVALIDATE_SECONDS:
+            if raw_message is not None or monotonic() - last_revalidated >= call_realtime.SOCKET_REVALIDATE_SECONDS:
                 try:
                     refreshed = await asyncio.to_thread(
                         call_realtime.authorize_call_socket, raw_credential, appointment_id

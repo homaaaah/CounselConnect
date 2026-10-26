@@ -17,6 +17,9 @@ from app.modules.cor_screening import screening as engine
 from app.modules.cor_screening.schemas import RequestEditRequest
 from app.modules.cor_screening.service import CorScreeningService
 from app.modules.profile_change.service import ProfileChangeService
+from app.modules.profile_change.models import ProfileChangeRequest
+from app.modules.cor_screening.schemas import ConfirmScreeningRequest
+from sqlalchemy import func, select
 
 
 def stub_screening(monkeypatch, result):
@@ -123,6 +126,110 @@ def test_request_edit_without_a_difference_is_a_plain_confirmation(
     assert change_request is None
 
 
+def test_equivalent_normalized_values_create_no_request(db_session, academic_references, monkeypatch):
+    campus_id, program_id = academic_references
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    user, _screening = _register(service)
+    _scr, activated, profile, request = service.request_edit(
+        user, _payload(campus_id, program_id, first_name="  JUAN  ", middle_name="  deLA\t ", section=" a ")
+    )
+    assert request is None
+    assert activated.account_status == "ACTIVE"
+    assert (activated.first_name, activated.middle_name, profile.section) == ("Juan", "Dela", "A")
+    assert db_session.scalar(select(func.count()).select_from(ProfileChangeRequest)) == 0
+
+
+def test_middle_name_addition_is_pending_and_student_can_sign_in(
+    db_session, db_client, academic_references, monkeypatch
+):
+    campus_id, program_id = academic_references
+    result = good_result()
+    result.fields.name = "Juan Cruz"
+    stub_screening(monkeypatch, result)
+    service = CorScreeningService(db_session)
+    user, screening, _, _, token = service.register_with_cor(
+        "middle@example.edu", "password1", b"%PDF-1.4 test", "cor.pdf"
+    )
+    response = db_client.post("/api/v1/cor-screenings/request-edit", headers={"X-COR-Token": token},
+                              json=_payload(campus_id, program_id, middle_name="  Maria\t Luisa  ").model_dump())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["account_status"] == "ACTIVE"
+    assert data["user"]["middle_name"] is None
+    assert data["screening"]["extracted_middle_name"] is None
+    assert data["change_request"]["student_user_id"] == user.user_id
+    assert data["change_request"]["cor_screening_id"] == screening.cor_screening_id
+    assert data["change_request"]["status"] == "PENDING"
+    assert data["change_request"]["requested_middle_name"] == "Maria Luisa"
+    login = db_client.post("/api/v1/auth/login", json={"identifier": "middle@example.edu", "password": "password1"})
+    assert login.status_code == 200
+    assert login.json()["user"]["account_status"] == "ACTIVE"
+    assert db_client.get("/api/v1/appointments").status_code == 200
+
+
+def test_plain_confirmation_cannot_bypass_middle_name_review(db_session, academic_references, monkeypatch):
+    campus_id, program_id = academic_references
+    result = good_result()
+    result.fields.name = "Juan Cruz"
+    stub_screening(monkeypatch, result)
+    service = CorScreeningService(db_session)
+    user, screening = _register(service)
+    with pytest.raises(AppError) as error:
+        service.confirm(user, ConfirmScreeningRequest(**_payload(campus_id, program_id, middle_name="Maria").model_dump()))
+    assert error.value.code == "FIELD_MISMATCH"
+    assert error.value.details == {"fields": ["middle_name"]}
+    assert user.account_status == "PENDING_VERIFICATION"
+    assert screening.extracted_middle_name is None
+
+
+def test_middle_name_removal_stays_pending(db_session, academic_references, monkeypatch):
+    campus_id, program_id = academic_references
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    user, _screening = _register(service)
+    _scr, activated, _profile, request = service.request_edit(user, _payload(campus_id, program_id, middle_name=" \t "))
+    assert request.requested_middle_name is None
+    assert request.status == "PENDING"
+    assert activated.middle_name == "Dela"
+
+
+@pytest.mark.parametrize("action", ["confirm", "request_edit"])
+def test_unicode_casefold_and_absent_middle_name_are_a_plain_confirmation(
+    db_session, academic_references, monkeypatch, action
+):
+    campus_id, program_id = academic_references
+    result = good_result()
+    result.fields.name = "Straße Cruz"
+    stub_screening(monkeypatch, result)
+    service = CorScreeningService(db_session)
+    user, _screening = _register(service)
+    outcome = getattr(service, action)(
+        user, _payload(campus_id, program_id, first_name="STRASSE", middle_name=" \t ")
+    )
+    assert user.account_status == "ACTIVE"
+    assert user.first_name == "Straße"
+    assert user.middle_name is None
+    if action == "request_edit":
+        assert outcome[3] is None
+    assert db_session.scalar(select(func.count()).select_from(ProfileChangeRequest)) == 0
+
+
+@pytest.mark.parametrize("missing", ["first_name", "last_name", "year_level", "section"])
+def test_missing_required_extraction_cannot_use_proposed_value(db_session, academic_references, monkeypatch, missing):
+    campus_id, program_id = academic_references
+    stub_screening(monkeypatch, good_result())
+    service = CorScreeningService(db_session)
+    user, screening = _register(service)
+    setattr(screening, f"extracted_{missing}", None)
+    db_session.commit()
+    with pytest.raises(AppError) as error:
+        service.request_edit(user, _payload(campus_id, program_id))
+    assert error.value.code == "SCREENING_NOT_CONFIRMABLE"
+    assert user.account_status == "PENDING_VERIFICATION"
+    assert db_session.scalar(select(func.count()).select_from(ProfileChangeRequest)) == 0
+
+
 def test_request_edit_rejects_excluded_fields(db_session, academic_references, monkeypatch):
     campus_id, program_id = academic_references
     stub_screening(monkeypatch, good_result())
@@ -198,10 +305,10 @@ def test_superadmin_approve_applies_edits(db_session, academic_references, monke
 
     # Only a Superadmin may decide.
     with pytest.raises(AppError) as forbidden:
-        reviews.approve(user, change_request.change_request_id)
+        reviews.approve(user, change_request.change_request_id, submission_version=1)
     assert forbidden.value.code == "FORBIDDEN_ROLE"
 
-    approved = reviews.approve(superadmin, change_request.change_request_id)
+    approved = reviews.approve(superadmin, change_request.change_request_id, submission_version=1)
     assert approved.status == "APPROVED"
     db_session.refresh(user)
     db_session.refresh(profile)
@@ -211,7 +318,7 @@ def test_superadmin_approve_applies_edits(db_session, academic_references, monke
 
     # Deciding a non-pending request is rejected.
     with pytest.raises(AppError) as decided:
-        reviews.approve(superadmin, change_request.change_request_id)
+        reviews.approve(superadmin, change_request.change_request_id, submission_version=1)
     assert decided.value.code == "CHANGE_REQUEST_NOT_PENDING"
 
 
@@ -226,8 +333,8 @@ def test_superadmin_reject_keeps_original_values(db_session, academic_references
     superadmin = _superadmin(db_session)
     reviews = ProfileChangeService(db_session)
 
-    rejected = reviews.reject(superadmin, change_request.change_request_id, "Blurry COR")
-    assert rejected.status == "REJECTED"
+    rejected = reviews.reject(superadmin, change_request.change_request_id, "Blurry COR", submission_version=1)
+    assert rejected.status == "RETURNED"
     assert rejected.decision_reason == "Blurry COR"
     db_session.refresh(user)
     db_session.refresh(profile)
@@ -235,7 +342,7 @@ def test_superadmin_reject_keeps_original_values(db_session, academic_references
     assert profile.section == "A"
 
 
-def test_supersede_pending_marks_rejected(db_session, academic_references, monkeypatch):
+def test_supersede_versioned_pending_marks_returned(db_session, academic_references, monkeypatch):
     campus_id, program_id = academic_references
     stub_screening(monkeypatch, good_result())
     service = CorScreeningService(db_session)
@@ -248,7 +355,7 @@ def test_supersede_pending_marks_rejected(db_session, academic_references, monke
     row = reviews.supersede_pending(user.user_id)
     assert row is not None
     assert row.change_request_id == change_request.change_request_id
-    assert row.status == "REJECTED"
+    assert row.status == "RETURNED"
     assert row.decision_reason == "SUPERSEDED_BY_NEW_COR"
 
 
@@ -267,7 +374,7 @@ def test_resubmit_supersedes_a_pending_request(db_session, academic_references, 
 
     service.resubmit(user, b"%PDF-1.4 renew", "cor.pdf")
     db_session.refresh(change_request)
-    assert change_request.status == "REJECTED"
+    assert change_request.status == "RETURNED"
     assert change_request.decision_reason == "SUPERSEDED_BY_NEW_COR"
 
 
@@ -284,7 +391,7 @@ def test_list_requests_requires_superadmin(db_session, academic_references, monk
     assert forbidden.value.code == "FORBIDDEN_ROLE"
 
     superadmin = _superadmin(db_session)
-    items = reviews.list_requests(superadmin)
+    items = reviews.list_requests(superadmin).items
     assert len(items) == 1
     assert items[0].change_request.status == "PENDING"
     assert items[0].current_last_name == "Cruz"

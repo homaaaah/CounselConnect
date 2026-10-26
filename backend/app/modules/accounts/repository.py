@@ -13,6 +13,23 @@ class AccountsRepository(BaseRepository[User]):
 
     model = User
 
+    def page_users(self, *, q=None, role_code=None, account_status=None, is_deactivated=None, page=1, page_size=20):
+        conditions = []
+        for column, value in ((User.role_code, role_code), (User.account_status, account_status),
+                              (User.is_deactivated, is_deactivated)):
+            if value is not None:
+                conditions.append(column == value)
+        if q and q.strip():
+            term = q.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            conditions.append(or_(*(column.ilike(f"%{term}%", escape="!") for column in
+                (User.email, User.first_name, User.middle_name, User.last_name, StudentProfile.student_number))))
+        base = select(User, StudentProfile).outerjoin(StudentProfile,
+            (StudentProfile.user_id == User.user_id) & (User.role_code == "STUDENT")).where(*conditions)
+        total = self.session.scalar(select(func.count()).select_from(base.subquery()))
+        rows = self.session.execute(base.order_by(User.last_name, User.first_name, User.user_id)
+            .offset((page - 1) * page_size).limit(page_size)).all()
+        return rows, total
+
     # -- reference data (public) ---------------------------------------
 
     def find_campus(self, campus_id: int) -> Campus | None:
@@ -28,6 +45,10 @@ class AccountsRepository(BaseRepository[User]):
     def find_program(self, program_id: int) -> Program | None:
         return self.session.get(Program, program_id)
 
+    def lock_program(self, program_id: int) -> Program | None:
+        return self.session.scalar(select(Program).where(Program.program_id == program_id)
+            .with_for_update().execution_options(populate_existing=True))
+
     def list_active_campuses(self) -> list[Campus]:
         return list(self.session.scalars(select(Campus).where(Campus.is_active.is_(True))))
 
@@ -36,8 +57,11 @@ class AccountsRepository(BaseRepository[User]):
 
     # -- users ----------------------------------------------------------
 
-    def find_user_by_email(self, email: str) -> User | None:
-        return self.session.scalar(select(User).where(User.email == email))
+    def find_user_by_email(self, email: str, *, lock: bool = False) -> User | None:
+        stmt = select(User).where(User.email == email)
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return self.session.scalar(stmt)
 
     def list_active_guidance_staff(self) -> list[User]:
         return list(self.session.scalars(
@@ -56,10 +80,15 @@ class AccountsRepository(BaseRepository[User]):
     def find_student_profile(self, user_id: int) -> StudentProfile | None:
         return self.session.get(StudentProfile, user_id)
 
-    def find_student_profile_by_number(self, student_number: str) -> StudentProfile | None:
-        return self.session.scalar(
-            select(StudentProfile).where(StudentProfile.student_number == student_number)
-        )
+    def lock_student_profile(self, user_id: int) -> StudentProfile | None:
+        return self.session.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id)
+            .with_for_update().execution_options(populate_existing=True))
+
+    def find_student_profile_by_number(self, student_number: str, *, lock: bool = False) -> StudentProfile | None:
+        stmt = select(StudentProfile).where(StudentProfile.student_number == student_number)
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return self.session.scalar(stmt)
 
     # -- counselor directory --------------------------------------------
 

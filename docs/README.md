@@ -5,6 +5,7 @@
 | System overview | SYSTEM_OVERVIEW.md |
 | Roles/security | USER_ROLES.md, SECURITY.md |
 | COR screening | REGISTRATION_VERIFICATION.md |
+| Registration corrections and local release | REGISTRATION_CORRECTIONS.md, REGISTRATION_CORRECTIONS_DEPLOYMENT.md |
 | Appointments | APPOINTMENT_SCHEDULING.md |
 | Text messaging | REAL_TIME_MESSAGING.md |
 | Audio/video | AUDIO_VIDEO_CALLS.md |

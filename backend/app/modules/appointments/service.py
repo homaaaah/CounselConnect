@@ -128,7 +128,7 @@ class AppointmentsService(BaseService[Appointment]):
             counselor_user_id = actor.user_id
         elif counselor_user_id is not None:
             counselor = self.accounts.scheduling_user(counselor_user_id)
-            if counselor is None or counselor.role_code != "COUNSELOR" or counselor.account_status != "ACTIVE":
+            if counselor is None or counselor.role_code != "COUNSELOR" or (counselor.account_status != "ACTIVE" or counselor.is_deactivated):
                 raise AppError("COUNSELOR_NOT_FOUND", "The selected Counselor is unavailable.", status_code=404)
         if end_date < start_date or (end_date - start_date).days > 62:
             raise AppError("INVALID_CALENDAR_RANGE", "Choose a calendar range of 63 days or less.", status_code=422)
@@ -219,7 +219,7 @@ class AppointmentsService(BaseService[Appointment]):
                 "You do not have access to appointments.",
                 status_code=403,
             )
-        if actor.account_status != "ACTIVE":
+        if (actor.account_status != "ACTIVE" or getattr(actor, "is_deactivated", False)):
             raise AppError(
                 "ACCOUNT_NOT_ACTIVE",
                 "An active verified account is required.",
@@ -408,7 +408,7 @@ class AppointmentsService(BaseService[Appointment]):
             if (
                 user is None
                 or user.role_code != expected
-                or (require_active and user.account_status != "ACTIVE")
+                or (require_active and (user.account_status != "ACTIVE" or user.is_deactivated))
             ):
                 raise AppError(
                     "PARTICIPANT_UNAVAILABLE",
@@ -535,7 +535,7 @@ class AppointmentsService(BaseService[Appointment]):
         self.authorize(actor)
         if actor.role_code == "STUDENT" and counselor_user_id is not None:
             counselor = self.accounts.scheduling_user(counselor_user_id)
-            if counselor is None or counselor.role_code != "COUNSELOR" or counselor.account_status != "ACTIVE":
+            if counselor is None or counselor.role_code != "COUNSELOR" or (counselor.account_status != "ACTIVE" or counselor.is_deactivated):
                 raise AppError("COUNSELOR_NOT_FOUND", "The selected Counselor is unavailable.", status_code=404)
         items, total = self.repository.slots(
             actor,
@@ -904,7 +904,7 @@ class AppointmentsService(BaseService[Appointment]):
         replacement_counselor = self.accounts.scheduling_user(
             replacement.counselor_user_id
         )
-        if replacement_counselor.account_status != "ACTIVE":
+        if (replacement_counselor.account_status != "ACTIVE" or replacement_counselor.is_deactivated):
             raise AppError(
                 "PARTICIPANT_UNAVAILABLE", "The selected Counselor is unavailable."
             )

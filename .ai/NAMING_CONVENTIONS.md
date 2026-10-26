@@ -70,7 +70,7 @@ The v1 table names in `docs/DATABASE.md` are canonical.
   - `POST /wellness-resources/{resource_id}/publish`
 - Auth action exceptions use `/auth/login`, `/auth/refresh`, `/auth/logout`.
 - The one-time COR verification credential travels in the `X-COR-Token` request header (never a cookie, URL, or query); its failure code is `INVALID_VERIFICATION_TOKEN`. Session CSRF stays in `X-CSRF-Token`.
-- Student profile-edit requests use `POST /cor-screenings/request-edit`; review uses the `/profile-change-requests` resource (`approve`/`reject`) (ADR-032).
+- Student registration corrections reuse `POST /cor-screenings/request-edit` and `/profile-change-requests` (ADR-032). The agreed target uses `approve`/`return`/`resubmit`; `reject` is a compatibility alias during client migration. See `docs/REGISTRATION_CORRECTIONS.md`; target changes are not implemented yet.
 - Registration/self-service codes include `SCREENING_FAILED` (technical screening failure created no account) and `ACCOUNT_NOT_REJECTABLE` (self-cancellation of an active account) (ADR-033).
 - Never use role-specific duplicate routes when authorization can govern one resource route.
 
@@ -86,11 +86,12 @@ The v1 table names in `docs/DATABASE.md` are canonical.
 
 | Domain | Values |
 |---|---|
-| Account | `PENDING_VERIFICATION`, `ACTIVE`, `VERIFICATION_EXPIRED` |
+| Account | `PENDING_VERIFICATION`, `ACTIVE`, `VERIFICATION_EXPIRED`; schema after `20261025_account_screening_scope` adds independent `is_deactivated` boolean, not a new enrollment status; enforcement remains unimplemented. |
 | Role | `STUDENT`, `GUIDANCE_STAFF`, `COUNSELOR`, `SUPERADMIN` |
 | Verification (legacy `enrollment_verifications`) | `PENDING`, `APPROVED`, `NEEDS_RESUBMISSION`, `REJECTED`, `EXPIRED` |
 | COR screening | `PROCESSING`, `AWAITING_CONFIRMATION`, `PASSED`, `NEEDS_RESUBMISSION`, `FAILED` |
-| Profile change request | `PENDING`, `APPROVED`, `REJECTED` |
+| Profile change request | Schema after `20261025_correction_context`: `PENDING`, `APPROVED`, `RETURNED`, `REJECTED` (historical). Task 4.3 adds `RETURNED` API output for system evidence expiry/supersession. Existing manual rejection still writes `REJECTED`; manual return/resubmission remains unimplemented. |
+| COR screening purpose | Schema after `20261025_account_screening_scope`: `REGISTRATION` (default), `CORRECTION`. Correction-only creation/isolation remains unimplemented. |
 | COR barcode | `NOT_PROCESSED`, `NOT_FOUND`, `UNREADABLE`, `INVALID_FORMAT`, `DECODED`, `MISMATCH` |
 | Availability status | `AVAILABLE`, `RESERVED` |
 | Availability delivery mode | `ONLINE`, `FACE_TO_FACE`, `BOTH` |

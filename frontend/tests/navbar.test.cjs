@@ -99,7 +99,7 @@ test("active student sees Appointments link; History/Session render unclickable,
   fakeApi(t, authFor(student));
   const root = await mount(t, React.createElement(App));
   assert.ok(root.root.findAllByProps({ href: "#appointments" }).length >= 1);
-  assert.equal(root.root.findAllByProps({ href: "#registration" }).length, 0, "active students do not see the verification link");
+  assert.ok(root.root.findAllByProps({ href: "#registration" }).length >= 1, "active students can read correction outcomes through Registration");
   // History/Session are visible "coming soon" entries: disabled spans
   // without href; SOS/Assistant remain removed.
   const soon = root.root.findAllByProps({ "aria-disabled": "true" })

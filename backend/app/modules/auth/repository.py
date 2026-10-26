@@ -36,9 +36,12 @@ class AuthRepository(BaseRepository[User]):
         """Look up a user by email; student-number lookup uses the profile repository."""
         return self.session.scalar(select(User).where(User.email == identifier))
 
-    def find_session_by_token_hash(self, token_hash: bytes) -> UserSession | None:
+    def find_session_by_token_hash(self, token_hash: bytes, *, lock: bool = False) -> UserSession | None:
         """Fetch a session row by credential digest (hash-then-lookup)."""
-        return self.session.scalar(select(UserSession).where(UserSession.token_hash == token_hash))
+        stmt = select(UserSession).where(UserSession.token_hash == token_hash).execution_options(populate_existing=True)
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt)
 
     def list_sessions_for_user(self, user_id: int, active_only: bool = False) -> list[UserSession]:
         """Sessions for one user, newest first; optionally only non-revoked."""

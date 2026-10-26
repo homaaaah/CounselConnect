@@ -10,6 +10,7 @@ const CounselorAppointmentsPage = require("../src/pages/counselor/CounselorAppoi
 const CounselorSchedulePage = require("../src/pages/counselor/CounselorSchedulePage.jsx").default;
 const CounselorHistoryPage = require("../src/pages/counselor/CounselorHistoryPage.jsx").default;
 const HomePage = require("../src/pages/HomePage.jsx").default;
+const { ToastProvider } = require("../src/components/feedback");
 const { request, setCsrfToken } = require("../src/services/apiClient");
 const base = process.env.COUNSELCONNECT_TEST_API_URL;
 assert.ok(base && new URL(base).hostname === "127.0.0.1", "A disposable loopback API is required");
@@ -54,7 +55,7 @@ async function signIn(identifier, Component, ready) {
   setCsrfToken(null);
   const auth = await request("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password: "synthetic-live-pass" }) });
   setCsrfToken(auth.csrf_token);
-  await act(async () => { root = create(React.createElement(Component, { user: auth.user })); });
+  await act(async () => { root = create(React.createElement(ToastProvider, null, React.createElement(Component, { user: auth.user }))); });
   await waitFor(ready);
   return auth;
 }
@@ -93,23 +94,28 @@ async function main() {
 
     // The student books a materialized slot face-to-face through the home modal.
     await signIn(process.env.COUNSELCONNECT_TEST_STUDENT_NUMBER, HomePage,
-      () => Boolean(exactButton("Schedule")));
-    await act(async () => exactButton("Schedule").props.onClick());
+      () => Boolean(exactButton("Start Booking")));
+    await act(async () => exactButton("Start Booking").props.onClick());
+    const counselorCard = () => allButtons().find(b => b.props.className === "booking-counselor-card");
+    await waitFor(() => Boolean(counselorCard()));
+    await act(async () => counselorCard().props.onClick());
     await pickBookableDay();
     const timeButton = async () => {
       for (let i = 0; i < 250; i++) {
-        const time = allButtons().find(b => /^\d{2}:\d{2}$/.test(buttonText(b)));
+        const time = allButtons().find(b => b.props.className?.split(" ").includes("booking-time"));
         if (time) return time;
         await act(async () => new Promise(resolve => setTimeout(resolve, 20)));
       }
       throw new Error("No time buttons rendered for the selected day");
     };
     await act(async () => (await timeButton()).props.onClick());
-    await waitFor(() => Boolean(formFor("Confirm booking")));
-    await act(async () => formFor("Confirm booking").findByType("select")
+    await waitFor(() => Boolean(exactButton("Continue")) && !exactButton("Continue").props.disabled);
+    await act(async () => exactButton("Continue").props.onClick());
+    await act(async () => root.root.findByProps({ id: "booking-mode" })
       .props.onChange({ target: { value: "FACE_TO_FACE" } }));
-    await act(async () => formFor("Confirm booking").props.onSubmit({ preventDefault() {} }));
-    await waitFor(() => JSON.stringify(root.toJSON()).includes("Request submitted. Awaiting counselor review."));
+    await act(async () => exactButton("Review appointment").props.onClick());
+    await act(async () => formFor("Submit request").props.onSubmit({ preventDefault() {} }));
+    await waitFor(() => JSON.stringify(root.toJSON()).includes("Appointment requested"));
 
     // Counselor reviews the pending request on the Appointment Requests page...
     await signIn(process.env.COUNSELCONNECT_TEST_COUNSELOR_EMAIL, CounselorAppointmentsPage,

@@ -62,6 +62,15 @@ PROFILE_CHANGE_MIGRATION_FILE = (
 WEEKLY_SCHED_SOFTDEL_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20261024_weekly_sched_softdel.py"
 )
+CORRECTION_CONTEXT_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261025_correction_context.py"
+)
+ACCOUNT_SCREENING_SCOPE_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261025_account_screening_scope.py"
+)
+PENDING_CORRECTION_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261025_pending_correction.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -182,6 +191,36 @@ def load_weekly_sched_softdel_migration_module():
     return module
 
 
+def load_correction_context_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "correction_context_migration", CORRECTION_CONTEXT_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_account_screening_scope_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "account_screening_scope_migration", ACCOUNT_SCREENING_SCOPE_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_pending_correction_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "pending_correction_migration", PENDING_CORRECTION_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture(scope="session")
 def mysql_test_engine():
     """Create, own, and remove a randomly named disposable MySQL schema."""
@@ -259,6 +298,9 @@ def mysql_test_engine():
                 load_cor_token_migration_module().upgrade()
                 load_profile_change_migration_module().upgrade()
                 load_weekly_sched_softdel_migration_module().upgrade()
+                load_correction_context_migration_module().upgrade()
+                load_account_screening_scope_migration_module().upgrade()
+                load_pending_correction_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

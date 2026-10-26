@@ -17,7 +17,7 @@ Conflict order: current human/adviser instruction â†’ latest approved decision â
 
 ## Privacy/safety invariants
 
-- COR screening: private temporary storage, OCR/format checks only, Student confirmation, and cleanup logging without file content. Do not claim University authenticity; QR/registrar verification is pending.
+- COR screening: private temporary storage, OCR/format checks only, Student confirmation, and cleanup logging without file content. The user-approved pending-correction exception is bounded by decision/replacement or the original seven-day upload deadline (`docs/REGISTRATION_CORRECTIONS.md`). Do not claim University authenticity; QR/registrar verification is pending.
 - Counseling access: support multiple Counselors and enforce assignment. Superadmin has no default access to chats, drafts, assessments, clinical files, SOS answers, or call media.
 - Assessments: Counselor drafts are private; finalized assessments are immutable; corrections use append-only Counselor-authored amendments; Students receive read-only final access.
 - Clinical files: store bytes through private storage, metadata/opaque keys in MySQL, and serve only through authorization-checked no-store responses.

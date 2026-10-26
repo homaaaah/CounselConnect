@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.accounts.schemas import StudentProfileResponse, UserResponse
 from app.modules.profile_change.schemas import ProfileChangeRequestResponse
+from app.modules.profile_change.normalization import normalize_text
 
 ScreeningStatus = Literal[
     "PROCESSING", "AWAITING_CONFIRMATION", "PASSED", "NEEDS_RESUBMISSION", "FAILED"
@@ -63,15 +64,27 @@ class RegistrationWithCorResponse(BaseModel):
 class ConfirmScreeningRequest(BaseModel):
     """Student-confirmed academic fields (COR is the source of truth)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     student_number: str = Field(min_length=1, max_length=50)
     first_name: str = Field(min_length=1, max_length=100)
     middle_name: str | None = Field(default=None, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     campus_id: int = Field(gt=0)
     program_id: int = Field(gt=0)
-    year_level: int = Field(ge=1, le=10)
+    year_level: int = Field(ge=1, le=10, strict=True)
     section: str = Field(min_length=1, max_length=50)
     academic_period: str | None = Field(default=None, max_length=100)
+
+    @field_validator("first_name", "last_name", "section", mode="before")
+    @classmethod
+    def normalize_required_text(cls, value):
+        return normalize_text(value) if isinstance(value, str) else value
+
+    @field_validator("middle_name", mode="before")
+    @classmethod
+    def normalize_middle_name(cls, value):
+        return (normalize_text(value) or None) if isinstance(value, str) else value
 
 
 class ConfirmScreeningResponse(BaseModel):

@@ -319,7 +319,7 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
           <CorUpload
             inputId="resubmit-cor"
             title="Registration form (COR) — re-upload"
-            description="PDF only, max 10 MB. Stored privately and deleted after your account is activated."
+            description="PDF only, max 10 MB. Stored privately. Deleted after activation unless corrections await review; then deleted after a decision, replacement, or the original seven-day upload deadline."
             file={resubmitFile}
             onFile={setResubmitFile}
             disabled={busy}
@@ -401,7 +401,7 @@ export default function RegisterPage({ inModal = false, onClose, onSwitchToLogin
             inputId="register-cor"
             required
             title="Registration form (COR) — required PDF"
-            description="Your Certificate of Registration is the required proof of current enrollment. PDF only, max 10 MB. Stored privately and deleted after your account is activated."
+            description="Your Certificate of Registration is the required proof of current enrollment. PDF only, max 10 MB. Stored privately. Deleted after activation unless corrections await review; then deleted after a decision, replacement, or the original seven-day upload deadline."
             file={corFile}
             onFile={setCorFile}
             disabled={submitting}

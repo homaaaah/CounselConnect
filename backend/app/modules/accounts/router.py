@@ -1,12 +1,13 @@
 """accounts router — public endpoints for registration + reference data.
 
-Counselor-only management endpoints arrive with ADR-P01 (auth context).
+Users operations require active Superadmin authority; clinical permissions are unchanged.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
-from pydantic import EmailStr
+from typing import Annotated
+from pydantic import EmailStr, BeforeValidator
 
 from app.modules.accounts.schemas import (
     CampusResponse,
@@ -15,6 +16,11 @@ from app.modules.accounts.schemas import (
     StudentProfileResponse,
     StudentRegistrationRequest,
     UserResponse,
+    ManagedUserSummary,
+    ManagedUserDetail,
+    UserStatusRequest,
+    RoleCode,
+    AccountStatus,
 )
 from app.modules.accounts.service import AccountsService, get_accounts_service
 from app.modules.cor_screening.schemas import (
@@ -28,8 +34,42 @@ from app.modules.cor_screening.service import (
 )
 from app.shared.dependencies import CurrentUser
 from app.shared.pagination import ListEnvelope, paginate
+from app.shared.private_routes import PrivateRoute
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+users_router = APIRouter(prefix="/users", route_class=PrivateRoute)
+
+
+@users_router.get("", response_model=ListEnvelope[ManagedUserSummary])
+def managed_users(response: Response, actor: CurrentUser,
+    q: Annotated[str | None, Query(max_length=320), BeforeValidator(lambda value: value.strip() if isinstance(value, str) else value)] = None, role_code: RoleCode | None = None,
+    account_status: AccountStatus | None = None, is_deactivated: bool | None = None,
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    service: AccountsService = Depends(get_accounts_service)):
+    response.headers["Cache-Control"] = "no-store"
+    return service.managed_users(actor, q=q, role_code=role_code, account_status=account_status,
+        is_deactivated=is_deactivated, page=page, page_size=page_size)
+
+
+@users_router.get("/{user_id}", response_model=ManagedUserDetail)
+def managed_user(user_id: int, response: Response, actor: CurrentUser,
+    service: AccountsService = Depends(get_accounts_service)):
+    response.headers["Cache-Control"] = "no-store"
+    return service.managed_user(actor, user_id)
+
+
+@users_router.post("/{user_id}/deactivate", response_model=ManagedUserDetail)
+def deactivate_user(user_id: int, data: UserStatusRequest, response: Response, actor: CurrentUser,
+    service: AccountsService = Depends(get_accounts_service)):
+    response.headers["Cache-Control"] = "no-store"
+    return service.change_user_status(actor, user_id, deactivated=True)
+
+
+@users_router.post("/{user_id}/reactivate", response_model=ManagedUserDetail)
+def reactivate_user(user_id: int, data: UserStatusRequest, response: Response, actor: CurrentUser,
+    service: AccountsService = Depends(get_accounts_service)):
+    response.headers["Cache-Control"] = "no-store"
+    return service.change_user_status(actor, user_id, deactivated=False)
 
 
 @router.post(
@@ -172,3 +212,6 @@ def recover_student(
         profile=StudentProfileResponse.model_validate(profile) if profile is not None else None,
         screening=CorScreeningResponse.model_validate(screening) if screening is not None else None,
     )
+
+
+router.include_router(users_router)

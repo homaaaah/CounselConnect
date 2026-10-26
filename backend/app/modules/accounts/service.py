@@ -1,14 +1,15 @@
 """accounts service: authorization + business rules.
 
-Authorization model (docs/USER_ROLES.md): only COUNSELOR may manage
-accounts/staff/academic corrections (arrives with ADR-P01 auth context).
-Self-registration below is the open DFD 1.1 'Register Student Account' flow.
+Public registration/reference data and narrow Superadmin Users operations.
+Counselor clinical authority is unchanged; account status operations do not
+read or modify clinical records.
 """
 
 from __future__ import annotations
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import DBAPIError
 
 from app.core.exceptions import AppError
 from app.core.security import hash_password
@@ -23,6 +24,68 @@ class AccountsService(BaseService[User]):
 
     def __init__(self, session: Session) -> None:
         super().__init__(AccountsRepository(session))
+
+    @staticmethod
+    def _require_user_manager(actor):
+        if actor.role_code != "SUPERADMIN" or actor.account_status != "ACTIVE" or actor.is_deactivated:
+            raise AppError(code="FORBIDDEN_ROLE", message="Active Superadmin access is required.", status_code=403)
+
+    def managed_users(self, actor, **filters):
+        from app.modules.accounts.schemas import ManagedUserSummary
+        from app.shared.pagination import ListEnvelope
+        self._require_user_manager(actor)
+        rows, total = self.repository.page_users(**filters)
+        return ListEnvelope[ManagedUserSummary](items=[ManagedUserSummary(
+            **ManagedUserSummary.model_validate(user).model_dump(exclude={"student_number"}),
+            student_number=profile.student_number if profile and user.role_code == "STUDENT" else None) for user, profile in rows],
+            total=total, page=filters["page"], page_size=filters["page_size"])
+
+    def managed_user(self, actor, user_id):
+        from app.modules.accounts.schemas import ManagedUserDetail
+        from app.modules.cor_screening.repository import CorScreeningRepository
+        self._require_user_manager(actor)
+        user = self.ensure_found(self.repository.get(user_id), "USER_NOT_FOUND", "User not found.")
+        profile = self.repository.find_student_profile(user_id) if user.role_code == "STUDENT" else None
+        campus = self.repository.find_campus(profile.campus_id) if profile else None
+        program = self.repository.find_program(profile.program_id) if profile else None
+        enrolled = CorScreeningRepository(self.repository.session).find_registered_enrollment(user_id) if profile else None
+        return ManagedUserDetail(**ManagedUserDetail.model_validate(user).model_dump(exclude={
+            "student_number", "profile", "campus_name", "program_name", "valid_until"}),
+            student_number=profile.student_number if profile else None,
+            profile={field: getattr(profile, field) for field in
+                     ("student_number", "campus_id", "program_id", "year_level", "section")} if profile else None,
+            campus_name=campus.campus_name if campus else None, program_name=program.program_name if program else None,
+            valid_until=enrolled.valid_until if enrolled else None)
+
+    def change_user_status(self, actor, user_id, *, deactivated):
+        from app.modules.auth.repository import AuthRepository
+        from app.modules.audit.service import AuditService
+        self._require_user_manager(actor)
+        db = self.repository.session
+        try:
+            reviewer = self.repository.lock_user(actor.user_id)
+            if reviewer is None:
+                raise AppError(code="FORBIDDEN_ROLE", message="Active Superadmin access is required.", status_code=403)
+            self._require_user_manager(reviewer)
+            target = self.ensure_found(self.repository.lock_user(user_id), "USER_NOT_FOUND", "User not found.")
+            if target.role_code not in {"STUDENT", "COUNSELOR"} or target.user_id == reviewer.user_id:
+                raise AppError(code="USER_STATUS_CHANGE_FORBIDDEN", message="This account cannot be changed here.", status_code=403)
+            if deactivated or target.is_deactivated:
+                AuthRepository(db).revoke_all_sessions_for_user(user_id, "ACCOUNT_DISABLED")
+            if target.is_deactivated != deactivated:
+                previous = target.is_deactivated
+                target.is_deactivated = deactivated
+                AuditService(db).record(reviewer.user_id, "account_deactivated" if deactivated else "account_reactivated",
+                    "user", user_id, metadata={"previous_is_deactivated": previous, "is_deactivated": deactivated})
+            db.flush()
+            db.commit()
+        except DBAPIError:
+            db.rollback()
+            raise AppError(code="INTERNAL_ERROR", message="An unexpected error occurred.", status_code=500) from None
+        except Exception:
+            db.rollback()
+            raise
+        return self.managed_user(reviewer, user_id)
 
     # --- public self-registration (DFD 1.1 + 1.2 combined) -----------
 

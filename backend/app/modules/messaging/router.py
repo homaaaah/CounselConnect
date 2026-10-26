@@ -7,6 +7,7 @@ Nested resource per NAMING_CONVENTIONS.md:
 from __future__ import annotations
 
 import asyncio
+from time import monotonic
 
 from fastapi import APIRouter, Depends, Query, Response, WebSocket, WebSocketDisconnect
 
@@ -69,11 +70,15 @@ async def conversation_socket(websocket: WebSocket, conversation_id: int):
     channel = f"conversation:{conversation_id}"
     connection = await registry.add(channel, websocket, identity.session_id)
     raw = websocket.cookies.get("counselconnect_session")
+    last_revalidated = monotonic()
     try:
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                await asyncio.wait_for(websocket.receive_text(), timeout=max(0.01, 30 - (monotonic() - last_revalidated)))
             except asyncio.TimeoutError:
+                pass
+            if monotonic() - last_revalidated >= 30:
+                last_revalidated = monotonic()
                 refreshed = await asyncio.to_thread(authorize_conversation_socket, raw, conversation_id)
                 if refreshed.session_id != identity.session_id:
                     break

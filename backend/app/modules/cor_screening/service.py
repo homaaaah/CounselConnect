@@ -6,8 +6,9 @@ Automated COR verification (ADR-029):
   extracted/academic fields, which activates the account with a validity
   window. Anything unreadable/mismatched requests resubmission (no human
   approval queue).
-- COR bytes live only in the private store (seven-day TTL) and are deleted
-  after confirmation or resubmission. Raw OCR text and raw barcode payloads
+- COR bytes live only in the private store (seven-day TTL). Exact pending
+  correction evidence survives confirmation only until decision/replacement
+  or its original upload deadline; no-change confirmation deletes immediately. Raw OCR text and raw barcode payloads
   are never persisted; only codes, scores, and a payload SHA-256 digest.
 """
 
@@ -36,6 +37,7 @@ from app.modules.cor_screening import screening as engine
 from app.modules.cor_screening.models import CorScreening, CorScreeningFile
 from app.modules.cor_screening.repository import OPEN_STATUSES, CorScreeningRepository
 from app.modules.profile_change.models import ProfileChangeRequest
+from app.modules.profile_change.normalization import normalize_profile_fields, normalize_text
 
 PDF_MAGIC = b"%PDF"
 SEVEN_DAYS = timedelta(days=7)
@@ -208,9 +210,9 @@ class CorScreeningService(BaseService[CorScreening]):
 
     def _confirm_core(self, student: User, screening: CorScreening | None, data) -> tuple[CorScreening, User, StudentProfile]:  # noqa: ANN001
         """Shared confirm logic for the session and token paths."""
-        if screening is None:
+        if screening is None or screening.student_user_id != student.user_id:
             raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
-        if screening.status != "AWAITING_CONFIRMATION":
+        if screening.status != "AWAITING_CONFIRMATION" or screening.purpose != "REGISTRATION":
             raise AppError(
                 code="SCREENING_NOT_CONFIRMABLE",
                 message="This screening is not awaiting confirmation.",
@@ -246,6 +248,7 @@ class CorScreeningService(BaseService[CorScreening]):
                 status_code=422,
             )
         self._assert_fields_match(screening, data)
+        baseline = self._screened_profile_fields(screening)
         owner = self.accounts.find_student_profile_by_number(student_number)
         if owner is not None and owner.user_id != student.user_id:
             raise AppError(
@@ -265,14 +268,10 @@ class CorScreeningService(BaseService[CorScreening]):
             student,
             screening,
             student_number=student_number,
-            first_name=data.first_name,
-            middle_name=data.middle_name,
-            last_name=data.last_name,
             campus_id=data.campus_id,
             program_id=data.program_id,
-            year_level=data.year_level,
-            section=data.section,
             academic_period=data.academic_period,
+            **baseline,
         )
         # Commit before deleting evidence (never delete on a failed decision).
         self.repository.session.commit()
@@ -283,6 +282,22 @@ class CorScreeningService(BaseService[CorScreening]):
             student.user_id, "account_activated", "user", student.user_id
         )
         return screening, student, profile
+
+    @staticmethod
+    def _screened_profile_fields(screening: CorScreening) -> dict[str, object]:
+        """Never fill missing required extraction with unreviewed proposal values."""
+        try:
+            return normalize_profile_fields(
+                screening.extracted_first_name, screening.extracted_middle_name,
+                screening.extracted_last_name, screening.extracted_year_level,
+                screening.extracted_section,
+            )
+        except AppError as exc:
+            raise AppError(
+                code="SCREENING_NOT_CONFIRMABLE",
+                message="Required extracted information is unavailable. Submit a readable COR.",
+                status_code=409,
+            ) from exc
 
     def _activate(
         self,
@@ -300,6 +315,8 @@ class CorScreeningService(BaseService[CorScreening]):
         academic_period: str | None,
     ) -> StudentProfile:
         """Apply the activation state (no commit). Shared by confirm/request-edit."""
+        if screening.purpose != "REGISTRATION" or screening.student_user_id != student.user_id:
+            raise AppError(code="SCREENING_NOT_CONFIRMABLE", message="This screening cannot establish enrollment.", status_code=409)
         now = datetime.now(timezone.utc)
         profile = self.accounts.find_student_profile(student.user_id)
         if profile is None:
@@ -366,9 +383,9 @@ class CorScreeningService(BaseService[CorScreening]):
         editable fields (names, year_level, section) may differ and are stored
         as a PENDING request for Superadmin review (ADR-032).
         """
-        if screening is None:
+        if screening is None or screening.student_user_id != student.user_id:
             raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
-        if screening.status != "AWAITING_CONFIRMATION":
+        if screening.status != "AWAITING_CONFIRMATION" or screening.purpose != "REGISTRATION":
             raise AppError(
                 code="SCREENING_NOT_CONFIRMABLE",
                 message="This screening is not awaiting confirmation.",
@@ -393,7 +410,7 @@ class CorScreeningService(BaseService[CorScreening]):
             )
 
         def norm(value) -> str:  # noqa: ANN001
-            return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+            return normalize_text(value).casefold()
 
         student_number = (data.student_number or "").strip().upper()
         if not engine.STUDENT_NO_RE.match(student_number):
@@ -448,76 +465,90 @@ class CorScreeningService(BaseService[CorScreening]):
         if program is None or not program.is_active:
             raise AppError(code="PROGRAM_NOT_FOUND", message="Program does not exist or is inactive.", status_code=404)
 
-        # Activate with the COR-verified value when present; otherwise use the
-        # Student-supplied value (only possible when the COR did not yield it).
-        act_first = screening.extracted_first_name or data.first_name
-        act_middle = (
-            screening.extracted_middle_name
-            if screening.extracted_middle_name is not None
-            else data.middle_name
+        baseline = self._screened_profile_fields(screening)
+        proposed = normalize_profile_fields(
+            data.first_name, data.middle_name, data.last_name, data.year_level, data.section,
         )
-        act_last = screening.extracted_last_name or data.last_name
-        act_year = (
-            screening.extracted_year_level
-            if screening.extracted_year_level is not None
-            else data.year_level
-        )
-        act_section = screening.extracted_section or data.section
-
-        changes: dict[str, object] = {}
-        if screening.extracted_first_name is not None and norm(data.first_name) != norm(screening.extracted_first_name):
-            changes["first_name"] = data.first_name
-        if screening.extracted_middle_name is not None and norm(data.middle_name) != norm(screening.extracted_middle_name):
-            changes["middle_name"] = data.middle_name
-        if screening.extracted_last_name is not None and norm(data.last_name) != norm(screening.extracted_last_name):
-            changes["last_name"] = data.last_name
-        if screening.extracted_year_level is not None and int(data.year_level) != screening.extracted_year_level:
-            changes["year_level"] = data.year_level
-        if screening.extracted_section is not None and norm(data.section) != norm(screening.extracted_section):
-            changes["section"] = data.section
+        changes = {
+            field: value for field, value in proposed.items()
+            if (value != baseline[field] if field == "year_level" else norm(value) != norm(baseline[field]))
+        }
 
         from app.modules.profile_change.service import ProfileChangeService
 
         change_request: ProfileChangeRequest | None = None
         if changes:
-            change_request = ProfileChangeService(self.repository.session).create_pending(
-                student,
-                screening.cor_screening_id,
-                first_name=str(changes.get("first_name", act_first)),
-                middle_name=(
-                    changes["middle_name"] if "middle_name" in changes else act_middle
-                ),  # type: ignore[arg-type]
-                last_name=str(changes.get("last_name", act_last)),
-                year_level=int(changes.get("year_level", act_year)),
-                section=str(changes.get("section", act_section)),
+            evidence = self.repository.find_active_file(screening.cor_screening_id, lock=True)
+            if evidence is None:
+                raise AppError(
+                    code="COR_EVIDENCE_UNAVAILABLE",
+                    message="The COR evidence is unavailable. Submit a current COR before requesting corrections.",
+                    status_code=409,
+                )
+            # Capture original structured values before _activate fills unmapped
+            # references or normalizes fields. Never include raw OCR/barcodes,
+            # validation payloads, filenames, storage keys, or credentials.
+            fields = (
+                "student_number", "first_name", "middle_name", "last_name",
+                "campus_id", "program_id", "year_level", "section", "academic_period",
             )
+            extraction = {field: getattr(screening, f"extracted_{field}") for field in fields}
+            extraction["valid_until"] = (
+                screening.extracted_valid_until.isoformat() if screening.extracted_valid_until else None
+            )
+            # Unchanged fields keep their screened spelling; only actual
+            # differences become proposed values (including null -> middle name).
+            requested = {**baseline, **changes}
+            change_request = ProfileChangeService(self.repository.session).create_pending(
+                student, screening.cor_screening_id, **requested,
+            )
+            change_request.submission_version = 1
+            # Root/predecessor stay null for an initial version; its own ID is
+            # the logical root. Legacy requests are not backfilled or relabeled.
+            change_request.extracted_values_json = extraction
+            change_request.registered_cor_screening_id = screening.cor_screening_id
+            change_request.evidence_file_id = evidence.cor_screening_file_id
+            change_request.evidence_sha256_hash = evidence.sha256_hash
+            change_request.evidence_uploaded_at = evidence.uploaded_at
+            change_request.evidence_expires_at = evidence.expires_at
 
         profile = self._activate(
             student,
             screening,
             student_number=student_number,
-            first_name=act_first,
-            middle_name=act_middle,
-            last_name=act_last,
             campus_id=data.campus_id,
             program_id=data.program_id,
-            year_level=act_year,
-            section=act_section,
             academic_period=data.academic_period,
+            **baseline,
         )
-        self.repository.session.commit()
-        self._purge_cor_files(screening.cor_screening_id)
+        if change_request is not None:
+            # This is the baseline established by THIS confirmation (including
+            # renewal), not an invented previous registered value.
+            change_request.registered_values_json = {
+                **baseline,
+                "student_number": profile.student_number,
+                "campus_id": profile.campus_id,
+                "program_id": profile.program_id,
+                "academic_period": screening.extracted_academic_period,
+                "valid_until": screening.valid_until.isoformat() if screening.valid_until else None,
+            }
         from app.modules.audit.service import AuditService
 
         audit = AuditService(self.repository.session)
-        audit.record(student.user_id, "account_activated", "user", student.user_id)
+        audit.record(student.user_id, "account_activated", "user", student.user_id,
+                     metadata={"status": "ACTIVE"})
         if change_request is not None:
             audit.record(
                 student.user_id,
                 "profile_change_requested",
                 "profile_change_request",
                 change_request.change_request_id,
+                metadata={"status": "PENDING", "submission_version": 1},
             )
+        # Audit, activation, and submitted context must commit together. Delete
+        # temporary evidence under the bounded policy only after commit.
+        self.repository.session.commit()
+        self._purge_cor_files(screening.cor_screening_id)
         return screening, student, profile, change_request
 
     # ----------------------------------------------------------- reject
@@ -533,9 +564,9 @@ class CorScreeningService(BaseService[CorScreening]):
         return self._reject_core(student, screening)
 
     def _reject_core(self, student: User, screening: CorScreening | None) -> CorScreening:
-        if screening is None:
+        if screening is None or screening.student_user_id != student.user_id:
             raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
-        if screening.status != "AWAITING_CONFIRMATION":
+        if screening.status != "AWAITING_CONFIRMATION" or screening.purpose != "REGISTRATION":
             raise AppError(
                 code="SCREENING_NOT_CONFIRMABLE",
                 message="This screening is not awaiting confirmation.",
@@ -572,6 +603,11 @@ class CorScreeningService(BaseService[CorScreening]):
         filename: str,
         latest: CorScreening | None = None,
     ) -> tuple[CorScreening, str]:
+        if latest is not None:
+            if latest.student_user_id != student.user_id:
+                raise AppError(code="SCREENING_NOT_FOUND", message="No COR screening was found.", status_code=404)
+            if latest.purpose != "REGISTRATION":
+                raise AppError(code="SCREENING_NOT_CONFIRMABLE", message="This screening cannot establish enrollment.", status_code=409)
         settings = get_settings()
         if not settings.cor_screening_enabled:
             raise AppError(
@@ -681,7 +717,7 @@ class CorScreeningService(BaseService[CorScreening]):
         # A fresh screening supersedes any pending profile-edit request (ADR-032).
         from app.modules.profile_change.service import ProfileChangeService
 
-        ProfileChangeService(self.repository.session).supersede_pending(student.user_id)
+        superseded = ProfileChangeService(self.repository.session).supersede_pending(student.user_id)
         try:
             self.repository.session.commit()
         except Exception:
@@ -691,6 +727,8 @@ class CorScreeningService(BaseService[CorScreening]):
             raise
         self._clear_pending_marker(storage_key)
         self._purge_cor_files(screening.cor_screening_id)
+        if superseded is not None and superseded.cor_screening_id != screening.cor_screening_id:
+            self._purge_cor_files(superseded.cor_screening_id)
         from app.modules.audit.service import AuditService
 
         AuditService(self.repository.session).record(
@@ -761,7 +799,7 @@ class CorScreeningService(BaseService[CorScreening]):
         screening becomes `NEEDS_RESUBMISSION` (ADMIN_RECOVERY) so they can
         submit a fresh COR. Active accounts are not altered.
         """
-        if actor.role_code != "SUPERADMIN" or actor.account_status != "ACTIVE":
+        if actor.role_code != "SUPERADMIN" or actor.account_status != "ACTIVE" or getattr(actor, "is_deactivated", False):
             raise AppError(
                 code="FORBIDDEN_ROLE",
                 message="Only an active Superadmin may recover accounts.",
@@ -776,6 +814,8 @@ class CorScreeningService(BaseService[CorScreening]):
                 message="An active account does not need recovery.",
                 status_code=409,
             )
+        if getattr(target, "is_deactivated", False):
+            raise AppError(code="ACCOUNT_DEACTIVATED", message="This account is deactivated.", status_code=403)
         target.account_status = "PENDING_VERIFICATION"
         latest = self.repository.find_latest_for_student(target.user_id, lock=True)
         if latest is not None and latest.status in OPEN_STATUSES:
@@ -893,12 +933,13 @@ class CorScreeningService(BaseService[CorScreening]):
         if found is None:
             raise self._invalid_token()
         student = self.accounts.lock_user(found.student_user_id)
-        if student is None or student.role_code != "STUDENT":
+        if student is None or student.role_code != "STUDENT" or student.is_deactivated:
             raise self._invalid_token()
         screening = self.repository.lock_screening(found.cor_screening_id)
         if (
             screening is None
             or screening.student_user_id != student.user_id
+            or screening.purpose != "REGISTRATION"
             or not screening.verification_token_hash
             or not digests_match(screening.verification_token_hash, digest)
         ):
@@ -915,6 +956,8 @@ class CorScreeningService(BaseService[CorScreening]):
 
     def _issue_verification_token(self, screening: CorScreening, now: datetime) -> str:
         """Issue a new 256-bit token; persist only its SHA-256 digest."""
+        if screening.purpose != "REGISTRATION":
+            raise self._invalid_token()
         raw = new_session_credential()
         screening.verification_token_hash = sha256_digest(raw)
         screening.verification_token_issued_at = now
@@ -934,6 +977,58 @@ class CorScreeningService(BaseService[CorScreening]):
         )
 
     # ------------------------------------------------------- persistence
+
+    def screen_correction_document(
+        self, actor: User, *, registered_cor_screening_id: int, content: bytes, filename: str,
+    ) -> tuple[CorScreening, bytes]:
+        """Internal scratch screening, returning transient proof and content digest.
+
+        The eventual revision transaction must recheck preflight, bind these
+        exact bytes/digest, and preserve submitted_at as the upload deadline
+        origin. Scratch bytes are released even on success; no rows are added.
+        """
+        student = self._lock_student(actor)
+        if student.is_deactivated:
+            raise AppError(code="ACCOUNT_DEACTIVATED", message="This account is deactivated.", status_code=403)
+        if student.account_status != "ACTIVE":
+            raise AppError(code="CORRECTION_RESUBMISSION_NOT_ALLOWED", message="Current enrollment is required to resubmit a correction.", status_code=409)
+        settings = get_settings()
+        if not settings.cor_screening_enabled:
+            raise AppError(code="REGISTRATION_DISABLED", message="COR screening is temporarily unavailable.", status_code=503)
+        self._validate_pdf(content, filename, settings.cor_max_mb)
+        started = datetime.now(timezone.utc)
+        key = None
+        try:
+            engine.ensure_dependencies(settings)
+            key = self._store_cor_bytes(content)
+            result = engine.screen_pdf(self._storage_path(key), settings)
+            proof = CorScreening(student_user_id=student.user_id, purpose="CORRECTION",
+                format_template_version=settings.cor_template_version, submitted_at=started,
+                processing_started_at=started)
+            number = normalize_text(result.fields.student_no).upper()
+            self._apply_result(proof, result, number, datetime.now(timezone.utc))
+            if proof.status != "AWAITING_CONFIRMATION":
+                raise AppError(code="COR_SCREENING_FAILED", message="Upload a readable current COR that passes automated screening.", status_code=422)
+            self._screened_profile_fields(proof)  # Independently require usable names/year/section.
+            proof.status = "PASSED"  # Automated proof only; never Student enrollment confirmation.
+            context = ProfileChangeRequest(student_user_id=student.user_id,
+                registered_cor_screening_id=registered_cor_screening_id)
+            latest = self.repository.find_latest_registration(student.user_id, lock=True)
+            if (latest is None or latest.cor_screening_id != registered_cor_screening_id
+                    or not self._matches_correction_enrollment(context, proof, lock=True)):
+                raise AppError(code="COR_CONTEXT_MISMATCH", message="The COR must match your current registered enrollment.", status_code=422)
+            if started + SEVEN_DAYS <= datetime.now(timezone.utc):
+                raise AppError(code="COR_EVIDENCE_UNAVAILABLE", message="The COR evidence has expired.", status_code=409)
+            return proof, hashlib.sha256(content).digest()
+        except engine.ScreeningUnavailableError:
+            raise AppError(code="SCREENING_UNAVAILABLE", message="COR screening is temporarily unavailable.", status_code=503) from None
+        finally:
+            if key is not None:
+                if self._delete_cor_bytes(key):
+                    self._clear_pending_marker(key)
+                else:
+                    # Keep the existing marker so abandoned-upload cleanup retries.
+                    logger.warning("cor_screening_upload_cleanup_retry_required")
 
     def _create_screening_record(
         self,
@@ -1020,18 +1115,18 @@ class CorScreeningService(BaseService[CorScreening]):
 
         The UI renders these fields read-only; this blocks a crafted request
         from rewriting verified academic data. Only fields the COR did not
-        yield (campus/program when unmatched, an absent middle name or period)
-        may be supplied by the Student.
+        yield (campus/program when unmatched, or an absent academic period)
+        may be supplied by the Student. A middle-name addition requires review.
         """
         def norm(value) -> str:  # noqa: ANN001
-            return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+            return normalize_text(value).casefold()
 
         mismatches = []
         if norm(data.first_name) != norm(screening.extracted_first_name):
             mismatches.append("first_name")
         if norm(data.last_name) != norm(screening.extracted_last_name):
             mismatches.append("last_name")
-        if screening.extracted_middle_name is not None and norm(data.middle_name) != norm(screening.extracted_middle_name):
+        if norm(data.middle_name) != norm(screening.extracted_middle_name):
             mismatches.append("middle_name")
         if screening.extracted_campus_id is not None and int(data.campus_id) != screening.extracted_campus_id:
             mismatches.append("campus_id")
@@ -1109,6 +1204,128 @@ class CorScreeningService(BaseService[CorScreening]):
         target.write_bytes(content)
         return key
 
+    def registered_enrollment_context(self, student_user_id: int) -> dict:
+        """Internal read: latest confirmed registration, never unconfirmed evidence."""
+        row = self.repository.find_registered_enrollment(student_user_id)
+        return {"academic_period": row.extracted_academic_period if row else None,
+                "valid_until": row.valid_until if row else None}
+
+    def correction_evidence_status(self, request: ProfileChangeRequest) -> dict:
+        """Authorized internal informational read; no locks or state changes."""
+        status, _content = self.inspect_correction_evidence(request)
+        return status
+
+    def registered_review_context(self, student_user_id: int) -> dict | None:
+        """Internal current enrollment read after the caller's Student lock."""
+        row = self.repository.find_registered_enrollment(student_user_id, lock=True)
+        if row is None:
+            return None
+        return {"cor_screening_id": row.cor_screening_id, "student_number": row.extracted_student_number,
+                "campus_id": row.extracted_campus_id, "program_id": row.extracted_program_id,
+                "academic_period": row.extracted_academic_period, "valid_until": row.valid_until}
+
+    def inspect_correction_evidence(
+        self, request: ProfileChangeRequest, *, lock: bool = False,
+    ) -> tuple[dict, bytes | None]:
+        """Internal exact check plus the same verified bytes; never JSON content.
+
+        The caller authorizes review access. Retrieval additionally holds the
+        reviewer, Student, screening and request locks before current file reads.
+        Availability reads remain nonlocking and perform no mutation/cleanup.
+        """
+        deadlines = []
+        if request.evidence_uploaded_at is not None:
+            deadlines.append(as_utc(request.evidence_uploaded_at) + SEVEN_DAYS)
+        if request.evidence_expires_at is not None:
+            deadlines.append(as_utc(request.evidence_expires_at))
+
+        def result(code, content=None):
+            return {"availability": code, "expires_at": min(deadlines) if deadlines else None}, content
+
+        if request.status != "PENDING":
+            return result("RESOLVED")
+        if request.submission_version is None:
+            return {"availability": "LEGACY_UNKNOWN", "expires_at": None}, None
+        if (request.evidence_uploaded_at is None or request.evidence_expires_at is None
+                or request.evidence_file_id is None or request.evidence_sha256_hash is None):
+            return result("UNAVAILABLE")
+        now = datetime.now(timezone.utc)
+        if min(deadlines) <= now:
+            return result("EXPIRED")
+        screening = self.repository.get(request.cor_screening_id)
+        if (screening is None or screening.student_user_id != request.student_user_id
+                or screening.purpose not in {"REGISTRATION", "CORRECTION"}):
+            return result("UNAVAILABLE")
+        if screening.purpose == "REGISTRATION" and screening.confirmed_at is None:
+            return result("UNAVAILABLE")
+        if screening.purpose == "CORRECTION" and not self._matches_correction_enrollment(request, screening, lock=lock):
+            return result("UNAVAILABLE")
+        deadlines.append(as_utc(screening.submitted_at) + SEVEN_DAYS)
+        if min(deadlines) <= now:
+            return result("EXPIRED")
+        latest = self.repository.find_latest_registration(request.student_user_id, lock=lock)
+        baseline_id = (request.registered_cor_screening_id if screening.purpose == "CORRECTION"
+                       else screening.cor_screening_id)
+        if screening.status != "PASSED" or latest is None or latest.cor_screening_id != baseline_id:
+            return result("REPLACED")
+        file = self.repository.find_exact_file(request.evidence_file_id, screening.cor_screening_id, lock=lock)
+        if file is None:
+            return result("UNAVAILABLE")
+        deadlines.extend((as_utc(file.expires_at), as_utc(file.uploaded_at) + SEVEN_DAYS))
+        if min(deadlines) <= now:
+            return result("EXPIRED")
+        if (file.cleanup_state != "PENDING" or file.sha256_hash != request.evidence_sha256_hash
+                or as_utc(file.uploaded_at) != as_utc(request.evidence_uploaded_at)
+                or file.mime_type != "application/pdf"):
+            return result("UNAVAILABLE")
+        if self.repository.has_newer_active_file(screening.cor_screening_id, file.cor_screening_file_id, now, lock=lock):
+            return result("REPLACED")
+        limit = get_settings().cor_max_mb * 1024 * 1024
+        if not 0 < file.size_bytes <= limit:
+            return result("CORRUPT")
+        try:
+            with Path(self._storage_path(file.storage_key)).open("rb") as source:
+                content = source.read(limit + 1)
+        except (OSError, ValueError):
+            # Paths, original filenames, OS error text and bytes stay private.
+            return result("UNAVAILABLE")
+        if (len(content) != file.size_bytes or not content.startswith(PDF_MAGIC)
+                or hashlib.sha256(content).digest() != request.evidence_sha256_hash):
+            return result("CORRUPT")
+        # Expiry may occur while reading; availability is informational and
+        # every future preview/approval must perform its own fresh checks.
+        if min(deadlines) <= datetime.now(timezone.utc):
+            return result("EXPIRED")
+        return result("AVAILABLE", content)
+
+    def _matches_correction_enrollment(self, request: ProfileChangeRequest, proof: CorScreening, *, lock: bool) -> bool:
+        """Read-only proof scope check; correction evidence never grants enrollment."""
+        enrolled = self.repository.find_registered_enrollment(request.student_user_id, lock=lock)
+        student = self.accounts.get(request.student_user_id)
+        profile = self.accounts.find_student_profile(request.student_user_id)
+        if (enrolled is None or enrolled.cor_screening_id != request.registered_cor_screening_id
+                or enrolled.cor_screening_id == proof.cor_screening_id
+                or student is None or student.role_code != "STUDENT" or profile is None
+                or student.account_status != "ACTIVE" or student.is_deactivated
+                or enrolled.valid_until is None or enrolled.valid_until < datetime.now(timezone.utc).date()
+                or proof.status != "PASSED" or proof.confirmed_at is not None or proof.valid_until is not None):
+            return False
+        number = normalize_text(proof.extracted_student_number).upper()
+        if (not number or number != normalize_text(profile.student_number).upper()
+                or number != normalize_text(enrolled.extracted_student_number).upper()):
+            return False
+        for field in ("campus", "program"):
+            current_id = getattr(profile, f"{field}_id")
+            if (current_id is None or current_id != getattr(enrolled, f"extracted_{field}_id")
+                    or getattr(proof, f"extracted_{field}_id") not in (None, current_id)):
+                return False
+            reference = getattr(self.accounts, f"find_{field}")(current_id)
+            if reference is None or not reference.is_active:
+                return False
+        original_period = normalize_text(enrolled.extracted_academic_period).casefold()
+        proof_period = normalize_text(proof.extracted_academic_period).casefold()
+        return not (original_period and proof_period and original_period != proof_period)
+
     def _storage_path(self, storage_key: str) -> str:
         root = Path(get_settings().cor_storage_root).resolve()
         target = (root / storage_key).resolve()
@@ -1131,26 +1348,72 @@ class CorScreeningService(BaseService[CorScreening]):
         except OSError:
             logger.warning("cor_screening_upload_marker_cleanup_retry_required")
 
+    def cleanup_screening_files(self, screening_id: int) -> None:
+        """Internal decision hook: purge evidence released by a committed decision."""
+        self._purge_cor_files(screening_id)
+
     def _purge_cor_files(self, screening_id: int) -> None:
-        """Delete only committed cleanup work, retaining failed rows for retry."""
-        screening = self._lock_screening(screening_id)
-        now = datetime.now(timezone.utc)
-        for file_row in self.repository.list_files_for_screening(screening_id):
-            if (
-                screening.status in ("AWAITING_CONFIRMATION", "NEEDS_RESUBMISSION", "PROCESSING", "FAILED")
-                and file_row.cleanup_state == "PENDING"
-                and as_utc(file_row.expires_at) > now
-            ):
+        """Retain only exact pending evidence; commit returns before deleting bytes."""
+        from app.modules.profile_change.service import ProfileChangeService
+
+        changes = ProfileChangeService(self.repository.session)
+        while True:
+            # The second pass after a return re-locks/rechecks current state, so
+            # a concurrent confirmation cannot make a stale deletion plan valid.
+            screening = self._lock_screening(screening_id)
+            pending = changes.lock_pending_for_screening(screening_id)
+            files = self.repository.list_files_for_screening(screening_id)
+            by_id = {file.cor_screening_file_id: file for file in files}
+            now = datetime.now(timezone.utc)
+            retained = set()
+            returned = False
+            for request in pending:
+                if request.submission_version is None:
+                    continue  # Unknown legacy context never extends retention.
+                file = by_id.get(request.evidence_file_id)
+                reason = None
+                if request.evidence_expires_at is None or request.evidence_uploaded_at is None:
+                    reason = "COR_EVIDENCE_UNAVAILABLE"
+                elif min(as_utc(request.evidence_expires_at), as_utc(request.evidence_uploaded_at) + SEVEN_DAYS) <= now:
+                    reason = "COR_EVIDENCE_EXPIRED"
+                elif screening.status != "PASSED" or request.student_user_id != screening.student_user_id:
+                    reason = "SUPERSEDED_BY_NEW_COR"
+                elif file is None or file.cleanup_state != "PENDING":
+                    reason = "COR_EVIDENCE_UNAVAILABLE"
+                elif as_utc(file.expires_at) <= now:
+                    reason = "COR_EVIDENCE_EXPIRED"
+                elif as_utc(file.uploaded_at) + SEVEN_DAYS <= now:
+                    reason = "COR_EVIDENCE_EXPIRED"
+                elif (file.sha256_hash != request.evidence_sha256_hash
+                      or as_utc(file.uploaded_at) != as_utc(request.evidence_uploaded_at)):
+                    reason = "COR_EVIDENCE_UNAVAILABLE"
+                elif any(other.cor_screening_file_id > file.cor_screening_file_id
+                         and other.cleanup_state == "PENDING" and as_utc(other.expires_at) > now for other in files):
+                    reason = "SUPERSEDED_BY_NEW_COR"
+                if reason is not None:
+                    changes.return_pending_for_evidence(request, reason)
+                    returned = True
+                else:
+                    retained.add(file.cor_screening_file_id)
+            if returned:
+                # Audit/return failure leaves bytes untouched and is retried by
+                # the existing worker. File deletion is outside DB rollback.
+                self.repository.session.commit()
                 continue
-            if self._delete_cor_bytes(file_row.storage_key):
-                self.repository.session.delete(file_row)
-                logger.info("cor_screening_file_deleted file_id=%s", file_row.cor_screening_file_id)
-            else:
-                file_row.cleanup_state = "FAILED"
-                logger.warning(
-                    "cor_screening_file_cleanup_failed file_id=%s", file_row.cor_screening_file_id
-                )
-        self.repository.session.commit()
+            for file in files:
+                if file.cor_screening_file_id in retained:
+                    continue
+                if (screening.status in OPEN_STATUSES and file.cleanup_state == "PENDING"
+                        and min(as_utc(file.expires_at), as_utc(file.uploaded_at) + SEVEN_DAYS) > now):
+                    continue
+                if self._delete_cor_bytes(file.storage_key):
+                    self.repository.session.delete(file)
+                    logger.info("cor_screening_file_deleted file_id=%s", file.cor_screening_file_id)
+                else:
+                    file.cleanup_state = "FAILED"
+                    logger.warning("cor_screening_file_cleanup_failed file_id=%s", file.cor_screening_file_id)
+            self.repository.session.commit()
+            return
 
     def _lock_screening(self, screening_id: int) -> CorScreening:
         student_id = self.repository.student_for_screening(screening_id)
@@ -1169,6 +1432,8 @@ class CorScreeningService(BaseService[CorScreening]):
             "STUDENT_NOT_FOUND",
             "Student not found.",
         )
+        if getattr(student, "is_deactivated", False):
+            raise AppError(code="ACCOUNT_DEACTIVATED", message="This account is deactivated.", status_code=403)
         if student.role_code != "STUDENT":
             raise AppError(code="FORBIDDEN_ROLE", message="This action is for Students only.", status_code=403)
         return student

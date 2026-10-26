@@ -379,7 +379,7 @@ def test_raw_credentials_never_stored(db_session, student):
 # --------------------------------------------- one-time COR verification token
 
 
-def _seed_screening(db_session, student, *, status="AWAITING_CONFIRMATION", token=None):
+def _seed_screening(db_session, student, *, status="AWAITING_CONFIRMATION", token=None, with_evidence=False):
     from datetime import datetime, timezone
 
     from app.core.security import sha256_digest
@@ -405,6 +405,22 @@ def _seed_screening(db_session, student, *, status="AWAITING_CONFIRMATION", toke
         screening.verification_token_issued_at = datetime.now(timezone.utc)
     db_session.add(screening)
     db_session.flush()
+    if with_evidence:
+        from app.modules.cor_screening.models import CorScreeningFile
+        from app.modules.cor_screening.service import CorScreeningService
+
+        service = CorScreeningService(db_session)
+        content = b"%PDF-1.4 seeded COR evidence"
+        key = service._store_cor_bytes(content)
+        now = datetime.now(timezone.utc)
+        db_session.add(CorScreeningFile(
+            cor_screening_id=screening.cor_screening_id, storage_key=key,
+            original_filename="cor.pdf", mime_type="application/pdf", size_bytes=len(content),
+            sha256_hash=hashlib.sha256(content).digest(), uploaded_at=now,
+            expires_at=now + timedelta(days=7), cleanup_state="PENDING",
+        ))
+        db_session.flush()
+        service._clear_pending_marker(key)
     return profile, screening
 
 
@@ -534,7 +550,7 @@ def test_token_resubmit_rotates_the_token(client, db_session, student, monkeypat
 
 def test_token_request_edit_activates_and_queues(client, db_session, student):
     token = "cor-token-edit"
-    profile, _screening = _seed_screening(db_session, student, token=token)
+    profile, _screening = _seed_screening(db_session, student, token=token, with_evidence=True)
     payload = _confirm_payload(profile)
     payload["last_name"] = "Reyes"
 
@@ -553,7 +569,7 @@ def test_token_request_edit_activates_and_queues(client, db_session, student):
 
 def test_superadmin_reviews_pending_edit(client, db_session, student, superadmin):
     token = "cor-token-edit-review"
-    profile, _screening = _seed_screening(db_session, student, token=token)
+    profile, _screening = _seed_screening(db_session, student, token=token, with_evidence=True)
     payload = _confirm_payload(profile)
     payload["last_name"] = "Reyes"
     created = client.post(
@@ -575,9 +591,10 @@ def test_superadmin_reviews_pending_edit(client, db_session, student, superadmin
     approved = client.post(
         f"/api/v1/profile-change-requests/{change_request_id}/approve",
         headers={"X-CSRF-Token": login["csrf_token"]},
+        json={"submission_version": 1},
     )
     assert approved.status_code == 200, approved.text
-    assert approved.json()["status"] == "APPROVED"
+    assert approved.json()["change_request"]["status"] == "APPROVED"
     db_session.refresh(student)
     assert student.last_name == "Reyes"
 
@@ -594,7 +611,7 @@ def test_counselor_cannot_review_profile_edits(client, counselor):
 
 def test_counselor_cannot_approve_a_profile_edit(client, db_session, student, counselor):
     token = "cor-token-edit-counselor"
-    profile, _screening = _seed_screening(db_session, student, token=token)
+    profile, _screening = _seed_screening(db_session, student, token=token, with_evidence=True)
     payload = _confirm_payload(profile)
     payload["last_name"] = "Reyes"
     created = client.post(
@@ -609,6 +626,7 @@ def test_counselor_cannot_approve_a_profile_edit(client, db_session, student, co
     r = client.post(
         f"/api/v1/profile-change-requests/{change_request_id}/approve",
         headers={"X-CSRF-Token": login["csrf_token"]},
+        json={"submission_version": 1},
     )
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "FORBIDDEN_ROLE"

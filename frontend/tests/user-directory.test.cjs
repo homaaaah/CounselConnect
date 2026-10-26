@@ -77,8 +77,8 @@ async function mount(t, component) {
   return root;
 }
 
-test("superadmin Users page lists students with their screening status", async (t) => {
-  environment(t, "#users");
+test("superadmin student-directory page preserves screening details", async (t) => {
+  environment(t, "#student-directory");
   const calls = fakeApi(t, authFor(superadmin));
   const root = await mount(t, React.createElement(App));
   assert.ok(calls.some((call) => call.path === "/api/v1/accounts/students"), "directory endpoint is called");
@@ -136,7 +136,7 @@ test("the Users component stays read-only without the recovery grant", async (t)
 });
 
 test("superadmin can recover a non-active student", async (t) => {
-  environment(t, "#users");
+  environment(t, "#student-directory");
   const calls = fakeApi(t, authFor(superadmin));
   const root = await mount(t, React.createElement(App));
   const recover = root.root.findAllByType("button")
