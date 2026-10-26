@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAppointments, formatSchedule } from "../../features/appointments";
 import { buttonClass, secondaryClass, modeLabel } from "../../components/appointments/ui";
 import BookingModal from "../../components/appointments/BookingModal.jsx";
+import ConcernSummary from "../../components/appointments/ConcernSummary.jsx";
 
 function Pagination({ page, total, onChange, disabled }) {
   return <div className="mt-4 flex items-center justify-between gap-3 text-sm">
@@ -27,6 +28,7 @@ function RecordCard({ appointment: a, state, onReschedule }) {
     <p className="mt-3 text-sm">{"Student: " + a.student_name}</p>
     <p className="text-sm">{modeLabel(a.appointment_mode)}</p>
     {a.meeting_location && <p className="mt-1 text-sm">Guidance Office: {a.meeting_location}</p>}
+    <ConcernSummary categories={a.concern_categories} details={a.concern_details} className="mt-3 rounded-lg bg-slate-50 p-3" />
     {a.rejection_note && <p className="mt-2 text-sm text-slate-600">Counselor note: {a.rejection_note}</p>}
     {a.status === "CONFIRMED" && <p className="mt-2 text-sm text-slate-600">A completed session is marked here; report contents are not part of the frontend records view.</p>}
     <div className="mt-4 flex flex-wrap gap-2">

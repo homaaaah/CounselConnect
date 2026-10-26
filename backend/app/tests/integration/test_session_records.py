@@ -67,7 +67,9 @@ def context(db_session, academic_references):
     appointment = service.book(
         student,
         AppointmentCreateRequest(
-            availability_slot_id=slot.slot_id, appointment_mode="ONLINE"
+            availability_slot_id=slot.slot_id,
+            appointment_mode="ONLINE",
+            concern_categories=["ACADEMIC_PROBLEM"],
         ),
     )
     service.transition(counselor, appointment.appointment_id, "confirm")

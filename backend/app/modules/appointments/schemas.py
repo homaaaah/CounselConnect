@@ -18,6 +18,13 @@ AppointmentMode = Literal["ONLINE", "FACE_TO_FACE"]
 AppointmentStatus = Literal[
     "PENDING", "CONFIRMED", "COMPLETED", "CANCELLED", "REJECTED", "NO_SHOW"
 ]
+ConcernCategory = Literal[
+    "FAMILY_PROBLEM",
+    "FINANCIAL_PROBLEM",
+    "ACADEMIC_PROBLEM",
+    "RELATIONSHIP_PROBLEM",
+    "CUSTOM",
+]
 
 
 class CounselorBookingOption(BaseModel):
@@ -50,10 +57,24 @@ class AppointmentCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     availability_slot_id: int = Field(gt=0)
     appointment_mode: AppointmentMode
+    concern_categories: list[ConcernCategory] = Field(min_length=1, max_length=5)
+    concern_details: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ] | None = None
+
+    @model_validator(mode="after")
+    def validate_concerns(self):
+        if len(set(self.concern_categories)) != len(self.concern_categories):
+            raise ValueError("Concern categories must not contain duplicates.")
+        if "CUSTOM" in self.concern_categories and not self.concern_details:
+            raise ValueError("Add a short description when selecting Custom.")
+        return self
 
 
-class AppointmentRescheduleRequest(AppointmentCreateRequest):
-    pass
+class AppointmentRescheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    availability_slot_id: int = Field(gt=0)
+    appointment_mode: AppointmentMode
 
 
 class AppointmentModeChangeRequest(BaseModel):
@@ -119,6 +140,8 @@ class AppointmentResponse(UTCResponse):
     ends_at: datetime
     appointment_mode: AppointmentMode
     meeting_location: str | None
+    concern_categories: list[ConcernCategory] | None = None
+    concern_details: str | None = None
     conversation_id: int | None
     status: AppointmentStatus
     rejection_note: str | None

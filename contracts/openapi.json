@@ -6383,13 +6383,43 @@
               "FACE_TO_FACE"
             ],
             "title": "Appointment Mode"
+          },
+          "concern_categories": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "FAMILY_PROBLEM",
+                "FINANCIAL_PROBLEM",
+                "ACADEMIC_PROBLEM",
+                "RELATIONSHIP_PROBLEM",
+                "CUSTOM"
+              ]
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Concern Categories"
+          },
+          "concern_details": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concern Details"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "availability_slot_id",
-          "appointment_mode"
+          "appointment_mode",
+          "concern_categories"
         ],
         "title": "AppointmentCreateRequest"
       },
@@ -6517,6 +6547,38 @@
               }
             ],
             "title": "Meeting Location"
+          },
+          "concern_categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "FAMILY_PROBLEM",
+                    "FINANCIAL_PROBLEM",
+                    "ACADEMIC_PROBLEM",
+                    "RELATIONSHIP_PROBLEM",
+                    "CUSTOM"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concern Categories"
+          },
+          "concern_details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concern Details"
           },
           "conversation_id": {
             "anyOf": [

@@ -54,8 +54,10 @@ INSERT INTO emergency_contacts (name, contact_number, description, is_active, di
 INSERT INTO users (email, password_hash, role_code, account_status, first_name, last_name) VALUES
   ('counselor@ucc.edu.ph',
    '$argon2id$v=19$m=65536,t=3,p=4$43nTlIUufFh8aMcQiWuBeg$sIpNnGlbCkbgOdcdOEN0gpk8beIvUAkjfkVzVtQ+nuI',
-   'COUNSELOR', 'ACTIVE', 'Guidance', 'Counselor')
-ON DUPLICATE KEY UPDATE email = email;
+   'COUNSELOR', 'ACTIVE', 'Riziel', 'Jumadiao')
+ON DUPLICATE KEY UPDATE
+  first_name = VALUES(first_name),
+  last_name = VALUES(last_name);
 
 -- Dev superadmin account (ADR-030: account-recovery/operations role).
 -- Password: superadmin-dev-2026 (dev only — rotate before any real deployment).

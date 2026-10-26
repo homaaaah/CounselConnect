@@ -148,7 +148,7 @@ export default function CalendarGrid({ calendar, month: visibleMonth, onMonthCha
             </span>
             {inModal && day && !day.is_past && !day.is_blocked && <p className="mt-1 hidden truncate text-[10px] font-medium text-emerald-700 sm:block">
               {day.available_times.length > 0 ? "Available" : "No times"}</p>}
-            {day && (day.is_past || day.is_blocked) && <p className="mt-1 hidden truncate text-[10px] text-slate-400 sm:block">{day.is_blocked ? "Blocked" : "Passed"}</p>}
+            {day && (day.is_past || day.is_blocked) && <p className="mt-1 hidden truncate text-[10px] text-slate-400 sm:block">{day.is_blocked ? "Temporary unavailable" : "Passed"}</p>}
           </button>
         </div>;
       })}

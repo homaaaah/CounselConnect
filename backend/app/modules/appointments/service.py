@@ -472,6 +472,8 @@ class AppointmentsService(BaseService[Appointment]):
                     "availability_slot_id",
                     "appointment_mode",
                     "meeting_location",
+                    "concern_categories",
+                    "concern_details",
                     "conversation_id",
                     "status",
                     "rejection_note",
@@ -822,6 +824,8 @@ class AppointmentsService(BaseService[Appointment]):
             availability_slot_id=slot.slot_id,
             appointment_mode=data.appointment_mode,
             meeting_location=location,
+            concern_categories=list(data.concern_categories),
+            concern_details=data.concern_details,
             status="PENDING",
         )
         self.repository.add(appointment)

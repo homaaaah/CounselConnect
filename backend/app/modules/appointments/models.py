@@ -16,7 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.mysql import BINARY, BIGINT, DATE, SMALLINT, TIME, TINYINT
+from sqlalchemy.dialects.mysql import BINARY, BIGINT, DATE, JSON, SMALLINT, TIME, TINYINT
 from sqlalchemy import Boolean, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -170,6 +170,8 @@ class Appointment(Base):
     )
     appointment_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     meeting_location: Mapped[str | None] = mapped_column(String(255))
+    concern_categories: Mapped[list[str] | None] = mapped_column(JSON)
+    concern_details: Mapped[str | None] = mapped_column(Text)
     conversation_id: Mapped[int | None] = mapped_column(
         BIGINT(unsigned=True),
         ForeignKey("conversations.conversation_id", name="fk_appointments_conversation", ondelete="SET NULL", onupdate="CASCADE"),

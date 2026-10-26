@@ -1,6 +1,6 @@
 // Real component forms and API requests. Python provides a disposable loopback server.
 // Drives the redesigned scheduling UI: the counselor availability editor,
-// the student home booking modal (calendar -> time -> mode), and the
+// the student home booking modal (calendar -> time/concern -> mode), and the
 // counselor records tabs (pending review -> confirm -> cancel).
 const assert = require("node:assert/strict");
 const React = require("react");
@@ -117,6 +117,11 @@ async function main() {
     };
     await act(async () => (await timeButton()).props.onClick());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    await waitFor(() => root.root.findAllByType("input")
+      .some(input => input.props.type === "checkbox"));
+    const firstConcern = root.root.findAllByType("input")
+      .find(input => input.props.type === "checkbox");
+    await act(async () => firstConcern.props.onChange());
     await waitFor(() => Boolean(button("Continue")));
     await act(async () => button("Continue").props.onClick());
     await waitFor(() => Boolean(root.root.findAllByType("select").length));

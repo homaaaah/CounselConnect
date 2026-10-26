@@ -22,11 +22,12 @@ const slot = { slot_id: 10, counselor_user_id: 1, counselor_name: "Cora Test", c
   starts_at: "2099-01-01T01:00:00Z", ends_at: "2099-01-01T02:00:00Z" };
 const appointment = { appointment_id: 5, student_user_id: 2, student_name: "Ana Test", counselor_user_id: 1,
   counselor_name: "Cora Test", campus_id: 1, campus_name: "Main", availability_slot_id: 9, appointment_mode: "ONLINE",
-  starts_at: slot.starts_at, ends_at: slot.ends_at, status: "CONFIRMED", conversation_id: null, meeting_location: null, rejection_note: null };
+  starts_at: slot.starts_at, ends_at: slot.ends_at, status: "CONFIRMED", conversation_id: null, meeting_location: null, rejection_note: null,
+  concern_categories: ["ACADEMIC_PROBLEM", "FAMILY_PROBLEM"], concern_details: "School stress" };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const envelope = items => ({ items, total: items.length, page: 1, page_size: 20 });
 
-function setup(t, { user = student, appointments = [], failure = false, calendar, calendarFailure = false, slotsResponse, availabilityBlocks = [] } = {}) {
+function setup(t, { user = student, appointments = [], failure = false, validationFailure = false, calendar, calendarFailure = false, slotsResponse, availabilityBlocks = [] } = {}) {
   const calls = [];
   global.window = { location: { hash: "#appointments" }, addEventListener() {}, removeEventListener() {} };
   setCsrfToken("synthetic-csrf");
@@ -36,6 +37,16 @@ function setup(t, { user = student, appointments = [], failure = false, calendar
     calls.push({ path, query: Object.fromEntries(parsed.searchParams), ...init });
     if (path.endsWith("/auth/csrf")) return json({ user, csrf_token: "synthetic-csrf" });
     if (init.method === "POST") {
+      if (validationFailure) return json({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed.",
+          details: { fields: [
+            { loc: ["body", "availability_slot_id"] },
+            { loc: ["body", "concern_categories"] },
+          ] },
+        },
+      }, 422);
       if (failure) return json({ error: { code: "SLOT_UNAVAILABLE", message: "The selected slot is no longer available." } }, 409);
       return json(appointment, 201);
     }
@@ -96,6 +107,10 @@ const showBookingMonth = async root => act(async () => {
   const month = root.root.findAllByProps({ type: "month" })[0];
   if (month && month.props.value !== "2099-01") month.props.onChange({ target: { value: "2099-01" } });
 });
+const chooseConcern = async root => act(async () => {
+  const firstConcern = root.root.findAllByType("input").find(input => input.props.type === "checkbox");
+  if (firstConcern && !firstConcern.props.checked) firstConcern.props.onChange({ target: { checked: true } });
+});
 const calendar = () => ({ days: [{ calendar_date: "2099-01-01", is_weekday: true, is_blocked: false, is_past: false, available_times: ["09:00"] }] });
 
 test("student opens the home booking modal, picks a slot, and requests the appointment", async t => {
@@ -112,6 +127,7 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
   const timeButton = button(root, "9:00 AM");
   await act(async () => timeButton.props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   await act(async () => button(root, "Review appointment").props.onClick());
   const form = formFor(root, "Submit request");
@@ -119,7 +135,7 @@ test("student opens the home booking modal, picks a slot, and requests the appoi
   await act(async () => form.props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(c => c.method === "POST").at(-1);
   assert.equal(post.path, "/api/v1/appointments");
-  assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 10, appointment_mode: "ONLINE" });
+  assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 10, appointment_mode: "ONLINE", concern_categories: ["FAMILY_PROBLEM"], concern_details: null });
   assert.equal(post.headers["X-CSRF-Token"], "synthetic-csrf");
   assert.ok(calls.some(call => call.path.endsWith("/calendar") && call.query.counselor_user_id === "1"),
     "calendar availability is scoped to the selected Counselor");
@@ -139,6 +155,7 @@ test("booking modal shows the revealed campus/time details before requesting", a
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   await act(async () => button(root, "Review appointment").props.onClick());
   const rendered = JSON.stringify(root.toJSON());
@@ -146,6 +163,59 @@ test("booking modal shows the revealed campus/time details before requesting", a
   assert.ok(rendered.includes("Main"), "campus is included in review");
   assert.ok(rendered.includes("Cora Test"), "counselor is revealed");
   assert.ok(rendered.includes("9:00 AM"), "slot time is revealed");
+});
+
+test("concern checkboxes keep selection order and All of the above expands and clears topics", async t => {
+  setup(t, { calendar: calendar() });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
+  await act(async () => root.root.findAllByType("button").find(item => item.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  const boxes = () => root.root.findAllByType("input").filter(input => input.props.type === "checkbox");
+  const priorityText = () => root.root.findAllByType("p").map(paragraph => paragraph.children.join("")).find(text => text.startsWith("Priority:"));
+  assert.equal(boxes().length, 6);
+  await act(async () => boxes()[2].props.onChange({ target: { checked: true } }));
+  await act(async () => boxes()[4].props.onChange({ target: { checked: true } }));
+  assert.deepEqual(boxes().slice(0, 4).map(input => input.props.checked), [true, true, true, true]);
+  assert.ok(priorityText().startsWith("Priority: Academic problem"), "the first selected topic remains priority");
+  await act(async () => boxes()[4].props.onChange({ target: { checked: false } }));
+  assert.deepEqual(boxes().slice(0, 4).map(input => input.props.checked), [false, false, false, false]);
+  await act(async () => boxes()[0].props.onChange({ target: { checked: true } }));
+  await act(async () => boxes()[2].props.onChange({ target: { checked: true } }));
+  await act(async () => boxes()[0].props.onChange({ target: { checked: false } }));
+  assert.deepEqual(boxes().slice(0, 4).map(input => input.props.checked), [false, false, true, false]);
+  assert.equal(priorityText(), "Priority: Academic problem");
+});
+
+test("custom concern requires text and booking submits selected topics in priority order", async t => {
+  const calls = setup(t, { calendar: calendar() });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
+  await act(async () => root.root.findAllByType("button").find(item => item.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  const boxes = root.root.findAllByType("input").filter(input => input.props.type === "checkbox");
+  await act(async () => boxes[2].props.onChange({ target: { checked: true } }));
+  await act(async () => boxes[5].props.onChange({ target: { checked: true } }));
+  assert.equal(button(root, "Continue").props.disabled, true);
+  const details = root.root.findByProps({ id: "booking-concern-details" });
+  await act(async () => details.props.onChange({ target: { value: "I would like help balancing school and family responsibilities." } }));
+  assert.equal(button(root, "Continue").props.disabled, false);
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => formFor(root, "Submit request").props.onSubmit({ preventDefault() {} }));
+  const post = calls.filter(call => call.method === "POST").at(-1);
+  assert.deepEqual(JSON.parse(post.body), {
+    availability_slot_id: 10,
+    appointment_mode: "ONLINE",
+    concern_categories: ["ACADEMIC_PROBLEM", "CUSTOM"],
+    concern_details: "I would like help balancing school and family responsibilities.",
+  });
 });
 
 test("session mode choices match the selected slot's supported delivery mode", async t => {
@@ -157,6 +227,7 @@ test("session mode choices match the selected slot's supported delivery mode", a
   await act(async () => root.root.findAllByType("button").find(item => item.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   const options = root.root.findByType("select").findAllByType("option").map(option => option.props.value);
   assert.deepEqual(options, ["ONLINE"]);
@@ -190,11 +261,12 @@ test("booking loads every selected-date slot page and lets the student choose a 
   const option = root.root.findAllByType("button").find(b => b.props["aria-label"] === "Choose Campus 101 at Counselor 101");
   assert.ok(option, "the second API page is offered as a booking choice");
   await act(async () => option.props.onClick());
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   await act(async () => button(root, "Review appointment").props.onClick());
   await act(async () => formFor(root, "Submit request").props.onSubmit({ preventDefault() {} }));
   const post = calls.filter(call => call.method === "POST").at(-1);
-  assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 110, appointment_mode: "ONLINE" });
+  assert.deepEqual(JSON.parse(post.body), { availability_slot_id: 110, appointment_mode: "ONLINE", concern_categories: ["FAMILY_PROBLEM"], concern_details: null });
 });
 
 test("a background slot refresh preserves a selected compatible appointment mode", async t => {
@@ -213,6 +285,7 @@ test("a background slot refresh preserves a selected compatible appointment mode
   await showBookingMonth(root);
   await act(async () => root.root.findByType(CalendarGrid).props.onPickTime("2099-01-01", "09:00"));
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   let mode = root.root.findByType("select");
   await act(async () => mode.props.onChange({ target: { value: "FACE_TO_FACE" } }));
@@ -238,12 +311,31 @@ test("server booking conflict keeps the modal open and shows the slot-unavailabl
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   await act(async () => button(root, "Review appointment").props.onClick());
   await act(async () => formFor(root, "Submit request").props.onSubmit({ preventDefault() {} }));
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("The selected slot is no longer available."));
   assert.ok(rendered.includes("Submit request"), "form stays available for another try");
+});
+
+test("booking validation errors identify rejected fields without exposing submitted values", async t => {
+  setup(t, { validationFailure: true, calendar: calendar() });
+  const root = await mount(t, React.createElement(HomePage, { user: student }));
+  await act(async () => button(root, "Start Booking").props.onClick());
+  await chooseCounselor(root);
+  await showBookingMonth(root);
+  await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
+  await act(async () => button(root, "9:00 AM").props.onClick());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
+  await act(async () => button(root, "Continue").props.onClick());
+  await act(async () => button(root, "Review appointment").props.onClick());
+  await act(async () => formFor(root, "Submit request").props.onSubmit({ preventDefault() {} }));
+  const rendered = JSON.stringify(root.toJSON());
+  assert.ok(rendered.includes("Please check your appointment time, support topics."));
+  assert.ok(rendered.includes("Submit request"), "form stays available to correct and resubmit");
 });
 
 test("confirmed student record opens the reschedule modal and sends reschedule", async t => {
@@ -256,6 +348,7 @@ test("confirmed student record opens the reschedule modal and sends reschedule",
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   await act(async () => button(root, "Review appointment").props.onClick());
   await act(async () => formFor(root, "Submit reschedule").props.onSubmit({ preventDefault() {} }));
@@ -275,6 +368,7 @@ test("Counselor reschedule starts on their own calendar and never needs the stud
   await act(async () => root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-01")).props.onClick());
   await act(async () => button(root, "9:00 AM").props.onClick());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await chooseConcern(root);
   await act(async () => button(root, "Continue").props.onClick());
   await act(async () => button(root, "Review appointment").props.onClick());
   await act(async () => formFor(root, "Submit reschedule").props.onSubmit({ preventDefault() {} }));
@@ -288,6 +382,7 @@ test("records view keeps every appointment outcome accessible by status", async 
   const root = await mount(t, React.createElement(AppointmentsPage, { user: student }));
   const rendered = JSON.stringify(root.toJSON());
   assert.ok(rendered.includes("My Appointments"), "records heading for students");
+  assert.ok(rendered.includes("Priority:") && rendered.includes("Academic problem") && rendered.includes("School stress"), "Student sees their concern in appointment records");
   const labels = ["Confirmed", "Pending", "Completed", "No-show", "Cancelled", "Rejected"];
   const tabs = root.root.findAllByType("button").filter(b => labels.includes(buttonText(b)));
   assert.equal(tabs.length, labels.length, "every appointment status has a record tab");
@@ -443,6 +538,8 @@ test("counselor accepts a pending request from the Appointment Requests page", a
     "the requests queue loads pending appointments only");
   const accept = button(root, "Accept Appointment");
   assert.ok(accept, "a pending request exposes Accept Appointment");
+  assert.ok(JSON.stringify(root.toJSON()).includes("Priority:") && JSON.stringify(root.toJSON()).includes("Academic problem"), "assigned Counselor sees the Student's priority concern");
+  assert.ok(JSON.stringify(root.toJSON()).includes("School stress"), "assigned Counselor sees the Student's details");
   await act(async () => accept.props.onClick());
   const post = calls.filter(call => call.method === "POST").at(-1);
   assert.equal(post.path, "/api/v1/appointments/5/confirm");

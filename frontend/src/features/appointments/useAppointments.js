@@ -18,6 +18,26 @@ export const manilaLocalInput = (date) => {
 export const slotIsPast = (slot, now = new Date()) => new Date(slot.starts_at).getTime() <= now.getTime();
 
 const SELECTED_DATE_SLOT_PAGE_SIZE = 100;
+const VALIDATION_FIELD_LABELS = {
+  availability_slot_id: "appointment time",
+  appointment_mode: "session mode",
+  concern_categories: "support topics",
+  concern_details: "support details",
+};
+
+function mutationErrorMessage(error) {
+  if (error?.code === "VALIDATION_ERROR" && Array.isArray(error.details?.fields)) {
+    const fields = [...new Set(error.details.fields.map((field) => {
+      const location = Array.isArray(field?.loc) ? field.loc : [];
+      const name = location.at(-1);
+      return VALIDATION_FIELD_LABELS[name] ?? "booking details";
+    }))];
+    if (fields.length) {
+      return `Request validation failed. Please check your ${fields.join(", ")}.`;
+    }
+  }
+  return error instanceof Error ? error.message : "The change could not be saved.";
+}
 
 /**
  * initialStatus seeds the records filter (e.g. "CONFIRMED" default on the
@@ -217,7 +237,7 @@ export function useAppointments(role = "", initialStatus = "") {
       if (mounted.current) { setMessage(success); await refresh(); }
       return true;
     } catch (err) {
-      if (mounted.current) setError(err instanceof Error ? err.message : "The change could not be saved.");
+      if (mounted.current) setError(mutationErrorMessage(err));
       return false;
     } finally {
       mutating.current = false;

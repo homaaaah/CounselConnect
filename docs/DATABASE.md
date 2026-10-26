@@ -28,6 +28,7 @@
 - `availability_slots.weekly_schedule_id`: nullable provenance link for slots generated from a weekly schedule. Legacy and concrete one-off slots remain valid with `NULL`.
 - `appointments.appointment_mode`: Student-selected `ONLINE` or `FACE_TO_FACE` compatible with the slot.
 - `appointments.meeting_location`: required booking-time campus-location snapshot for face-to-face appointments; null for online appointments.
+- `appointments.concern_categories` / `concern_details` (migration `20261026_appointment_concerns`): nullable ordered JSON category values and up to 500 characters of Student-provided context. Null remains valid for historical appointments; new bookings require at least one supported category. The first array entry is the priority. The API returns these only to the Student and assigned Counselor; they remain separate from `session_records.presenting_concern` and are not copied into notifications, audit content, or routine logs.
 - `appointments.conversation_id`: nullable unique FK to the dedicated scheduled online conversation.
 - `appointments.student_reminder_dispatched_at` / `counselor_reminder_dispatched_at`: nullable markers for successfully queued appointment reminders.
 - `session_records`: one row per appointment (`appointment_id` unique) holding the Counselor's private `notepad` and the assessment fields; `status` is `DRAFT` or `FINAL` (`chk_session_records_status`). The notepad is never returned to a Student; only a finalized assessment is.

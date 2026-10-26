@@ -3,6 +3,7 @@ import { formatSchedule } from "../features/appointments";
 import { useAppointmentChat } from "../features/messaging/useAppointmentChat";
 import { useSessionRecordEditor } from "../features/sessionRecords/useSessionRecordEditor";
 import AppointmentCallPanel from "../components/calls/AppointmentCallPanel";
+import ConcernSummary from "../components/appointments/ConcernSummary.jsx";
 import SessionRecordWorkspace from "../components/sessionRecords/SessionRecordWorkspace";
 import { request } from "../services/apiClient";
 
@@ -30,12 +31,15 @@ function SessionDetails({ appointment, session }) {
     ["Schedule", `${formatSchedule(session.starts_at)} – ${formatSchedule(session.ends_at)}`],
     ["Status", session.status.replaceAll("_", " ")],
   ];
-  return <dl className="space-y-3 text-sm">
-    {rows.map(([label, value]) => <div key={label}>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 text-slate-800">{value}</dd>
-    </div>)}
-  </dl>;
+  return <div className="space-y-4">
+    <dl className="space-y-3 text-sm">
+      {rows.map(([label, value]) => <div key={label}>
+        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+        <dd className="mt-0.5 text-slate-800">{value}</dd>
+      </div>)}
+    </dl>
+    <ConcernSummary categories={appointment?.concern_categories} details={appointment?.concern_details} />
+  </div>;
 }
 
 export default function ScheduledSessionPage({ user, appointmentId }) {

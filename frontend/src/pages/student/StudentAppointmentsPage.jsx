@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAppointments, formatSchedule } from "../../features/appointments";
 import { secondaryClass, modeLabel } from "../../components/appointments/ui.js";
 import BookingModal from "../../components/appointments/BookingModal.jsx";
+import ConcernSummary from "../../components/appointments/ConcernSummary.jsx";
 
 function Pagination({ page, total, onChange, disabled }) {
   return <div className="mt-4 flex items-center justify-between gap-3 text-sm">
@@ -25,6 +26,7 @@ function AppointmentCard({ appointment: a, state, onReschedule }) {
     <p className="mt-3 text-sm font-medium text-slate-800">Counselor: {a.counselor_name}</p>
     <p className="text-sm text-slate-600">{modeLabel(a.appointment_mode)}</p>
     {a.meeting_location && <p className="mt-1 text-sm text-slate-600">Guidance Office: {a.meeting_location}</p>}
+    <ConcernSummary categories={a.concern_categories} details={a.concern_details} className="mt-3 rounded-lg bg-slate-50 p-3" />
     {a.rejection_note && <p className="mt-2 text-sm text-slate-600">Counselor note: {a.rejection_note}</p>}
     {a.status === "PENDING" && <p className="mt-2 text-sm text-amber-700">Awaiting counselor review.</p>}
     {a.status === "CONFIRMED" && a.appointment_mode === "ONLINE" && <p className="mt-2 text-sm text-slate-600">Online appointment confirmed. The session lobby opens 30 minutes before the scheduled start.</p>}

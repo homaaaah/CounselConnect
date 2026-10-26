@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppointments } from "../../features/appointments";
 import { buttonClass, secondaryClass, inputClass } from "../../components/appointments/ui";
+import ConcernSummary from "../../components/appointments/ConcernSummary.jsx";
 
 const MANILA = "Asia/Manila";
 const dateLabel = (value) => new Intl.DateTimeFormat("en-PH", { timeZone: MANILA, month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
@@ -64,6 +65,7 @@ function PendingRequestCard({ appointment: a, state, open, onToggle }) {
     </div>
 
     <div id={detailsId} hidden={!open} className="mt-3 space-y-3">
+      <ConcernSummary categories={a.concern_categories} details={a.concern_details} className="rounded-xl bg-emerald-50 p-3" />
       <div className="rounded-xl border-l-4 border-[#D8EAD8] bg-[#F8FAFB] p-3">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-[#7B8493]">Request</p>
         <p className="text-sm text-slate-600">

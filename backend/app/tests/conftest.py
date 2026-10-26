@@ -65,6 +65,9 @@ WEEKLY_SCHED_SOFTDEL_MIGRATION_FILE = (
 SESSION_RECORDS_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20261025_session_records_and_documents.py"
 )
+APPOINTMENT_CONCERNS_MIGRATION_FILE = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261026_appointment_concerns.py"
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -195,6 +198,16 @@ def load_session_records_migration_module():
     return module
 
 
+def load_appointment_concerns_migration_module():
+    spec = importlib.util.spec_from_file_location(
+        "appointment_concerns_migration", APPOINTMENT_CONCERNS_MIGRATION_FILE
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture(scope="session")
 def mysql_test_engine():
     """Create, own, and remove a randomly named disposable MySQL schema."""
@@ -273,6 +286,7 @@ def mysql_test_engine():
                 load_profile_change_migration_module().upgrade()
                 load_weekly_sched_softdel_migration_module().upgrade()
                 load_session_records_migration_module().upgrade()
+                load_appointment_concerns_migration_module().upgrade()
         yield engine
     finally:
         if engine is not None:

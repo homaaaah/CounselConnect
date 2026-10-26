@@ -79,7 +79,10 @@ def book(service, student, slot, mode="ONLINE"):
     return service.book(
         student,
         AppointmentCreateRequest(
-            availability_slot_id=slot.slot_id, appointment_mode=mode
+            availability_slot_id=slot.slot_id,
+            appointment_mode=mode,
+            concern_categories=["ACADEMIC_PROBLEM", "FAMILY_PROBLEM"],
+            concern_details="School stress",
         ),
     )
 
@@ -340,7 +343,7 @@ def test_reschedule_rejected_for_past_replacement(db_session, actors):
     appt = book(svc, users[2], first)
     svc.transition(users[0], appt.appointment_id, "confirm")
     past = _past_slot(db_session, users[0], campus, days=1)
-    data = AppointmentCreateRequest(
+    data = AppointmentRescheduleRequest(
         availability_slot_id=past.slot_id, appointment_mode="ONLINE"
     )
     check_error(
@@ -458,7 +461,11 @@ def test_booking_rejects_slots_from_disabled_or_deleted_weekly_schedule(db_sessi
     )
     db_session.add_all([linked, one_off])
     db_session.flush()
-    request = AppointmentCreateRequest(availability_slot_id=linked.slot_id, appointment_mode="ONLINE")
+    request = AppointmentCreateRequest(
+        availability_slot_id=linked.slot_id,
+        appointment_mode="ONLINE",
+        concern_categories=["FAMILY_PROBLEM"],
+    )
 
     schedule.is_active = False
     db_session.flush()
@@ -482,7 +489,10 @@ def test_booking_rejects_slots_from_disabled_or_deleted_weekly_schedule(db_sessi
     svc.book(users[2], request)
     # A one-off slot has no schedule and stays bookable regardless.
     svc.book(users[2], AppointmentCreateRequest(
-        availability_slot_id=one_off.slot_id, appointment_mode="ONLINE"))
+        availability_slot_id=one_off.slot_id,
+        appointment_mode="ONLINE",
+        concern_categories=["FAMILY_PROBLEM"],
+    ))
 
 
 def test_standard_weekday_batch_is_all_or_nothing(db_session, actors):
@@ -706,7 +716,7 @@ def test_reschedule_revalidation_and_rollback(db_session, actors):
     first = create_slot(svc, users[0], campus)
     second = create_slot(svc, users[0], campus, "FACE_TO_FACE", 3)
     appt = book(svc, users[2], first)
-    data = AppointmentCreateRequest(
+    data = AppointmentRescheduleRequest(
         availability_slot_id=second.slot_id, appointment_mode="FACE_TO_FACE"
     )
     check_error(
@@ -729,6 +739,8 @@ def test_reschedule_revalidation_and_rollback(db_session, actors):
     assert (
         result.status == "PENDING" and result.meeting_location == "Replacement office"
     )
+    assert result.concern_categories == ["ACADEMIC_PROBLEM", "FAMILY_PROBLEM"]
+    assert result.concern_details == "School stress"
     assert svc.repository.find_slot(first.slot_id).status == "AVAILABLE"
     assert svc.repository.find_slot(second.slot_id).status == "RESERVED"
     svc.transition(users[2], appt.appointment_id, "cancel")
@@ -776,6 +788,10 @@ def test_ownership_roles_status_and_lists(db_session, actors):
         )
         assert svc.list_appointments(outsider)["items"] == []
     assert len(svc.list_appointments(users[0])["items"]) == 1
+    assert svc.detail(users[2], appt.appointment_id).concern_categories == [
+        "ACADEMIC_PROBLEM", "FAMILY_PROBLEM"
+    ]
+    assert svc.detail(users[0], appt.appointment_id).concern_details == "School stress"
     for actor in [users[2], users[4]]:
         check_error("FORBIDDEN_ROLE", lambda: create_slot(svc, actor, campus))
         check_error(
@@ -832,7 +848,12 @@ def test_http_contract_csrf_and_no_store(db_client, db_session, actors):
         json={"identifier": "APPT-2", "password": "synthetic-test-pass"},
     )
     token = response.json()["csrf_token"]
-    payload = {"availability_slot_id": slot.slot_id, "appointment_mode": "ONLINE"}
+    payload = {
+        "availability_slot_id": slot.slot_id,
+        "appointment_mode": "ONLINE",
+        "concern_categories": ["ACADEMIC_PROBLEM", "FAMILY_PROBLEM"],
+        "concern_details": "School stress",
+    }
     assert db_client.post("/api/v1/appointments", json=payload).status_code == 403
     response = db_client.post(
         "/api/v1/appointments", json=payload, headers={"X-CSRF-Token": token}
@@ -840,6 +861,8 @@ def test_http_contract_csrf_and_no_store(db_client, db_session, actors):
     assert response.status_code == 201, response.text
     assert response.headers["cache-control"] == "no-store"
     assert response.json()["starts_at"].endswith("Z")
+    assert response.json()["concern_categories"] == ["ACADEMIC_PROBLEM", "FAMILY_PROBLEM"]
+    assert response.json()["concern_details"] == "School stress"
     result = db_client.get("/api/v1/appointments?page=1&page_size=1")
     assert result.status_code == 200 and result.json()["total"] == 1
     starts_at = response.json()["starts_at"]
@@ -918,7 +941,9 @@ def test_concurrent_reservations(mysql_test_engine, same_student):
                 AppointmentsService(db).book(
                     actor,
                     AppointmentCreateRequest(
-                        availability_slot_id=slot_ids[i], appointment_mode="ONLINE"
+                        availability_slot_id=slot_ids[i],
+                        appointment_mode="ONLINE",
+                        concern_categories=["FAMILY_PROBLEM"],
                     ),
                 )
                 db.commit()

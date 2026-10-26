@@ -363,7 +363,11 @@ def test_booking_rejected_inside_availability_block(db_session, service_counselo
         "SLOT_UNAVAILABLE",
         lambda: service.book(
             _service_actor("STUDENT", student.user_id),
-            AppointmentCreateRequest(availability_slot_id=slot.slot_id, appointment_mode="ONLINE"),
+            AppointmentCreateRequest(
+                availability_slot_id=slot.slot_id,
+                appointment_mode="ONLINE",
+                concern_categories=["FAMILY_PROBLEM"],
+            ),
         ),
     )
     # The block must not mutate the slot or create any appointment for this student.

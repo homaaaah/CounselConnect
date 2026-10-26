@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { formatSchedule, manilaToday } from "../../features/appointments";
 import { buttonClass, modeLabel } from "./ui.js";
 import CalendarGrid from "./CalendarGrid.jsx";
+import ConcernSummary from "./ConcernSummary.jsx";
+import {
+  ALL_CONCERNS_VALUE,
+  CUSTOM_CONCERN,
+  STANDARD_CONCERNS,
+  toggleConcernCategory,
+} from "./concerns.js";
 
 const STEP_LABELS = ["Counselor", "Date", "Time", "Session mode", "Review", "Submit"];
 
@@ -17,12 +24,15 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
   const [slotSelectionInitialized, setSlotSelectionInitialized] = useState(false);
   const [slotDetails, setSlotDetails] = useState(null);
   const [mode, setMode] = useState("ONLINE");
+  const [concernCategories, setConcernCategories] = useState([]);
+  const [concernDetails, setConcernDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
   const resetSelection = () => {
     setStep(1); setSelectedCounselorId(null); setSelectedDate(null); setPickedTime(null); setSlotCandidates([]);
     setSelectedSlotId(null); setSlotSelectionInitialized(false); setSlotDetails(null); setMode("ONLINE"); setDone(false);
+    setConcernCategories([]); setConcernDetails("");
     state.setCounselorUserId?.("");
   };
   useEffect(() => { if (!open) resetSelection(); }, [open]);
@@ -100,11 +110,19 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
   };
   const submit = async event => {
     event.preventDefault();
-    if (!slotDetails || submitting || (mode === "FACE_TO_FACE" && !slotDetails.guidance_office_location)) return;
+    const hasCustom = concernCategories.includes(CUSTOM_CONCERN.value);
+    if (!slotDetails || submitting
+      || (!rescheduleId && (!concernCategories.length || (hasCustom && !concernDetails.trim())))
+      || (mode === "FACE_TO_FACE" && !slotDetails.guidance_office_location)) return;
     setStep(6); setSubmitting(true);
     const path = rescheduleId ? `/appointments/${rescheduleId}/reschedule` : "/appointments";
+    const payload = { availability_slot_id: slotDetails.slot_id, appointment_mode: mode };
+    if (!rescheduleId) {
+      payload.concern_categories = concernCategories;
+      payload.concern_details = concernDetails.trim() || null;
+    }
     const ok = await state.mutate(path,
-      { availability_slot_id: slotDetails.slot_id, appointment_mode: mode }, "POST",
+      payload, "POST",
       rescheduleId ? "Rescheduled. Awaiting counselor review." : "Request submitted. Awaiting counselor review.");
     setSubmitting(false);
     if (ok) setDone(true);
@@ -115,11 +133,18 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
   const stepTotal = STEP_LABELS.length;
   const progressPercent = Math.round((step / stepTotal) * 100);
   const subtitle = done ? "Request submitted" : `Step ${step} of ${stepTotal}: ${STEP_LABELS[step - 1]}`;
+  const hasCustomConcern = concernCategories.includes(CUSTOM_CONCERN.value);
+  const allStandardConcernsSelected = STANDARD_CONCERNS.every(option => concernCategories.includes(option.value));
   const confirmDisabled = submitting || state.busy || !slotDetails
+    || (!rescheduleId && (!concernCategories.length || (hasCustomConcern && !concernDetails.trim())))
     || (mode === "FACE_TO_FACE" && !slotDetails.guidance_office_location);
   const today = manilaToday();
   const availableModes = slotDetails?.delivery_mode === "BOTH" ? ["ONLINE", "FACE_TO_FACE"]
     : slotDetails ? [slotDetails.delivery_mode] : [];
+  const existingAppointment = rescheduleId == null ? null
+    : state.appointments.items.find(item => item.appointment_id === rescheduleId);
+  const canContinueFromTime = Boolean(slotDetails && (rescheduleId
+    || (concernCategories.length && (!hasCustomConcern || concernDetails.trim()))));
 
   return <div className="modal-overlay" role="dialog" aria-modal="true"
     aria-label={rescheduleId ? "Reschedule appointment" : "Schedule an appointment"}
@@ -191,6 +216,39 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
                   <span className="booking-counselor-campus">{modeLabel(candidate.delivery_mode)}</span>
                 </button>)}</div>
               </fieldset>}
+              {slotDetails && (rescheduleId
+                ? <ConcernSummary categories={existingAppointment?.concern_categories} details={existingAppointment?.concern_details} className="mt-5 rounded-lg bg-emerald-50 p-3" />
+                : <fieldset className="mt-5 rounded-lg border border-slate-200 p-3" aria-describedby="booking-concern-help">
+                  <legend className="px-1 text-sm font-semibold text-slate-800">What would you like support with?</legend>
+                  <p id="booking-concern-help" className="mb-3 text-xs text-slate-500">Select one or more. Your first selection is the priority topic and is shared only with you and your assigned Counselor.</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {STANDARD_CONCERNS.map(option => <label key={option.value} className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" checked={concernCategories.includes(option.value)}
+                        onChange={() => setConcernCategories(current => toggleConcernCategory(current, option.value))} />
+                      {option.label}
+                    </label>)}
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" checked={allStandardConcernsSelected}
+                        onChange={() => setConcernCategories(current => toggleConcernCategory(current, ALL_CONCERNS_VALUE))} />
+                      All of the above
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" checked={hasCustomConcern}
+                        onChange={() => setConcernCategories(current => toggleConcernCategory(current, CUSTOM_CONCERN.value))} />
+                      {CUSTOM_CONCERN.label}
+                    </label>
+                  </div>
+                  {concernCategories.length > 0 && <p role="status" className="mt-3 text-xs text-emerald-800">
+                    Priority: {concernCategories[0].toLowerCase().replaceAll("_", " ").replace(/^./, letter => letter.toUpperCase())}
+                    {concernCategories.length > 1 ? ` · ${concernCategories.length - 1} additional topic${concernCategories.length === 2 ? "" : "s"}` : ""}
+                  </p>}
+                  {concernCategories.length > 0 && <label className="booking-field mt-3" htmlFor="booking-concern-details">
+                    More details {hasCustomConcern ? "(required with Custom)" : "(optional)"}
+                    <textarea id="booking-concern-details" className="booking-select" rows={3} maxLength={500}
+                      required={hasCustomConcern} value={concernDetails} onChange={event => setConcernDetails(event.target.value)} />
+                    <span className="text-xs text-slate-500">{concernDetails.length}/500 characters</span>
+                  </label>}
+                </fieldset>)}
             </section>
           </div> : <section className="booking-panel" aria-label={step === 4 ? "Choose session mode" : "Review appointment"}>
             {slotDetails && <>
@@ -204,6 +262,9 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
                 {step === 5 && <div><dt>Session mode</dt><dd>{modeLabel(mode)}</dd></div>}
                 {mode === "FACE_TO_FACE" && slotDetails.guidance_office_location && <div className="booking-info-wide"><dt>Guidance Office</dt><dd>{slotDetails.guidance_office_location}</dd></div>}
               </dl>
+              {step === 5 && (rescheduleId
+                ? <ConcernSummary categories={existingAppointment?.concern_categories} details={existingAppointment?.concern_details} className="mt-4 rounded-lg bg-emerald-50 p-3" />
+                : <ConcernSummary categories={concernCategories} details={concernDetails} className="mt-4 rounded-lg bg-emerald-50 p-3" />)}
               {step === 4 && <><label className="booking-field" htmlFor="booking-mode">Appointment mode
                 <select id="booking-mode" className="booking-select" value={mode} onChange={event => setMode(event.target.value)}>
                   {availableModes.includes("ONLINE") && <option value="ONLINE">Online</option>}
@@ -227,7 +288,7 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
               && <button type="button" className="booking-btn-text" disabled={submitting || state.busy} onClick={back}>‹ Back</button>}
             <button type="button" className="booking-btn-text" onClick={onClose}>Cancel</button>
           </div>
-          {step === 3 && <button type="button" className={`${buttonClass} booking-btn-primary`} disabled={!slotDetails || state.loading}
+          {step === 3 && <button type="button" className={`${buttonClass} booking-btn-primary`} disabled={!canContinueFromTime || state.loading}
             onClick={() => setStep(4)}>Continue</button>}
           {step === 4 && <button type="button" className={`${buttonClass} booking-btn-primary`}
             onClick={() => setStep(5)} disabled={!slotDetails || (mode === "FACE_TO_FACE" && !slotDetails.guidance_office_location)}>Review appointment</button>}

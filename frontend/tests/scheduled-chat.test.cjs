@@ -385,6 +385,8 @@ function markDoneHarness(t, { onMarkDone, initialRecord = "DRAFT", recordFailure
       return json({
         appointment_id: 7, student_name: "Ana Test", counselor_name: "Cora Test",
         campus_name: "Main", appointment_mode: "ONLINE", status: sessionStatus,
+        concern_categories: ["ACADEMIC_PROBLEM", "FAMILY_PROBLEM"],
+        concern_details: "School stress",
       });
     }
     if (path.endsWith("/appointments/7/record") && (!init.method || init.method === "GET")) {
@@ -409,6 +411,21 @@ function markDoneHarness(t, { onMarkDone, initialRecord = "DRAFT", recordFailure
   });
   return { calls, session: () => sessionStatus, record: () => recordStatus };
 }
+
+test("session Details shows student appointment concerns separately from the counselor record", async t => {
+  const harness = markDoneHarness(t);
+  const root = await mountCounselor(t);
+  await act(async () => buttonByText(root, "Details").props.onClick());
+  await settle();
+
+  const content = JSON.stringify(root.toJSON());
+  assert.match(content, /Student-stated concern/);
+  assert.match(content, /Academic problem/);
+  assert.match(content, /Priority/);
+  assert.match(content, /School stress/);
+  assert.doesNotMatch(content, /presenting concern/i);
+  assert.ok(harness.calls.some(call => call.path.endsWith("/appointments/7")));
+});
 
 async function mountCounselor(t) {
   let root;

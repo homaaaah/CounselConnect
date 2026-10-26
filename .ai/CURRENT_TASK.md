@@ -1,77 +1,58 @@
-# CounselConnect - Current Task
+# CounselConnect — Current Task
 
-**Status:** COMPLETED
-**Task:** Session UI: scrollable tab panels, automatic join at the scheduled start, and **Mark as done** moved to the session header.
-**Risk:** HIGH (completion action placement); MEDIUM (auto-join); LOW (layout).
-**Route:** `appointments` + `messaging` (including `docs/REAL_TIME_MESSAGING.md`), plus the `ui-refactor` safety checklist.
+**Status:** PLANNING / NOT YET IMPLEMENTED  
+**Program:** Advisor-directed system revision
 
 ## Objective
 
-On both roles' scheduled-session page, the right tab panel scrolls internally; the open page submits the existing authorized join request once at/after the scheduled start (with a manual retry on failure); and the Counselor's **Mark as done** lives in the page header beside **Mark no-show** instead of the Record panel. The standalone `#session-record/{id}` page's tab content also scrolls.
+Migrate the working CounselConnect prototype to the approved target design without breaking authentication, recurring appointment scheduling, scheduled text chat, or existing data.
 
-## Result
+## Approved target changes
 
-- The Counselor session page owns one `useSessionRecordEditor` instance; the Student hook is disabled and never requests `/appointments/{id}/record`.
-- The header **Mark as done** appears only after a successful record load, saves the current form first, skips a PUT for an already-`FINAL` record, then calls the unchanged `POST /mark-done`. A rejected completion switches to the Record tab and surfaces the named missing fields.
-- An open page (including one already in the lobby) submits the join once at/after `messaging_opens_at`; the automatic attempt is a background request (no idle renewal), and a failure shows the error plus **Retry joining** (a normal user request). A start-boundary background session refresh prevents waiting for the 15-second interval.
-- The session page and standalone record page use bounded viewport layouts with independently scrolling tab content. The rail Record panel no longer shows **Mark as done**; the standalone page keeps **Finalize record**/**Reopen for editing**.
-- A failed record load now offers an inline **Reload record** control, replacing the implicit refetch that remounting the tab used to provide.
+1. Replace manual Guidance Staff COR review with automated COR format matching, OCR/data extraction, embedded-barcode screening, reference-data checks, and Student confirmation.
+2. Permit Student login by Student Number or registered email.
+3. Replace the target role set with `STUDENT`, `COUNSELOR`, and `SUPERADMIN`.
+4. Preserve support for multiple Counselor accounts and assignment-scoped data.
+5. Add concern category/details to appointment requests.
+6. Add planned one-to-one WebRTC audio/video to confirmed online sessions without recording.
+7. Add Counselor draft notes, finalized assessments, session tracking, prior-session history, Student read-only assessment access, and append-only amendments.
+8. Add private external diagnosis/prescription/referral document uploads.
+9. Expand the optional emotional feature into an AI-assisted multimodal observation panel using observable cues, Student self-report, and session trends; no diagnosis or persistence.
+10. Remove the Wellness Resource Library and automated resource discovery.
 
-## In scope
+## Important limitations
 
-- `frontend/src/pages/ScheduledSessionPage.jsx`, `frontend/src/pages/SessionRecordPage.jsx`
-- `frontend/src/components/sessionRecords/SessionRecordWorkspace.jsx`
-- `frontend/src/features/sessionRecords/useSessionRecord.js`, new `useSessionRecordEditor.js`
-- `frontend/src/features/messaging/useAppointmentChat.js`
-- `frontend/tests/scheduled-chat.test.cjs`, `frontend/tests/session-records.test.cjs`
-- Owning docs and ADR-038.
+- COR format matching, OCR, and barcode screening check structure and internal consistency; they do not prove UCC issued the file.
+- Authoritative verification of decoded barcode data against a University-controlled source remains pending.
+- Superadmin has no default access to counseling content.
+- The Counselor, not AI, authors every durable assessment.
+- Raw call media, recordings, transcripts, automatic summaries, facial media, embeddings, and AI observation history remain forbidden.
+- The production private-storage provider and final clinical-record retention periods remain pending.
+- The future of a navigation/FAQ-only assistant remains pending.
 
-## Out of scope
+## Migration sequence
 
-- Any backend, API, schema, migration, permission, retention, or student file-visibility change.
-- A Files tab on the session page; the Student keeps the `#session-record/{id}` link.
-- Replacing the explicit join contract with server-side auto-join on reads.
-- The future video-permission/chat-UI layout plan.
-
-## Acceptance criteria
-
-- The Counselor page fetches `/record` once at page level; the Student page never requests `/record`.
-- **Mark as done** is in the header (only after a successful record load), saves the current form first, never saves an already-`FINAL` record, then calls the unchanged `/mark-done`; incomplete fields switch to the Record tab and name the fields.
-- The Record panel no longer renders **Mark as done**; the standalone page keeps **Finalize record** and **Reopen for editing**.
-- An open session page joins automatically once at/after `messaging_opens_at`; a failure shows the error plus **Retry joining** and does not retry on every tick.
-- Tab content scrolls inside the panel on desktop and mobile; tablist/link stay outside the scroll area; desktop page does not scroll.
-- Focused and full frontend tests, the frontend build, the backend regression, and the OpenAPI check all pass (or gaps are reported).
+1. Update ADRs/contracts and freeze the current implementation checkpoint.
+2. Add `SUPERADMIN` while temporarily preserving current roles.
+3. Build automatic COR format/OCR/barcode screening alongside the manual path and validate it with unseen sanitized samples, including missing, unreadable, invalid, and mismatched barcodes.
+4. Switch registration to automated screening, migrate/deactivate Guidance Staff, then remove Guidance Staff authorization/routes/UI.
+5. Add appointment concern.
+6. Add counseling-session records, finalized assessment access, and amendment workflow.
+7. Add private clinical-document storage abstraction and uploads.
+8. Add WebRTC calling and authenticated signaling.
+9. Add optional AI-assisted session observation.
+10. Disable/remove Wellness Resource routes/UI/code, migrate or delete development data, and drop resource tables.
+11. Regenerate OpenAPI, run MySQL migrations/tests, update diagrams, and verify full flows.
 
 ## Contracts to preserve
 
-| Invariant / user capability | Owning contract and code | Regression test |
-|---|---|---|
-| Join stays participant/`CONFIRMED`/`ONLINE`/window authorized and records `*_joined_at` | `backend/app/modules/appointments/service.py`, `messaging/service.py` | `test_session_records.py`, `scheduled-chat.test.cjs` |
-| Chat send/catch-up/WebSocket and call panel behavior unchanged | `useAppointmentChat.js`, `AppointmentCallPanel` | `scheduled-chat.test.cjs`, `appointment-call.test.cjs` |
-| Students never request the record/notepad; finalized assessment only after `COMPLETED` | `useSessionRecord.js` `enabled`, `_record_response` | `session-records.test.cjs`, `test_session_records.py` |
-| Mark as done saves first, skips an already-`FINAL` record, and is atomic server-side | `useSessionRecordEditor.markDone`, `mark_session_done` | `scheduled-chat.test.cjs`, `test_session_records.py` |
-| Standalone page keeps Finalize/Reopen; Counselor History keeps status-only Mark completed | `SessionRecordPage`, `SessionRecordWorkspace` variant | `session-records.test.cjs`, `appointments.test.cjs` |
+- Opaque cookie sessions, CSRF, one-hour idle, 12-hour absolute expiry, and no Remember Me.
+- Weekly schedules, temporary blocks, slot materialization, booking locks, appointment ownership, mode/location rules, and scheduled text-chat behavior.
+- Message-body retention remains separate from durable assessments.
+- SOS remains rule-based and independent from AI observation.
+- UTC persistence and Asia/Manila display.
+- v4.1 remains the historical baseline; new schema changes use Alembic.
 
-- Compatible API methods, paths, payload fields, and response shapes: no change.
-- Navigation and actions that must remain available: Student files link, Mark no-show, Reopen, Finalize on the standalone page.
-- Required integration/browser checks and prerequisites: MySQL test URL for backend regression; manual two-role QA for time-dependent auto-join and layout.
-- Intentional behavior changes explicitly authorized by the user: auto-join at start (still an authorized background request), header placement, internal scrolling.
+## Next action
 
-## Verification (run)
-
-- `node --test frontend/tests/scheduled-chat.test.cjs frontend/tests/session-records.test.cjs`: **14 passed**.
-- `npm --prefix frontend test`: **121 passed**.
-- `npm --prefix frontend run build`: succeeded.
-- `pytest app/tests/integration/test_session_records.py app/tests/integration/test_appointments.py app/tests/integration/test_appointments_frontend.py -q` (with `COUNSELCONNECT_TEST_DATABASE_URL`): **83 passed, 1 skipped**. Skip reason: `test_appointments.py:327` "Manila already rolled to the next day for this slot time" (time-dependent, not a missing DB).
-- `pytest app/tests --ignore=app/tests/integration/test_calls.py -q`: **260 passed**.
-- `test_calls.py`: 19 tests passed in-file, then the file run hung on the peer-disconnect test; the remaining 4 tests (including that test) pass when run individually/groups. The suite's call behaviors are covered, but the full-file run is a reproducible environment hang unrelated to this frontend change.
-- `python -B scripts/export_openapi.py --check`: matches the application.
-- Fresh read-only HIGH-risk review performed; MEDIUM findings (start-boundary cached capabilities, Notes editing during save, failed-record recovery) and LOW test-strength gaps were fixed and covered.
-
-## Remaining risks / limitations
-
-- Manual QA has not been run in this session: both roles, pre-start/post-start entry, mobile/desktop panel scrolling, join failure retry, and header save-first/incomplete-field behavior still need a browser pass.
-- Auto-join is still one authorized request; the only new behavior is who submits it (the open page) and that the automatic attempt does not renew idle activity.
-- The full `test_calls.py` file run hangs in this environment at the peer-disconnect test; individual/groupped runs pass. Frontend changes do not touch call signaling.
-- `docs/DATABASE.md` was not edited (no schema change; it still carries the earlier reopen wording owned by the prior task).
-- UI disabling is cosmetic; the server remains authoritative.
+Before source-code changes, agree on the exact database/API design for role migration and automated COR screening, including template-specific barcode rules and safe metadata. Do not remove Guidance Staff until the replacement registration path is implemented and tested.
