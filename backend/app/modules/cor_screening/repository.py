@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.modules.bases import BaseRepository
 from app.modules.cor_screening.models import CorScreening, CorScreeningFile
+from app.modules.profile_change.models import ProfileChangeRequest
 
 # Statuses that represent an in-progress (not yet decided) screening.
 OPEN_STATUSES = ("PROCESSING", "AWAITING_CONFIRMATION", "NEEDS_RESUBMISSION", "FAILED")
@@ -37,14 +38,15 @@ class CorScreeningRepository(BaseRepository[CorScreening]):
         """Non-locking lookup by verification-token digest (caller locks rows)."""
         return self.session.scalar(
             select(CorScreening)
-            .where(CorScreening.verification_token_hash == token_hash)
+            .where(CorScreening.verification_token_hash == token_hash, CorScreening.purpose == "REGISTRATION")
             .execution_options(populate_existing=True)
         )
 
     def find_latest_for_student(self, student_user_id: int, *, lock: bool = False) -> CorScreening | None:
+        """Latest registration attempt; correction evidence never drives enrollment."""
         stmt = (
             select(CorScreening)
-            .where(CorScreening.student_user_id == student_user_id)
+            .where(CorScreening.student_user_id == student_user_id, CorScreening.purpose == "REGISTRATION")
             .order_by(
                 CorScreening.submitted_at.desc(),
                 CorScreening.cor_screening_id.desc(),
@@ -62,7 +64,7 @@ class CorScreeningRepository(BaseRepository[CorScreening]):
             return {}
         rows = self.session.scalars(
             select(CorScreening)
-            .where(CorScreening.student_user_id.in_(student_ids))
+            .where(CorScreening.student_user_id.in_(student_ids), CorScreening.purpose == "REGISTRATION")
             .order_by(
                 CorScreening.student_user_id,
                 CorScreening.submitted_at.desc(),
@@ -73,6 +75,44 @@ class CorScreeningRepository(BaseRepository[CorScreening]):
         for row in rows:
             latest.setdefault(row.student_user_id, row)
         return latest
+
+    def find_registered_enrollment(self, student_user_id: int, *, lock: bool = False) -> CorScreening | None:
+        stmt = select(CorScreening).where(
+            CorScreening.student_user_id == student_user_id,
+            CorScreening.purpose == "REGISTRATION",
+            CorScreening.status == "PASSED",
+            CorScreening.confirmed_at.is_not(None),
+        ).order_by(CorScreening.confirmed_at.desc(), CorScreening.cor_screening_id.desc()).limit(1)
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return self.session.scalar(stmt)
+
+    def find_latest_registration(self, student_user_id: int, *, lock: bool = False) -> CorScreening | None:
+        stmt = select(CorScreening).where(
+            CorScreening.student_user_id == student_user_id, CorScreening.purpose == "REGISTRATION",
+        ).order_by(CorScreening.submitted_at.desc(), CorScreening.cor_screening_id.desc()).limit(1)
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return self.session.scalar(stmt)
+
+    def find_exact_file(self, file_id: int, screening_id: int, *, lock: bool = False) -> CorScreeningFile | None:
+        stmt = select(CorScreeningFile).where(
+            CorScreeningFile.cor_screening_file_id == file_id,
+            CorScreeningFile.cor_screening_id == screening_id,
+        )
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return self.session.scalar(stmt)
+
+    def has_newer_active_file(self, screening_id: int, file_id: int, now: datetime, *, lock: bool = False) -> bool:
+        stmt = select(CorScreeningFile.cor_screening_file_id).where(
+            CorScreeningFile.cor_screening_id == screening_id,
+            CorScreeningFile.cor_screening_file_id > file_id,
+            CorScreeningFile.cleanup_state == "PENDING", CorScreeningFile.expires_at > now,
+        ).limit(1)
+        if lock:
+            stmt = stmt.with_for_update()
+        return self.session.scalar(stmt) is not None
 
     def list_files_for_screening(self, screening_id: int) -> list[CorScreeningFile]:
         return list(
@@ -108,7 +148,7 @@ class CorScreeningRepository(BaseRepository[CorScreening]):
         )
 
     def list_all(self, status: str | None = None) -> list[CorScreening]:
-        stmt = select(CorScreening)
+        stmt = select(CorScreening).where(CorScreening.purpose == "REGISTRATION")
         if status is not None:
             stmt = stmt.where(CorScreening.status == status)
         return list(
@@ -126,8 +166,15 @@ class CorScreeningRepository(BaseRepository[CorScreening]):
                     CorScreeningFile,
                     CorScreening.cor_screening_id == CorScreeningFile.cor_screening_id,
                 )
+                .outerjoin(ProfileChangeRequest,
+                    (ProfileChangeRequest.cor_screening_id == CorScreening.cor_screening_id)
+                    & (ProfileChangeRequest.status == "PENDING")
+                    & ProfileChangeRequest.submission_version.is_not(None))
                 .where(
                     (CorScreeningFile.expires_at <= now)
+                    | (CorScreeningFile.uploaded_at <= now - timedelta(days=7))
+                    | (ProfileChangeRequest.evidence_expires_at <= now)
+                    | (ProfileChangeRequest.evidence_uploaded_at <= now - timedelta(days=7))
                     | (CorScreeningFile.cleanup_state == "FAILED")
                     | ((CorScreening.status == "PASSED") & CorScreeningFile.cor_screening_file_id.is_not(None))
                     | (

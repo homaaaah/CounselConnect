@@ -56,6 +56,7 @@ def make_service():
 def make_screening():
     return CorScreening(
         student_user_id=1,
+        purpose="REGISTRATION",
         status="PROCESSING",
         format_template_version="test",
         submitted_at=datetime.now(timezone.utc),
@@ -287,6 +288,7 @@ def test_confirm_rejects_invalid_student_number():
     service.accounts.lock_user.return_value = SimpleNamespace(user_id=1, role_code="STUDENT")
     service.repository = Mock()
     service.repository.find_latest_for_student.return_value = SimpleNamespace(
+        student_user_id=1, purpose="REGISTRATION",
         status="AWAITING_CONFIRMATION", submitted_at=datetime.now(timezone.utc)
     )
     data = ConfirmScreeningRequest(
@@ -311,6 +313,7 @@ def test_confirm_rejects_number_that_differs_from_barcode_value():
     service.repository = Mock()
     service.repository.find_latest_for_student.return_value = SimpleNamespace(
         status="AWAITING_CONFIRMATION",
+        student_user_id=1, purpose="REGISTRATION",
         submitted_at=datetime.now(timezone.utc),
         extracted_student_number="20231234-A",
     )
@@ -336,6 +339,7 @@ def test_confirm_rejects_an_edited_verified_field():
     service.repository = Mock()
     service.repository.find_latest_for_student.return_value = SimpleNamespace(
         status="AWAITING_CONFIRMATION",
+        student_user_id=1, purpose="REGISTRATION",
         submitted_at=datetime.now(timezone.utc),
         extracted_student_number="20231234-A",
         extracted_first_name="Ana",
@@ -366,7 +370,9 @@ def test_reject_requires_awaiting_confirmation():
     service.accounts = Mock()
     service.accounts.lock_user.return_value = SimpleNamespace(user_id=1, role_code="STUDENT")
     service.repository = Mock()
-    service.repository.find_latest_for_student.return_value = SimpleNamespace(status="PASSED")
+    service.repository.find_latest_for_student.return_value = SimpleNamespace(
+        student_user_id=1, purpose="REGISTRATION", status="PASSED"
+    )
     with pytest.raises(AppError) as caught:
         service.reject(SimpleNamespace(user_id=1))
     assert caught.value.code == "SCREENING_NOT_CONFIRMABLE"
@@ -382,6 +388,7 @@ def test_reject_marks_needs_resubmission_by_student():
         failure_reason_code=None,
         processed_at=None,
         cor_screening_id=5,
+        student_user_id=1, purpose="REGISTRATION",
     )
     result = service.reject(SimpleNamespace(user_id=1))
     assert result.status == "NEEDS_RESUBMISSION"

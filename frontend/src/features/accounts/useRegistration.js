@@ -105,7 +105,10 @@ export function actionErrorMessage(err) {
 /** Fields a Student may request to edit (never number/academic year/campus/program). */
 const EDITABLE_FIELD_KEYS = ["first_name", "middle_name", "last_name", "year_level", "section"];
 
-function sameField(a, b) {
+function sameField(a, b, field) {
+  if (field === "year_level" && a != null && a !== "" && b != null && b !== "") {
+    return Number(a) === Number(b);
+  }
   const norm = (value) => String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
   return norm(a) === norm(b);
 }
@@ -118,8 +121,7 @@ export function editedEditableFields(screening, form) {
   if (!screening || !form) return [];
   return EDITABLE_FIELD_KEYS.filter((key) => {
     const extracted = screening[`extracted_${key}`];
-    if (extracted === null || extracted === undefined) return false;
-    return !sameField(form[key], extracted);
+    return !sameField(form[key], extracted, key);
   });
 }
 

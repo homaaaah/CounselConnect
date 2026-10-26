@@ -187,14 +187,14 @@ class AppointmentsRepository(BaseRepository[Appointment]):
 
     def active_counselor_ids(self):
         from app.modules.accounts.models import User
-        return list(self.session.scalars(select(User.user_id).where(User.role_code == "COUNSELOR", User.account_status == "ACTIVE")))
+        return list(self.session.scalars(select(User.user_id).where(User.role_code == "COUNSELOR", User.account_status == "ACTIVE", User.is_deactivated.is_(False))))
 
     def active_counselors(self):
         from app.modules.accounts.models import User
         return list(self.session.scalars(
             select(User).where(
                 User.role_code == "COUNSELOR",
-                User.account_status == "ACTIVE",
+                User.account_status == "ACTIVE", User.is_deactivated.is_(False),
             ).order_by(User.last_name, User.first_name, User.user_id)
         ))
 
@@ -366,7 +366,7 @@ class AppointmentsRepository(BaseRepository[Appointment]):
             active_counselor = select(User.user_id).where(
                 User.user_id == AvailabilitySlot.counselor_user_id,
                 User.role_code == "COUNSELOR",
-                User.account_status == "ACTIVE",
+                User.account_status == "ACTIVE", User.is_deactivated.is_(False),
             ).exists()
             stmt = stmt.where(
                 AvailabilitySlot.status == "AVAILABLE",

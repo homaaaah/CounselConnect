@@ -140,6 +140,12 @@ class AuthService(BaseService[User]):
                 message="Incorrect identifier or password.",
                 status_code=401,
             )
+        verified_hash = user.password_hash
+        user = self.accounts.lock_user(user.user_id)
+        if user is None or (user.password_hash != verified_hash and not verify_password(password, user.password_hash)):
+            raise AppError(code="INVALID_CREDENTIALS", message="Incorrect identifier or password.", status_code=401)
+        if user.is_deactivated:
+            raise AppError(code="ACCOUNT_DEACTIVATED", message="This account is deactivated.", status_code=403)
         if user.account_status not in _LOGIN_ALLOWED_STATUSES:
             raise AppError(
                 code="ACCOUNT_NOT_LOGINABLE",
@@ -223,7 +229,16 @@ class AuthService(BaseService[User]):
                     message="Request blocked: missing or invalid CSRF token.",
                     status_code=403,
                 )
-        user = self.accounts.get(session.user_id)
+        # Activity writes use User -> session order, matching login/deactivation.
+        # Socket revalidation uses a fresh, short-lived read-only transaction;
+        # it must not pre-lock an actor before domain participant lock ordering.
+        user = self.accounts.lock_user(session.user_id) if record_activity else self.accounts.get(session.user_id)
+        if record_activity:
+            session = self.repository.find_session_by_token_hash(sha256_digest(raw_credential), lock=True)
+            if session is None or not self._is_live(session):
+                raise AppError(code="SESSION_INVALID", message="Your session is invalid or has expired. Sign in again.", status_code=401)
+        if user is not None and user.is_deactivated:
+            raise AppError(code="ACCOUNT_DEACTIVATED", message="This account is deactivated.", status_code=403)
         if user is None or user.account_status not in _LOGIN_ALLOWED_STATUSES:
             # Account disabled/restricted after login: kill the session.
             self.repository.revoke_session(session.session_id, REVOCATION_ACCOUNT)

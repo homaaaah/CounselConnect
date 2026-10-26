@@ -41,10 +41,13 @@ export function useProfileChangeRequests(enabled = true) {
     void load();
   }, [load]);
 
-  async function approve(changeRequestId) {
+  async function approve(changeRequestId, submissionVersion) {
     setBusyId(changeRequestId);
     try {
-      await request(`/profile-change-requests/${changeRequestId}/approve`, { method: "POST" });
+      await request(`/profile-change-requests/${changeRequestId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ submission_version: submissionVersion }),
+      });
       await load();
       return { success: true };
     } catch (err) {
@@ -54,17 +57,17 @@ export function useProfileChangeRequests(enabled = true) {
     }
   }
 
-  async function reject(changeRequestId, reason) {
+  async function reject(changeRequestId, reason, submissionVersion) {
     setBusyId(changeRequestId);
     try {
-      await request(`/profile-change-requests/${changeRequestId}/reject`, {
+      await request(`/profile-change-requests/${changeRequestId}/return`, {
         method: "POST",
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ submission_version: submissionVersion, reason }),
       });
       await load();
       return { success: true };
     } catch (err) {
-      return { success: false, message: toError(err, "Could not reject this request.") };
+      return { success: false, message: toError(err, "Could not return this request.") };
     } finally {
       if (mounted.current) setBusyId(null);
     }

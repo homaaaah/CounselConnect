@@ -5,6 +5,8 @@ import RegisterPage from "./pages/RegisterPage";
 import StudentHomePage from "./pages/student/student_homepage";
 import CounselorDashboard from "./pages/counselor/counselor_dashboard";
 import CounselorUsersPage from "./pages/counselor/CounselorUsersPage";
+import UsersManagementPage from "./pages/superadmin/UsersManagementPage";
+import CorrectionsPage from "./pages/superadmin/CorrectionsPage";
 import RegistrationStatusPage from "./pages/student/RegistrationStatusPage";
 import StudentAppointmentsPage from "./pages/student/StudentAppointmentsPage";
 import CounselorAppointmentsPage from "./pages/counselor/CounselorAppointmentsPage";
@@ -145,7 +147,7 @@ function AppShell() {
         {page === "register" && <RegisterPage />}
         {page === "home" && (session.user
           ? session.user.role_code === "SUPERADMIN"
-            ? <CounselorUsersPage canRecover />
+            ? <UsersManagementPage user={session.user} />
             : session.user.role_code === "COUNSELOR"
               ? <CounselorDashboard user={session.user} />
               : <StudentHomePage user={session.user} />
@@ -158,7 +160,7 @@ function AppShell() {
             : <p role="alert" className="p-6">Appointments require an active Student or Counselor account.</p>
           : <LoginPage onSignedIn={session.accept} />)}
         {page === "registration" && (session.user?.role_code === "STUDENT"
-          ? <RegistrationStatusPage key={session.user.user_id} user={session.user} onRejected={handleRejected} />
+          ? <RegistrationStatusPage key={session.user.user_id} user={session.user} onRejected={handleRejected} onEnrollmentChanged={session.continueSession} />
           : <LoginPage onSignedIn={session.accept} />)}
         {page === "schedule" && (session.user?.role_code === "COUNSELOR"
           ? <CounselorSchedulePage key={session.user.user_id} user={session.user} />
@@ -167,13 +169,17 @@ function AppShell() {
           ? <CounselorHistoryPage key={session.user.user_id} user={session.user} />
           : <LoginPage onSignedIn={session.accept} />)}
         {page === "users" && (session.user?.role_code === "SUPERADMIN"
-          ? <CounselorUsersPage canRecover />
+          ? <UsersManagementPage user={session.user} />
           : <LoginPage onSignedIn={session.accept} />)}
+        {page === "corrections" && (session.user?.role_code === "SUPERADMIN"
+          ? <CorrectionsPage key={session.user.user_id} /> : <LoginPage onSignedIn={session.accept} />)}
+        {page === "student-directory" && (session.user?.role_code === "SUPERADMIN"
+          ? <CounselorUsersPage canRecover showCorrections={false} /> : <LoginPage onSignedIn={session.accept} />)}
         {sessionAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <ScheduledSessionPage key={`${session.user.user_id}-${sessionAppointmentId}`} user={session.user} appointmentId={sessionAppointmentId} />}
         {recordAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <SessionRecordPage key={`${session.user.user_id}-record-${recordAppointmentId}`} user={session.user} appointmentId={recordAppointmentId} />}
-        {!["login", "staff-login", "register", "registration", "users", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && !recordAppointmentId && (
+        {!["login", "staff-login", "register", "registration", "users", "corrections", "student-directory", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && !recordAppointmentId && (
           <LandingPage
             onSignedIn={session.accept}
           />

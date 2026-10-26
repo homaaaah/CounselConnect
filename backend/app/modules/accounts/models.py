@@ -64,6 +64,7 @@ class User(Base):
             "account_status IN ('PENDING_VERIFICATION', 'ACTIVE', 'VERIFICATION_EXPIRED')",
             name="chk_users_account_status",
         ),
+        CheckConstraint("is_deactivated IN (0, 1)", name="chk_users_is_deactivated"),
     )
 
     user_id: Mapped[int] = mapped_column(BIGINT(unsigned=True), primary_key=True, autoincrement=True)
@@ -71,6 +72,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role_code: Mapped[str] = mapped_column(String(32), nullable=False)
     account_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Operational status is independent of enrollment eligibility.
+    is_deactivated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("FALSE"), insert_default=False
+    )
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     middle_name: Mapped[str | None] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)

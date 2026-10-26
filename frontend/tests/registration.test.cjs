@@ -311,6 +311,47 @@ test("editing an editable field submits a profile edit request with the token", 
   assert.match(JSON.stringify(root.toJSON()), /pending Superadmin approval/i);
 });
 
+for (const scenario of [
+  { title: "adding an absent middle name", field: "middle-name", value: "Maria Luisa", first: "Ana", pending: true },
+  { title: "server finds no change after Unicode casefold", field: "first-name", value: "STRASSE", first: "Straße", pending: false },
+]) {
+  test(`${scenario.title} uses correction submission and the authoritative outcome`, async (t) => {
+    setCsrfToken(null);
+    const calls = [];
+    t.mock.method(global, "fetch", async (url, init = {}) => {
+      const path = new URL(url, "http://localhost:5173").pathname;
+      calls.push({ path, ...init });
+      if (path.endsWith("/accounts/campuses")) return json({ items: [{ campus_id: 1, campus_name: "Main" }] });
+      if (path.endsWith("/accounts/programs")) return json({ items: [{ program_id: 1, program_name: "BSIT" }] });
+      if (path.endsWith("/cor-screenings/request-edit")) {
+        return json({ user: { user_id: 2, account_status: "ACTIVE" }, profile: {},
+          screening: screening({ status: "PASSED" }),
+          change_request: scenario.pending ? { change_request_id: 7, status: "PENDING" } : null });
+      }
+      return json({ user: { user_id: 2 }, verification_token: "middle-token",
+        screening: screening({ extracted_first_name: scenario.first, extracted_middle_name: null,
+          extracted_last_name: "Santos", extracted_student_number: "20231234-A",
+          extracted_campus_id: 1, extracted_program_id: 1, extracted_year_level: 1, extracted_section: "A" }) }, 201);
+    });
+    const root = await mount(t);
+    await fillValid(root);
+    await submit(root);
+    assert.match(JSON.stringify(root.toJSON()), /Confirm details/);
+    await change(root, `confirm-${scenario.field}`, scenario.value);
+    const button = root.root.findAllByType("button").find((node) => node.children.join("").includes("Submit edit request"));
+    assert.ok(button);
+    await act(async () => { await button.props.onClick(); });
+    const request = calls.find((call) => call.path.endsWith("/cor-screenings/request-edit"));
+    assert.ok(request);
+    assert.equal(request.headers["X-COR-Token"], "middle-token");
+    assert.equal(JSON.parse(request.body)[scenario.field.replaceAll("-", "_")], scenario.value);
+    assert.ok(!calls.some((call) => call.path.endsWith("/cor-screenings/confirm")));
+    const rendered = JSON.stringify(root.toJSON());
+    assert.match(rendered, /Account activated/);
+    assert.equal(/pending Superadmin approval/i.test(rendered), scenario.pending);
+  });
+}
+
 test("a technical screening failure shows a retry message and creates no account", async (t) => {
   setCsrfToken(null);
   t.mock.method(global, "fetch", async (url) => {

@@ -1,0 +1,13 @@
+[
+  {"field":"middle_name","extracted":null,"proposed":"  Maria\t Luisa  ","canonical":"Maria Luisa","changed":true},
+  {"field":"middle_name","extracted":"Dela","proposed":" \t ","canonical":null,"changed":true},
+  {"field":"middle_name","extracted":null,"proposed":" \u00a0 ","canonical":null,"changed":false},
+  {"field":"first_name","extracted":"Ana Maria","proposed":"  Ana\t\u00a0Maria  ","canonical":"Ana Maria","changed":false},
+  {"field":"last_name","extracted":"Dela Cruz","proposed":"  DELA   CRUZ ","canonical":"DELA CRUZ","changed":false},
+  {"field":"section","extracted":"A 1","proposed":" a\n1 ","canonical":"a 1","changed":false},
+  {"field":"first_name","extracted":"Straße","proposed":"STRASSE","canonical":"STRASSE","changed":false,"preview_changed":true},
+  {"field":"last_name","extracted":"O'Neil","proposed":"ONeil","canonical":"ONeil","changed":true},
+  {"field":"first_name","extracted":"José","proposed":"Jose","canonical":"Jose","changed":true},
+  {"field":"year_level","extracted":1,"proposed":1,"canonical":1,"changed":false},
+  {"field":"year_level","extracted":1,"proposed":10,"canonical":10,"changed":true}
+]

@@ -9,7 +9,7 @@ Always read `.ai/RULES.md` and `.ai/CURRENT_TASK.md`, then only one primary rout
 | `architecture` | `.ai/ARCHITECTURE.md`, `.ai/DECISIONS.md` |
 | `requirements` | `.ai/REQUIREMENTS.md` |
 | `api-or-schema` | `docs/API_CONTRACT.md`, `.ai/NAMING_CONVENTIONS.md`, `docs/DATABASE.md`, owning feature doc; add `contracts/openapi.json` when it exists and implemented endpoint detail matters |
-| `registration` | `docs/REGISTRATION_VERIFICATION.md`, `docs/USER_ROLES.md`; cleanup implementation: `backend/app/modules/cor_screening/cleanup.py` |
+| `registration` | `docs/REGISTRATION_VERIFICATION.md`, `docs/REGISTRATION_CORRECTIONS.md` (corrections + Users backend/UI contract), `docs/USER_ROLES.md`; cleanup implementation: `backend/app/modules/cor_screening/cleanup.py` |
 | `auth-rbac` | `docs/USER_ROLES.md`, `docs/SECURITY.md` |
 | `appointments` | `docs/APPOINTMENT_SCHEDULING.md`; add `docs/REAL_TIME_MESSAGING.md` only for online-session integration |
 | `calls` | `docs/AUDIO_VIDEO_CALLS.md`, `docs/APPOINTMENT_SCHEDULING.md`; add `docs/REAL_TIME_MESSAGING.md` for the media/chat boundary |

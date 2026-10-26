@@ -155,27 +155,27 @@ function changeLines(row) {
 function PendingEditRequests() {
   const { items, loading, error, busyId, load, approve, reject } = useProfileChangeRequests(true);
   const toast = useToast();
-  const [rejectingId, setRejectingId] = useState(null);
+  const [returningId, setReturningId] = useState(null);
   const [reason, setReason] = useState("");
 
-  async function handleApprove(changeRequestId) {
-    const result = await approve(changeRequestId);
+  async function handleApprove(changeRequestId, submissionVersion) {
+    const result = await approve(changeRequestId, submissionVersion);
     if (result.success) toast.success("Profile edit approved.", { title: "Edit request" });
     else toast.error(result.message, { title: "Approval failed" });
   }
 
-  async function handleReject(changeRequestId) {
+  async function handleReturn(changeRequestId, submissionVersion) {
     if (!reason.trim()) {
-      toast.error("Enter a reason for rejecting this request.", { title: "Reason required" });
+      toast.error("Explain what needs to be corrected.", { title: "Reason required" });
       return;
     }
-    const result = await reject(changeRequestId, reason.trim());
+    const result = await reject(changeRequestId, reason.trim(), submissionVersion);
     if (result.success) {
-      toast.success("Profile edit rejected.", { title: "Edit request" });
-      setRejectingId(null);
+      toast.success("Profile edit returned for correction.", { title: "Edit request" });
+      setReturningId(null);
       setReason("");
     } else {
-      toast.error(result.message, { title: "Rejection failed" });
+      toast.error(result.message, { title: "Return failed" });
     }
   }
 
@@ -227,14 +227,15 @@ function PendingEditRequests() {
               ))}
             </dl>
 
-            {rejectingId === cr.change_request_id ? (
+            {returningId === cr.change_request_id ? (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <input
                   id={`edit-reason-${cr.change_request_id}`}
                   type="text"
+                  maxLength={500}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  placeholder="Reason for rejection"
+                  placeholder="What needs to be corrected?"
                   className="form-input max-w-xs"
                 />
                 <button
@@ -242,11 +243,11 @@ function PendingEditRequests() {
                   type="button"
                   className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
                   disabled={busyId === cr.change_request_id}
-                  onClick={() => handleReject(cr.change_request_id)}
+                  onClick={() => handleReturn(cr.change_request_id, cr.submission_version)}
                 >
-                  {busyId === cr.change_request_id ? "Rejecting…" : "Confirm reject"}
+                  {busyId === cr.change_request_id ? "Returning…" : "Confirm return"}
                 </button>
-                <button type="button" className="linklike" onClick={() => { setRejectingId(null); setReason(""); }}>
+                <button type="button" className="linklike" onClick={() => { setReturningId(null); setReason(""); }}>
                   Cancel
                 </button>
               </div>
@@ -256,8 +257,9 @@ function PendingEditRequests() {
                   id={`edit-approve-${cr.change_request_id}`}
                   type="button"
                   className="rounded-md border border-emerald-300 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
-                  disabled={busyId === cr.change_request_id}
-                  onClick={() => handleApprove(cr.change_request_id)}
+                  disabled={busyId === cr.change_request_id || !Number.isInteger(cr.submission_version) || cr.submission_version < 1}
+                  title={cr.submission_version == null ? "Approval requires a recorded submission version." : undefined}
+                  onClick={() => handleApprove(cr.change_request_id, cr.submission_version)}
                 >
                   {busyId === cr.change_request_id ? "Approving…" : "Approve"}
                 </button>
@@ -265,9 +267,9 @@ function PendingEditRequests() {
                   id={`edit-reject-${cr.change_request_id}`}
                   type="button"
                   className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                  onClick={() => { setRejectingId(cr.change_request_id); setReason(""); }}
+                  onClick={() => { setReturningId(cr.change_request_id); setReason(""); }}
                 >
-                  Reject
+                  Return
                 </button>
               </div>
             )}
@@ -278,7 +280,7 @@ function PendingEditRequests() {
   );
 }
 
-export default function CounselorUsersPage({ canRecover = false }) {
+export default function CounselorUsersPage({ canRecover = false, showCorrections = true }) {
   const {
     items,
     total,
@@ -327,7 +329,7 @@ export default function CounselorUsersPage({ canRecover = false }) {
             <p className="text-sm text-slate-600">{total} student{total === 1 ? "" : "s"}</p>
           </div>
 
-          {canRecover && <PendingEditRequests />}
+          {canRecover && showCorrections && <PendingEditRequests />}
 
           <form
             className="mt-5 flex flex-wrap items-center gap-3"

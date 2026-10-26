@@ -68,6 +68,11 @@ SESSION_RECORDS_MIGRATION_FILE = (
 APPOINTMENT_CONCERNS_MIGRATION_FILE = (
     BACKEND_ROOT / "migrations" / "versions" / "20261026_appointment_concerns.py"
 )
+CORRECTION_MIGRATION_FILES = (
+    BACKEND_ROOT / "migrations" / "versions" / "20261025_correction_context.py",
+    BACKEND_ROOT / "migrations" / "versions" / "20261025_account_screening_scope.py",
+    BACKEND_ROOT / "migrations" / "versions" / "20261025_pending_correction.py",
+)
 
 TEST_DB_NAME = "counselconnect_test"
 BASELINE_REVISION = "8f0f8c585641"
@@ -208,6 +213,17 @@ def load_appointment_concerns_migration_module():
     return module
 
 
+def load_correction_migration_modules():
+    modules = []
+    for migration_file in CORRECTION_MIGRATION_FILES:
+        spec = importlib.util.spec_from_file_location(migration_file.stem, migration_file)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        modules.append(module)
+    return modules
+
+
 @pytest.fixture(scope="session")
 def mysql_test_engine():
     """Create, own, and remove a randomly named disposable MySQL schema."""
@@ -287,6 +303,8 @@ def mysql_test_engine():
                 load_weekly_sched_softdel_migration_module().upgrade()
                 load_session_records_migration_module().upgrade()
                 load_appointment_concerns_migration_module().upgrade()
+                for migration in load_correction_migration_modules():
+                    migration.upgrade()
         yield engine
     finally:
         if engine is not None:

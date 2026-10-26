@@ -18,6 +18,7 @@ class LoginRequest(BaseModel):
 
 
 class SessionUser(BaseModel):
+    is_deactivated: bool = False
     user_id: int
     email: str
     role_code: str
