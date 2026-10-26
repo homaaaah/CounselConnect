@@ -486,7 +486,209 @@ def test_signaling_creates_no_audit_events_or_call_rows(
     with _ready(appointment_id, committed_client) as socket:
         assert socket.receive_json()["type"] == "room-state"
         socket.send_json({"type": "ready"})
+        socket.send_json({"type": "expression", "event": "consent", "id": "request-1"})
+        socket.send_json({
+            "type": "expression",
+            "event": "result",
+            "id": "request-1",
+            "label": "neutral",
+            "confidence": 0.72,
+        })
+        socket.send_json({"type": "expression", "event": "stop"})
         socket.send_json({"type": "hangup"})
     with Session(mysql_test_engine) as session:
         after = session.scalar(select(func.count()).select_from(AuditEvent))
     assert before == after
+
+
+def _paired_sockets(committed_client, app, call_data, mysql_test_engine):
+    appointment_id = _appointment(mysql_test_engine, call_data)
+    counselor_client = TestClient(app)
+    _login(committed_client, call_data["emails"]["student"])
+    _login(counselor_client, call_data["emails"]["counselor"])
+    return appointment_id, committed_client, counselor_client
+
+
+def test_expression_messages_relay_label_and_confidence_only(
+    committed_client, app, call_data, mysql_test_engine, socket_engine
+):
+    appointment_id, student_client, counselor_client = _paired_sockets(
+        committed_client, app, call_data, mysql_test_engine
+    )
+    with _ready(appointment_id, student_client) as student:
+        assert student.receive_json()["type"] == "room-state"
+        student.send_json({"type": "ready"})
+        with _ready(appointment_id, counselor_client) as counselor:
+            assert counselor.receive_json()["type"] == "room-state"
+            counselor.send_json({"type": "ready"})
+            assert counselor.receive_json()["initiator"] is True
+            assert student.receive_json()["type"] == "peer-joined"
+
+            counselor.send_json({"type": "expression", "event": "request", "id": "request-1"})
+            assert student.receive_json() == {
+                "type": "expression",
+                "event": "request",
+                "id": "request-1",
+            }
+
+            student.send_json({"type": "expression", "event": "consent", "id": "request-1"})
+            assert counselor.receive_json() == {
+                "type": "expression",
+                "event": "consent",
+                "id": "request-1",
+            }
+
+            student.send_json({
+                "type": "expression",
+                "event": "result",
+                "id": "request-1",
+                "label": "neutral",
+                "confidence": 0.7233333,
+                "frames": ["never-relayed"],
+                "embedding": "[1,2,3]",
+            })
+            assert counselor.receive_json() == {
+                "type": "expression",
+                "event": "result",
+                "id": "request-1",
+                "label": "neutral",
+                "confidence": 0.723,
+            }
+
+            student.send_json({
+                "type": "expression",
+                "event": "result",
+                "id": "request-1",
+                "label": "happy",
+                "confidence": 0.81,
+            })
+            assert counselor.receive_json() == {
+                "type": "expression",
+                "event": "result",
+                "id": "request-1",
+                "label": "happy",
+                "confidence": 0.81,
+            }
+
+            counselor.send_json({"type": "expression", "event": "stop"})
+            assert student.receive_json() == {"type": "expression", "event": "stop"}
+
+
+def test_expression_student_events_relay_and_student_can_stop(
+    committed_client, app, call_data, mysql_test_engine, socket_engine
+):
+    appointment_id, student_client, counselor_client = _paired_sockets(
+        committed_client, app, call_data, mysql_test_engine
+    )
+    with _ready(appointment_id, student_client) as student:
+        assert student.receive_json()["type"] == "room-state"
+        student.send_json({"type": "ready"})
+        with _ready(appointment_id, counselor_client) as counselor:
+            assert counselor.receive_json()["type"] == "room-state"
+            counselor.send_json({"type": "ready"})
+            assert counselor.receive_json()["initiator"] is True
+            assert student.receive_json()["type"] == "peer-joined"
+
+            counselor.send_json({"type": "expression", "event": "request", "id": "request-1"})
+            assert student.receive_json()["event"] == "request"
+            student.send_json({"type": "expression", "event": "decline", "id": "request-1"})
+            assert counselor.receive_json() == {
+                "type": "expression",
+                "event": "decline",
+                "id": "request-1",
+            }
+
+            counselor.send_json({"type": "expression", "event": "request", "id": "request-2"})
+            assert student.receive_json()["event"] == "request"
+            student.send_json({"type": "expression", "event": "unavailable", "id": "request-2"})
+            assert counselor.receive_json() == {
+                "type": "expression",
+                "event": "unavailable",
+                "id": "request-2",
+            }
+
+            counselor.send_json({"type": "expression", "event": "request", "id": "request-3"})
+            assert student.receive_json()["event"] == "request"
+            student.send_json({"type": "expression", "event": "stop"})
+            assert counselor.receive_json() == {"type": "expression", "event": "stop"}
+
+
+def test_expression_role_matrix_is_enforced(
+    committed_client, app, call_data, mysql_test_engine, socket_engine
+):
+    appointment_id = _appointment(mysql_test_engine, call_data)
+    _login(committed_client, call_data["emails"]["student"])
+    with _ready(appointment_id, committed_client) as student:
+        assert student.receive_json()["type"] == "room-state"
+        student.send_json({"type": "expression", "event": "request", "id": "request-1"})
+        with pytest.raises(WebSocketDisconnect):
+            student.receive_json()
+
+    appointment_id = _appointment(
+        mysql_test_engine, call_data, start_minutes=-10, end_minutes=50
+    )
+    counselor_client = TestClient(app)
+    _login(counselor_client, call_data["emails"]["counselor"])
+    with _ready(appointment_id, counselor_client) as counselor:
+        assert counselor.receive_json()["type"] == "room-state"
+        counselor.send_json({"type": "expression", "event": "consent", "id": "request-1"})
+        with pytest.raises(WebSocketDisconnect):
+            counselor.receive_json()
+
+    with _ready(appointment_id, counselor_client) as counselor:
+        assert counselor.receive_json()["type"] == "room-state"
+        counselor.send_json({
+            "type": "expression",
+            "event": "result",
+            "id": "request-1",
+            "label": "neutral",
+            "confidence": 0.9,
+        })
+        with pytest.raises(WebSocketDisconnect):
+            counselor.receive_json()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "expression", "event": "unknown", "id": "request-1"},
+        {"type": "expression", "event": "request"},
+        {"type": "expression", "event": "request", "id": ""},
+        {"type": "expression", "event": "request", "id": "x" * 65},
+        {"type": "expression", "event": "result", "id": "request-1", "confidence": 0.9},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "depressed", "confidence": 0.9},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": 1.1},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": -0.1},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": "0.9"},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": True},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": 10 ** 1000},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": float("nan")},
+        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": float("inf")},
+    ],
+)
+def test_expression_rejects_invalid_payloads(
+    committed_client, call_data, mysql_test_engine, socket_engine, payload
+):
+    appointment_id = _appointment(mysql_test_engine, call_data)
+    _login(committed_client, call_data["emails"]["student"])
+    with _ready(appointment_id, committed_client) as socket:
+        assert socket.receive_json()["type"] == "room-state"
+        socket.send_json(payload)
+        with pytest.raises(WebSocketDisconnect):
+            socket.receive_json()
+
+
+def test_expression_rejects_a_parser_limited_integer(
+    committed_client, call_data, mysql_test_engine, socket_engine
+):
+    appointment_id = _appointment(mysql_test_engine, call_data)
+    _login(committed_client, call_data["emails"]["student"])
+    raw = (
+        '{"type":"expression","event":"result","id":"request-1",'
+        '"label":"neutral","confidence":' + ("9" * 5_000) + "}"
+    )
+    with _ready(appointment_id, committed_client) as socket:
+        assert socket.receive_json()["type"] == "room-state"
+        socket.send_text(raw)
+        with pytest.raises(WebSocketDisconnect):
+            socket.receive_json()

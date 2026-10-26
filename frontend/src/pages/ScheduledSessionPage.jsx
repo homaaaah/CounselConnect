@@ -140,6 +140,7 @@ export default function ScheduledSessionPage({ user, appointmentId }) {
             status={session.status}
             now={Date.now()}
             selfName={selfName}
+            role={user.role_code}
           />
           {chat.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-red-700">{chat.error}</p>}
           {beforeStart && <section className="mt-6 rounded-lg bg-emerald-50 p-5">

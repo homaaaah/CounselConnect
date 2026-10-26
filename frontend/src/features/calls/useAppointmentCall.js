@@ -37,6 +37,7 @@ export function useAppointmentCall({ appointmentId, canCall }) {
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [peerRole, setPeerRole] = useState(null);
+  const [expressionEvent, setExpressionEvent] = useState(null);
 
   const mounted = useRef(false);
   const runRef = useRef(0);
@@ -51,9 +52,14 @@ export function useAppointmentCall({ appointmentId, canCall }) {
 
   const send = useCallback((payload) => {
     const socketInstance = socket.current;
-    if (!socketInstance || socketInstance.readyState !== 1) return;
+    if (!socketInstance || socketInstance.readyState !== 1) return false;
     socketInstance.send(JSON.stringify(payload));
+    return true;
   }, []);
+
+  const sendExpression = useCallback((payload) => {
+    return send({ type: "expression", ...payload });
+  }, [send]);
 
   const cleanupCall = useCallback(() => {
     const socketInstance = socket.current;
@@ -92,6 +98,7 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     setMicOn(false);
     setCamOn(false);
     setPeerRole(null);
+    setExpressionEvent(null);
   }, []);
 
   const endLocally = useCallback((reason = "") => {
@@ -232,6 +239,11 @@ export function useAppointmentCall({ appointmentId, canCall }) {
         case "call-ended":
           endLocally(message.reason || "PEER_HUNG_UP");
           break;
+        case "expression":
+          if (mounted.current && run === runRef.current && socket.current === activeSocket) {
+            setExpressionEvent(message);
+          }
+          break;
         default:
           break;
       }
@@ -362,9 +374,11 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     micOn,
     camOn,
     peerRole,
+    expressionEvent,
     active: Boolean(localStream) || ["joining", "waiting", "negotiating", "connected"].includes(phase),
     join,
     hangUp,
+    sendExpression,
     toggleMic,
     toggleCam,
   };

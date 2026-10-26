@@ -178,13 +178,9 @@ function AppShell() {
           ? <CounselorUsersPage canRecover showCorrections={false} /> : <LoginPage audience="superadmin" onSignedIn={session.accept} />)}
         {sessionAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <ScheduledSessionPage key={`${session.user.user_id}-${sessionAppointmentId}`} user={session.user} appointmentId={sessionAppointmentId} />}
-<<<<<<< HEAD
         {recordAppointmentId && session.user?.account_status === "ACTIVE" && ["STUDENT", "COUNSELOR"].includes(session.user.role_code) &&
           <SessionRecordPage key={`${session.user.user_id}-record-${recordAppointmentId}`} user={session.user} appointmentId={recordAppointmentId} />}
-        {!["login", "staff-login", "register", "registration", "users", "corrections", "student-directory", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && !recordAppointmentId && (
-=======
-        {!["login", "staff-login", "superadmin-login", "register", "registration", "users", "corrections", "student-directory", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && (
->>>>>>> external/fullstack/superadminSide
+        {!["login", "staff-login", "superadmin-login", "register", "registration", "users", "corrections", "student-directory", "home", "appointments", "schedule", "history"].includes(page) && !sessionAppointmentId && !recordAppointmentId && (
           <LandingPage
             onSignedIn={session.accept}
           />

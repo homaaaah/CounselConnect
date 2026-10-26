@@ -100,7 +100,8 @@ async def call_socket(websocket: WebSocket, appointment_id: int):
                 break
             try:
                 message = json.loads(raw_message)
-            except json.JSONDecodeError:
+            except ValueError:
+                # Includes JSONDecodeError and parser-limit ValueErrors.
                 await websocket.close(code=1008, reason="Invalid signaling message")
                 break
             event = call_realtime.validate_signal(message)
@@ -116,6 +117,11 @@ async def call_socket(websocket: WebSocket, appointment_id: int):
                     {"type": "call-ended", "reason": "PEER_HUNG_UP"},
                 )
                 break
+            elif event["type"] == "expression":
+                if not call_realtime.expression_allowed(peer.role_code, event["event"]):
+                    await websocket.close(code=1008, reason="Invalid signaling message")
+                    break
+                call_realtime.registry.relay(appointment_id, peer.user_id, event)
             else:
                 call_realtime.registry.relay(appointment_id, peer.user_id, event)
     except (WebSocketDisconnect, AppError):

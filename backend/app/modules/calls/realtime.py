@@ -1,13 +1,15 @@
 """Ephemeral, single-process signaling rooms for appointment calls (ADR-034).
 
-The registry carries SDP/ICE messages between the two authorized participants
-only. It never persists, logs, or replays signaling payloads. A process restart
-or multi-worker deployment simply drops rooms; clients must rejoin.
+The registry carries SDP/ICE and ephemeral expression-cue events between the
+two authorized participants only. It never persists, logs, or replays signaling
+payloads. A process restart or multi-worker deployment simply drops rooms;
+clients must rejoin.
 """
 
 from __future__ import annotations
 
 import asyncio
+import math
 from dataclasses import dataclass
 from threading import RLock
 from time import monotonic
@@ -22,6 +24,18 @@ from app.shared.realtime import SocketIdentity
 
 SOCKET_REVALIDATE_SECONDS = 30
 QUEUE_SIZE = 100
+
+EXPRESSION_EVENTS = {"request", "consent", "decline", "unavailable", "result", "stop"}
+EXPRESSION_LABELS = {
+    "neutral",
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgusted",
+    "surprised",
+}
+EXPRESSION_STUDENT_EVENTS = {"consent", "decline", "unavailable", "result"}
 
 
 @dataclass(eq=False)
@@ -71,7 +85,56 @@ def validate_signal(message) -> dict | None:
         if candidate is not None and not isinstance(candidate, dict):
             return None
         return {"type": kind, "candidate": candidate}
+    if kind == "expression":
+        return _validate_expression(message)
     return None
+
+
+def _validate_expression(message: dict) -> dict | None:
+    """Validate one ephemeral expression-cue message; never logs its payload."""
+    event = message.get("event")
+    if not isinstance(event, str) or event not in EXPRESSION_EVENTS:
+        return None
+    if event == "stop":
+        return {"type": "expression", "event": "stop"}
+    request_id = message.get("id")
+    if not isinstance(request_id, str) or not 1 <= len(request_id) <= 64:
+        return None
+    if event in EXPRESSION_STUDENT_EVENTS - {"result"}:
+        return {"type": "expression", "event": event, "id": request_id}
+    if event == "result":
+        label = message.get("label")
+        confidence = message.get("confidence")
+        if not isinstance(label, str) or label not in EXPRESSION_LABELS:
+            return None
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            return None
+        # Range-check before float conversion: an oversized JSON integer must
+        # not raise OverflowError and escape the 1008 validation path.
+        if not 0 <= confidence <= 1:
+            return None
+        value = float(confidence)
+        if not math.isfinite(value):
+            return None
+        return {
+            "type": "expression",
+            "event": "result",
+            "id": request_id,
+            "label": label,
+            "confidence": round(value, 3),
+        }
+    return {"type": "expression", "event": event, "id": request_id}
+
+
+def expression_allowed(role_code: str, event: str) -> bool:
+    """Enforce the expression role matrix on the server, not in the browser."""
+    if event == "request":
+        return role_code == "COUNSELOR"
+    if event in EXPRESSION_STUDENT_EVENTS:
+        return role_code == "STUDENT"
+    if event == "stop":
+        return role_code in ("STUDENT", "COUNSELOR")
+    return False
 
 
 class CallRoomRegistry:
