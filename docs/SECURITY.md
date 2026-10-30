@@ -66,7 +66,7 @@ A **technical** screening failure during registration (`derive_outcome == FAILED
 | Appointments | authorized durable records | owner/Counselor scope; mode compatibility; Counselor-only campus-location mutation |
 | Messages | authorized store; bodies purged 30 days after close | no recordings/transcripts/summaries/log bodies |
 | SOS | approved fields; retention pending | Counselor scope; no diagnostic claim |
-| Expression cue | active session only | no raw media/embedding/history; no SOS influence |
+| Facial observation | active session only; Counselor review expires within five minutes | no raw media/landmarks/embeddings/history; no record autofill; no SOS influence |
 | External resources | bounded metadata/canonical URL | allowlist, SSRF/redirect controls, Counselor review |
 | Internal resource files | controlled durable store | authorized retrieval, file validation |
 | CMS/contacts | structured durable records | Counselor-only mutation; sanitized rendering |

@@ -1,10 +1,63 @@
-# Current work: Session-long local expression cue (ADR-039)
+# Current work: Facial observation prototype
+
+## Task: MediaPipe facial observation prototype (2026-10-28)
+
+**Status: COMPLETED (prototype; real-device validation pending).**
+**Risk: HIGH** (privacy/AI behavior; replaced the ADR-039 emotion-cue path).
+**Source of truth:** `.kilo/plans/1792998659483-session-long-expression-cue.md`;
+`docs/FACIAL_OBSERVATION_PROTOTYPE_PLAN.md`;
+`docs/FACIAL_OBSERVATION_IMPLEMENTATION_PLAN.md`.
+
+Goal: optional, Counselor-requested, Student-consented local detection of selected visible
+movements (smile first), bounded observation slots over the appointment call WebSocket,
+Counselor-only temporary timeline + deterministic Sentence/Bullets summary, five-minute
+review expiry, no persistence/frames/landmarks/embeddings.
+
+Built: MediaPipe Face Landmarker adapter with local WASM/model assets; smile, brow raise,
+and brow furrow enabled at client request (thresholds unvalidated);
+`facial-observation` v1 protocol with server-enforced in-memory consent/role state;
+Counselor reducer/ring buffer/timeline and Sentence/Bullets summary; Student status-only UI;
+in-call popover and Counselor badge; legacy face-api expression path removed.
+
+Verification actually run:
+- `node --test tests/facial-observation.test.cjs tests/appointment-call.test.cjs` — 25 passed
+- `npm test` — 181 passed, 1 pre-existing calendar failure (`calendar month navigation stays within loaded data`, `frontend/tests/appointments.test.cjs`; known fixture/date drift, unrelated)
+- `npm run build` — passed; 102 modules; MediaPipe runtime lazy chunk; local `dist/mediapipe` assets present
+- `pytest app/tests/integration/test_calls.py -q` — 40 passed
+- `python scripts/export_openapi.py --check` — matches
+- `git diff --check` — no errors (LF/CRLF warnings only)
+
+Remaining limitations:
+- No real-device validation or two-browser rehearsal was run. Smile, brow raise, and brow
+  furrow are enabled at client request, but their thresholds remain unvalidated; disable any
+  movement that fails real-device validation.
+- Added automated coverage for closing the popover during observation, withdrawal during
+  review, and detector failure without ending the call. Review-expiry UI timing, real
+  network/log/browser-storage inspection, keyboard/small-screen checks, and model card/license
+  approval remain manual.
+- MediaPipe runs about once per second on the Student device; no worker offload.
+- Review snapshot is in-memory and clears on call-end/navigation as designed; no post-call report.
+- The Student device necessarily computes the movement flag to send it; “Counselor-only”
+  is a UI and protocol-recipient boundary, not cryptographic blindness.
+
+# Prior work: Session-long local expression cue (ADR-039)
 
 **Status: COMPLETED**
 **Risk: HIGH** (privacy/AI behavior); no backend storage, no DB, no HTTP endpoint.
 **Route:** `expression-cue` + `calls` (`.ai/CONTEXT_MAP.md`).
 **Source of truth:** `.kilo/plans/1792998659483-session-long-expression-cue.md`
 (supersedes the duration/consent cadence in `.kilo/plans/1792774405483-video-demo-test-button.md`).
+
+## Follow-up: merge update planning docs (2026-10-28)
+
+**Status: COMPLETED.** Copied the two new facial-observation plans and the target
+database v5 snapshot from `CounselConnect(Update)/` and linked the plans from
+`docs/README.md`. The unreferenced reviewer/enrollment/notification components and the
+live-flow tests were intentionally excluded pending a wiring/test decision. No application
+code, migration, or runtime behavior changed.
+
+Verification: all three files present; full frontend suite 189 passed. The SQL snapshot was
+not executed against a database; it is a documentation/reference artifact.
 
 ## Follow-up: Counselor-only result visibility (2026-10-26)
 

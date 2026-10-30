@@ -37,7 +37,7 @@ export function useAppointmentCall({ appointmentId, canCall }) {
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [peerRole, setPeerRole] = useState(null);
-  const [expressionEvent, setExpressionEvent] = useState(null);
+  const [observationEvent, setObservationEvent] = useState(null);
 
   const mounted = useRef(false);
   const runRef = useRef(0);
@@ -57,8 +57,8 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     return true;
   }, []);
 
-  const sendExpression = useCallback((payload) => {
-    return send({ type: "expression", ...payload });
+  const sendObservation = useCallback((payload) => {
+    return send({ type: "facial-observation", version: 1, ...payload });
   }, [send]);
 
   const cleanupCall = useCallback(() => {
@@ -98,7 +98,7 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     setMicOn(false);
     setCamOn(false);
     setPeerRole(null);
-    setExpressionEvent(null);
+    setObservationEvent(null);
   }, []);
 
   const endLocally = useCallback((reason = "") => {
@@ -239,9 +239,9 @@ export function useAppointmentCall({ appointmentId, canCall }) {
         case "call-ended":
           endLocally(message.reason || "PEER_HUNG_UP");
           break;
-        case "expression":
+        case "facial-observation":
           if (mounted.current && run === runRef.current && socket.current === activeSocket) {
-            setExpressionEvent(message);
+            setObservationEvent(message);
           }
           break;
         default:
@@ -374,11 +374,11 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     micOn,
     camOn,
     peerRole,
-    expressionEvent,
+    observationEvent,
     active: Boolean(localStream) || ["joining", "waiting", "negotiating", "connected"].includes(phase),
     join,
     hangUp,
-    sendExpression,
+    sendObservation,
     toggleMic,
     toggleCam,
   };

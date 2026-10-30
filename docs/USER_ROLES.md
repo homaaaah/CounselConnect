@@ -13,7 +13,7 @@ Sign-in entries: Students use `#login`, Counselors/Guidance Staff use `#staff-lo
 | Use normal Student services | Own, while `ACTIVE` | — | — |
 | Availability/appointments | Request/manage own; select compatible mode; join own confirmed online session | — | Manage slots, modes, decisions, outcomes, and campus Guidance Office locations |
 | Messaging/SOS | Own authorized interactions | — | Authorized interactions |
-| Session expression cue | Allow/decline the session-long local cue; sees sharing status only | — | Start/stop the consented live cue; the only role that sees the current result |
+| Facial observation | Allow/decline the local session; sees sharing status and Stop only | — | Request/finish/stop; the only role that sees the temporary timeline and summary |
 | Review/manage resources | View published | — | Manage |
 | Assistant | Use | — | Manage source content through CMS/resources |
 | CMS/FAQ/announcements/contacts | View published | — | Manage |

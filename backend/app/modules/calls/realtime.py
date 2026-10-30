@@ -1,6 +1,6 @@
 """Ephemeral, single-process signaling rooms for appointment calls (ADR-034).
 
-The registry carries SDP/ICE and ephemeral expression-cue events between the
+The registry carries SDP/ICE and ephemeral facial-observation events between the
 two authorized participants only. It never persists, logs, or replays signaling
 payloads. A process restart or multi-worker deployment simply drops rooms;
 clients must rejoin.
@@ -9,7 +9,6 @@ clients must rejoin.
 from __future__ import annotations
 
 import asyncio
-import math
 from dataclasses import dataclass
 from threading import RLock
 from time import monotonic
@@ -25,17 +24,29 @@ from app.shared.realtime import SocketIdentity
 SOCKET_REVALIDATE_SECONDS = 30
 QUEUE_SIZE = 100
 
-EXPRESSION_EVENTS = {"request", "consent", "decline", "unavailable", "result", "stop"}
-EXPRESSION_LABELS = {
-    "neutral",
-    "happy",
-    "sad",
-    "angry",
-    "fearful",
-    "disgusted",
-    "surprised",
+OBSERVATION_TYPE = "facial-observation"
+OBSERVATION_VERSION = 1
+OBSERVATION_EVENTS = {"request", "consent", "decline", "observation", "finish", "stop"}
+OBSERVATION_MOVEMENTS = {"smile", "brow_raise", "brow_furrow"}
+OBSERVATION_ENABLED_MOVEMENTS = {"smile", "brow_raise", "brow_furrow"}
+OBSERVATION_REASONS = {
+    "NO_FACE",
+    "MULTIPLE_FACES",
+    "CAMERA_OFF",
+    "MODEL_ERROR",
+    "BUSY",
+    "LOW_QUALITY",
 }
-EXPRESSION_STUDENT_EVENTS = {"consent", "decline", "unavailable", "result"}
+OBSERVATION_CONTROL_FIELDS = {"type", "version", "event", "request_id"}
+OBSERVATION_SLOT_FIELDS = OBSERVATION_CONTROL_FIELDS | {
+    "seq",
+    "elapsed_ms",
+    "valid",
+    "movements",
+    "unavailable_reason",
+}
+OBSERVATION_MAX_SEQ = 86_400
+OBSERVATION_MAX_ELAPSED_MS = 86_400_000
 
 
 @dataclass(eq=False)
@@ -51,6 +62,12 @@ class CallPeer:
     ready: bool = False
     window_started: float = 0.0
     window_count: int = 0
+
+
+@dataclass
+class ObservationConsent:
+    request_id: str | None = None
+    active: bool = False
 
 
 def authorize_call_socket(raw_credential: str | None, appointment_id: int) -> SocketIdentity:
@@ -85,52 +102,76 @@ def validate_signal(message) -> dict | None:
         if candidate is not None and not isinstance(candidate, dict):
             return None
         return {"type": kind, "candidate": candidate}
-    if kind == "expression":
-        return _validate_expression(message)
+    if kind == "facial-observation":
+        return _validate_facial_observation(message)
     return None
 
 
-def _validate_expression(message: dict) -> dict | None:
-    """Validate one ephemeral expression-cue message; never logs its payload."""
-    event = message.get("event")
-    if not isinstance(event, str) or event not in EXPRESSION_EVENTS:
+def _validate_facial_observation(message: dict) -> dict | None:
+    """Validate one bounded observation message; never logs its payload."""
+    version = message.get("version")
+    if isinstance(version, bool) or not isinstance(version, int) or version != OBSERVATION_VERSION:
         return None
-    if event == "stop":
-        return {"type": "expression", "event": "stop"}
-    request_id = message.get("id")
+    event = message.get("event")
+    if not isinstance(event, str) or event not in OBSERVATION_EVENTS:
+        return None
+    request_id = message.get("request_id")
     if not isinstance(request_id, str) or not 1 <= len(request_id) <= 64:
         return None
-    if event in EXPRESSION_STUDENT_EVENTS - {"result"}:
-        return {"type": "expression", "event": event, "id": request_id}
-    if event == "result":
-        label = message.get("label")
-        confidence = message.get("confidence")
-        if not isinstance(label, str) or label not in EXPRESSION_LABELS:
-            return None
-        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-            return None
-        # Range-check before float conversion: an oversized JSON integer must
-        # not raise OverflowError and escape the 1008 validation path.
-        if not 0 <= confidence <= 1:
-            return None
-        value = float(confidence)
-        if not math.isfinite(value):
+    if event != "observation":
+        if set(message) - OBSERVATION_CONTROL_FIELDS:
             return None
         return {
-            "type": "expression",
-            "event": "result",
-            "id": request_id,
-            "label": label,
-            "confidence": round(value, 3),
+            "type": OBSERVATION_TYPE,
+            "version": OBSERVATION_VERSION,
+            "event": event,
+            "request_id": request_id,
         }
-    return {"type": "expression", "event": event, "id": request_id}
+    if set(message) - OBSERVATION_SLOT_FIELDS:
+        return None
+    seq = message.get("seq")
+    elapsed_ms = message.get("elapsed_ms")
+    valid = message.get("valid")
+    movements = message.get("movements")
+    reason = message.get("unavailable_reason")
+    if isinstance(seq, bool) or not isinstance(seq, int) or not 0 <= seq <= OBSERVATION_MAX_SEQ:
+        return None
+    if isinstance(elapsed_ms, bool) or not isinstance(elapsed_ms, int) or not 0 <= elapsed_ms <= OBSERVATION_MAX_ELAPSED_MS:
+        return None
+    if not isinstance(valid, bool):
+        return None
+    if not isinstance(movements, list) or len(movements) > len(OBSERVATION_MOVEMENTS):
+        return None
+    if len(set(movements)) != len(movements):
+        return None
+    if any(not isinstance(movement, str) or movement not in OBSERVATION_MOVEMENTS for movement in movements):
+        return None
+    if any(movement not in OBSERVATION_ENABLED_MOVEMENTS for movement in movements):
+        return None
+    if valid:
+        if reason is not None:
+            return None
+    else:
+        if reason not in OBSERVATION_REASONS or movements:
+            return None
+    return {
+        "type": OBSERVATION_TYPE,
+        "version": OBSERVATION_VERSION,
+        "event": "observation",
+        "request_id": request_id,
+        "seq": seq,
+        "elapsed_ms": elapsed_ms,
+        "valid": valid,
+        "movements": movements,
+        "unavailable_reason": reason,
+    }
 
 
-def expression_allowed(role_code: str, event: str) -> bool:
-    """Enforce the expression role matrix on the server, not in the browser."""
-    if event == "request":
+def observation_allowed(role_code: str, event: str) -> bool:
+    """Enforce the facial-observation role matrix on the server."""
+    if event in ("request", "finish"):
         return role_code == "COUNSELOR"
-    if event in EXPRESSION_STUDENT_EVENTS:
+    if event in ("consent", "decline", "observation"):
         return role_code == "STUDENT"
     if event == "stop":
         return role_code in ("STUDENT", "COUNSELOR")
@@ -142,6 +183,7 @@ class CallRoomRegistry:
 
     def __init__(self) -> None:
         self._rooms: dict[int, dict[int, CallPeer]] = {}
+        self._observations: dict[int, ObservationConsent] = {}
         self._guard = RLock()
 
     async def join(self, appointment_id: int, identity: SocketIdentity, websocket: WebSocket) -> CallPeer:
@@ -168,6 +210,7 @@ class CallRoomRegistry:
                 room.pop(other.user_id, None)
 
         if replaced is not None:
+            self.stop_observation(appointment_id)
             await self.send_terminal(replaced, {"type": "call-ended", "reason": "REPLACED"})
             await self._close(replaced)
             if other is not None:
@@ -209,6 +252,43 @@ class CallRoomRegistry:
                 "peer_role": peer.role_code,
             })
 
+    def request_observation(self, appointment_id: int, request_id: str) -> None:
+        with self._guard:
+            self._observations[appointment_id] = ObservationConsent(request_id=request_id)
+
+    def consent_observation(self, appointment_id: int, request_id: str) -> bool:
+        with self._guard:
+            state = self._observations.get(appointment_id)
+            if state is None or state.request_id != request_id or state.active:
+                return False
+            state.active = True
+            return True
+
+    def decline_observation(self, appointment_id: int, request_id: str) -> bool:
+        with self._guard:
+            state = self._observations.get(appointment_id)
+            if state is None or state.request_id != request_id:
+                return False
+            self._observations.pop(appointment_id, None)
+            return True
+
+    def observation_active(self, appointment_id: int, request_id: str) -> bool:
+        with self._guard:
+            state = self._observations.get(appointment_id)
+            return bool(state and state.active and state.request_id == request_id)
+
+    def finish_observation(self, appointment_id: int, request_id: str) -> bool:
+        with self._guard:
+            state = self._observations.get(appointment_id)
+            if state is None or not state.active or state.request_id != request_id:
+                return False
+            self._observations.pop(appointment_id, None)
+            return True
+
+    def stop_observation(self, appointment_id: int) -> None:
+        with self._guard:
+            self._observations.pop(appointment_id, None)
+
     def relay(self, appointment_id: int, sender_user_id: int, event: dict) -> None:
         with self._guard:
             room = self._rooms.get(appointment_id) or {}
@@ -227,6 +307,8 @@ class CallRoomRegistry:
                 other = next((item for user_id, item in room.items() if user_id != peer.user_id), None)
                 if not room:
                     self._rooms.pop(appointment_id, None)
+        if removed:
+            self.stop_observation(appointment_id)
         if removed and other is not None:
             # A disconnect can cancel this task at the next await. Notify the
             # remaining peer before awaiting cleanup so peer-left is not lost.

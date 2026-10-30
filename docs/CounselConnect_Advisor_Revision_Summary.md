@@ -80,7 +80,7 @@ The revision changes CounselConnect from a system centered on manual COR review 
 ## 2.7 AI-Assisted Multimodal Session Observation
 
 - The feature is optional and may be enabled by the Counselor only with informed Student consent during an online call.
-- The initial design combines local facial-expression cues, Student self-report, and non-clinical trend or context summaries.
+- The initial design combines local facial-observation cues, Student self-report, and non-clinical trend or context summaries.
 - Voice or prosody analysis is deferred and must not be added without a separate privacy review and decision.
 - Outputs use observable, non-diagnostic wording and include confidence or uncertainty. Examples are reduced facial expressiveness, repeated gaze aversion, or self-reported low mood.
 - The AI must not output diagnoses or condition labels such as depressed, depression, anxiety disorder, or similar clinical conclusions.

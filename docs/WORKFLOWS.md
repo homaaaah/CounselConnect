@@ -43,7 +43,7 @@ Counselor configures campus Guidance Office location
 
 ```text
 authorize Student↔Counselor pair and GENERAL / APPOINTMENT / SOS purpose
-→ optional local expression scan → session-only cue
+→ optional local facial observation → temporary Counselor timeline/summary
 → text messages → close → 30 days → purge message bodies
 ```
 

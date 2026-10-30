@@ -9,8 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatSchedule } from "../../features/appointments";
 import { callStatusText, useAppointmentCall } from "../../features/calls";
-import { expressionLabelIcon, expressionResultText } from "../../features/expression/expression";
-import ExpressionCuePanel from "./ExpressionCuePanel";
+import FacialObservationPanel from "./FacialObservationPanel";
 
 const primaryButton = "rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50";
 const controlButton = "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-slate-800/80 text-lg text-white backdrop-blur transition-colors hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
@@ -57,23 +56,18 @@ export default function AppointmentCallPanel({
   now: nowProp,
   selfName,
   role,
-  expressionScan,
+  observationDetector,
 }) {
   const call = useAppointmentCall({ appointmentId, canCall });
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const [playBlocked, setPlayBlocked] = useState(false);
-  const [expressionOpen, setExpressionOpen] = useState(false);
-  const [expressionLive, setExpressionLive] = useState(false);
-  const [expressionCue, setExpressionCue] = useState(null);
-  const expressionPopoverRef = useRef(null);
-  const expressionButtonRef = useRef(null);
-  const expressionWasOpenRef = useRef(false);
-  const handleExpressionResult = useCallback(next => setExpressionCue(next), []);
-  const handleExpressionActive = useCallback(active => {
-    setExpressionLive(active);
-    if (active) setExpressionOpen(false);
-  }, []);
+  const [observationOpen, setObservationOpen] = useState(false);
+  const [observationStatus, setObservationStatus] = useState({ active: false, reviewing: false });
+  const observationPopoverRef = useRef(null);
+  const observationButtonRef = useRef(null);
+  const observationWasOpenRef = useRef(false);
+  const handleObservationStatus = useCallback(next => setObservationStatus(next), []);
 
   useEffect(() => {
     const video = remoteVideoRef.current;
@@ -95,39 +89,36 @@ export default function AppointmentCallPanel({
   }, [call.remoteStream]);
 
   useEffect(() => {
-    const event = call.expressionEvent;
-    if (!event) return;
-    if (role === "STUDENT" && event.event === "request") setExpressionOpen(true);
-    if (role === "COUNSELOR") {
-      if (event.event === "consent") handleExpressionActive(true);
-      else if (event.event === "decline" || event.event === "stop") setExpressionLive(false);
+    if (role === "STUDENT" && call.observationEvent?.event === "request") {
+      setObservationOpen(true);
     }
-  }, [call.expressionEvent, handleExpressionActive, role]);
+  }, [call.observationEvent, role]);
 
   useEffect(() => {
     if (call.phase !== "connected") {
-      setExpressionOpen(false);
-      setExpressionLive(false);
-      setExpressionCue(null);
+      setObservationOpen(false);
+      setObservationStatus({ active: false, reviewing: false });
     }
   }, [call.phase]);
 
   useEffect(() => {
-    const node = expressionPopoverRef.current;
-    if (node) node.inert = !expressionOpen;
-    if (expressionOpen && !expressionWasOpenRef.current) node?.focus?.();
-    if (!expressionOpen && expressionWasOpenRef.current) expressionButtonRef.current?.focus?.();
-    expressionWasOpenRef.current = expressionOpen;
-  }, [call.phase, expressionOpen, role]);
+    const node = observationPopoverRef.current;
+    if (node) node.inert = !observationOpen;
+    if (observationOpen && !observationWasOpenRef.current) node?.focus?.();
+    if (!observationOpen && observationWasOpenRef.current) observationButtonRef.current?.focus?.();
+    observationWasOpenRef.current = observationOpen;
+  }, [call.phase, observationOpen, role]);
 
   useEffect(() => {
-    if (!expressionOpen || typeof document === "undefined") return undefined;
+    if (!observationOpen || typeof document === "undefined") return undefined;
     const onKeyDown = event => {
-      if (event.key === "Escape") setExpressionOpen(false);
+      if (event.key === "Escape") setObservationOpen(false);
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [expressionOpen]);
+    return () => {
+      if (typeof document !== "undefined") document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [observationOpen]);
 
   const now = Number.isFinite(nowProp)
     ? nowProp
@@ -222,14 +213,14 @@ export default function AppointmentCallPanel({
                   </div>
                 )}
 
-                {role === "COUNSELOR" && call.phase === "connected" && expressionCue && (
+                {role === "COUNSELOR" && call.phase === "connected" && (observationStatus.active || observationStatus.reviewing) && (
                   <div
-                    data-testid="expression-cue-badge"
+                    data-testid="facial-observation-badge"
                     className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-9rem)] items-start gap-2 rounded-lg bg-black/70 px-3 py-2 text-xs text-white shadow-lg backdrop-blur"
                   >
-                    <i className={`fa-regular ${expressionLabelIcon(expressionCue.label)} mt-0.5`} aria-hidden="true"></i>
+                    <i className={`fa-regular ${observationStatus.reviewing ? "fa-clock" : "fa-face-smile"} mt-0.5`} aria-hidden="true"></i>
                     <span>
-                      Live student cue: <strong>{expressionResultText(expressionCue)}</strong>
+                      {observationStatus.reviewing ? "Observation review — temporary" : "Facial observations active"}
                     </span>
                   </div>
                 )}
@@ -258,14 +249,14 @@ export default function AppointmentCallPanel({
                     </button>
                     {call.phase === "connected" && ["STUDENT", "COUNSELOR"].includes(role) && (
                       <button
-                        ref={expressionButtonRef}
+                        ref={observationButtonRef}
                         type="button"
-                        className={`${controlButton} ${expressionLive ? "ring-2 ring-emerald-400" : expressionOpen ? "ring-2 ring-white/60" : ""}`}
-                        aria-label="Expression cue"
-                        aria-expanded={expressionOpen}
-                        aria-controls="expression-cue-popover"
-                        title={expressionLive ? "Expression cue is live" : expressionOpen ? "Hide expression cue" : "Show expression cue"}
-                        onClick={() => setExpressionOpen(open => !open)}
+                        className={`${controlButton} ${observationStatus.reviewing ? "ring-2 ring-amber-400" : observationStatus.active ? "ring-2 ring-emerald-400" : observationOpen ? "ring-2 ring-white/60" : ""}`}
+                        aria-label="Facial observation"
+                        aria-expanded={observationOpen}
+                        aria-controls="facial-observation-popover"
+                        title={observationStatus.reviewing ? "Observation review is open" : observationStatus.active ? "Facial observations are active" : observationOpen ? "Hide facial observation" : "Show facial observation"}
+                        onClick={() => setObservationOpen(open => !open)}
                       >
                         <i className="fa-regular fa-face-smile" aria-hidden="true"></i>
                       </button>
@@ -284,36 +275,35 @@ export default function AppointmentCallPanel({
 
                 {call.phase === "connected" && ["STUDENT", "COUNSELOR"].includes(role) && (
                   <div
-                    ref={expressionPopoverRef}
-                    id="expression-cue-popover"
+                    ref={observationPopoverRef}
+                    id="facial-observation-popover"
                     role="dialog"
                     tabIndex={-1}
-                    aria-labelledby="expression-cue-heading"
-                    aria-hidden={!expressionOpen}
+                    aria-labelledby="facial-observation-heading"
+                    aria-hidden={!observationOpen}
                     onKeyDown={event => {
-                      if (event.key === "Escape") setExpressionOpen(false);
+                      if (event.key === "Escape") setObservationOpen(false);
                     }}
-                    className={`absolute bottom-20 left-3 z-10 w-[min(22rem,calc(100%-1.5rem))] max-h-[calc(100%-6rem)] overflow-y-auto rounded-xl shadow-xl transition-opacity ${expressionOpen ? "opacity-100" : "pointer-events-none opacity-0"}`}
+                    className={`absolute bottom-20 left-3 z-10 w-[min(24rem,calc(100%-1.5rem))] max-h-[calc(100%-6rem)] overflow-y-auto rounded-xl shadow-xl transition-opacity ${observationOpen ? "opacity-100" : "pointer-events-none opacity-0"}`}
                   >
                     <div className="relative">
                       <button
                         type="button"
                         className="absolute right-2 top-2 z-10 rounded-full bg-white/90 p-1.5 text-slate-600 shadow hover:bg-white"
-                        aria-label="Close expression cue"
-                        onClick={() => setExpressionOpen(false)}
+                        aria-label="Close facial observation"
+                        onClick={() => setObservationOpen(false)}
                       >
                         <i className="fa-solid fa-xmark" aria-hidden="true"></i>
                       </button>
-                      <ExpressionCuePanel
+                      <FacialObservationPanel
                         role={role}
                         localStream={call.localStream}
                         camOn={call.camOn}
                         phase={call.phase}
-                        expressionEvent={call.expressionEvent}
-                        sendExpression={call.sendExpression}
-                        onResult={role === "COUNSELOR" ? handleExpressionResult : undefined}
-                        onActiveChange={handleExpressionActive}
-                        scan={expressionScan}
+                        observationEvent={call.observationEvent}
+                        sendObservation={call.sendObservation}
+                        onStatusChange={handleObservationStatus}
+                        detector={observationDetector}
                       />
                     </div>
                   </div>

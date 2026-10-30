@@ -117,10 +117,28 @@ async def call_socket(websocket: WebSocket, appointment_id: int):
                     {"type": "call-ended", "reason": "PEER_HUNG_UP"},
                 )
                 break
-            elif event["type"] == "expression":
-                if not call_realtime.expression_allowed(peer.role_code, event["event"]):
+            elif event["type"] == "facial-observation":
+                if not call_realtime.observation_allowed(peer.role_code, event["event"]):
                     await websocket.close(code=1008, reason="Invalid signaling message")
                     break
+                kind = event["event"]
+                request_id = event["request_id"]
+                if kind == "request":
+                    call_realtime.registry.request_observation(appointment_id, request_id)
+                elif kind == "consent":
+                    if not call_realtime.registry.consent_observation(appointment_id, request_id):
+                        continue
+                elif kind == "decline":
+                    if not call_realtime.registry.decline_observation(appointment_id, request_id):
+                        continue
+                elif kind == "observation":
+                    if not call_realtime.registry.observation_active(appointment_id, request_id):
+                        continue
+                elif kind == "finish":
+                    if not call_realtime.registry.finish_observation(appointment_id, request_id):
+                        continue
+                elif kind == "stop":
+                    call_realtime.registry.stop_observation(appointment_id)
                 call_realtime.registry.relay(appointment_id, peer.user_id, event)
             else:
                 call_realtime.registry.relay(appointment_id, peer.user_id, event)

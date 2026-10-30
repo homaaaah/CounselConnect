@@ -12,6 +12,8 @@
 | Counseling records | COUNSELING_SESSION_RECORDS.md |
 | Clinical files | PRIVATE_CLINICAL_DOCUMENTS.md |
 | AI observation | AI_EMOTIONAL_BASELINE.md |
+| Facial observation product/summary plan (target) | FACIAL_OBSERVATION_PROTOTYPE_PLAN.md |
+| Facial observation implementation plan (target) | FACIAL_OBSERVATION_IMPLEMENTATION_PLAN.md |
 | SOS | SOS_TRIAGE.md |
 | Dashboards | COUNSELOR_DASHBOARD.md |
 | Database/API | DATABASE.md, API_CONTRACT.md |

@@ -14,8 +14,8 @@ Always read `.ai/RULES.md` and `.ai/CURRENT_TASK.md`, then only one primary rout
 | `appointments` | `docs/APPOINTMENT_SCHEDULING.md`; add `docs/REAL_TIME_MESSAGING.md` only for online-session integration |
 | `calls` | `docs/AUDIO_VIDEO_CALLS.md`, `docs/APPOINTMENT_SCHEDULING.md`; add `docs/REAL_TIME_MESSAGING.md` for the media/chat boundary |
 | `messaging` | `docs/REAL_TIME_MESSAGING.md`; add `docs/APPOINTMENT_SCHEDULING.md` only for appointment-linked conversations |
-| `sos` | `docs/SOS_TRIAGE.md`; add `AI_EMOTIONAL_BASELINE.md` only for cue integration |
-| `expression-cue` | `docs/AI_EMOTIONAL_BASELINE.md` |
+| `sos` | `docs/SOS_TRIAGE.md`; add `AI_EMOTIONAL_BASELINE.md` only for facial-observation integration |
+| `facial-observation` | `docs/AI_EMOTIONAL_BASELINE.md`, `docs/FACIAL_OBSERVATION_PROTOTYPE_PLAN.md`, `docs/FACIAL_OBSERVATION_IMPLEMENTATION_PLAN.md` |
 | `wellness-resources` | `docs/WELLNESS_RESOURCE_DISCOVERY.md` |
 | `virtual-assistant` | `docs/VIRTUAL_GUIDANCE_ASSISTANT.md` |
 | `content-operations` | `docs/CONTENT_MANAGEMENT.md`, `docs/COUNSELOR_DASHBOARD.md`, `docs/USER_ROLES.md` |

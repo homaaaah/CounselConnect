@@ -486,30 +486,65 @@ def test_signaling_creates_no_audit_events_or_call_rows(
     with _ready(appointment_id, committed_client) as socket:
         assert socket.receive_json()["type"] == "room-state"
         socket.send_json({"type": "ready"})
-        socket.send_json({"type": "expression", "event": "consent", "id": "request-1"})
         socket.send_json({
-            "type": "expression",
-            "event": "result",
-            "id": "request-1",
-            "label": "neutral",
-            "confidence": 0.72,
+            "type": "facial-observation",
+            "version": 1,
+            "event": "consent",
+            "request_id": "request-1",
         })
-        socket.send_json({"type": "expression", "event": "stop"})
+        socket.send_json({
+            "type": "facial-observation",
+            "version": 1,
+            "event": "observation",
+            "request_id": "request-1",
+            "seq": 0,
+            "elapsed_ms": 0,
+            "valid": True,
+            "movements": ["smile"],
+        })
+        socket.send_json({
+            "type": "facial-observation",
+            "version": 1,
+            "event": "stop",
+            "request_id": "request-1",
+        })
         socket.send_json({"type": "hangup"})
     with Session(mysql_test_engine) as session:
         after = session.scalar(select(func.count()).select_from(AuditEvent))
     assert before == after
 
 
-def _paired_sockets(committed_client, app, call_data, mysql_test_engine):
-    appointment_id = _appointment(mysql_test_engine, call_data)
+def _paired_sockets(committed_client, app, call_data, mysql_test_engine, **appointment_kwargs):
+    appointment_id = _appointment(mysql_test_engine, call_data, **appointment_kwargs)
     counselor_client = TestClient(app)
     _login(committed_client, call_data["emails"]["student"])
     _login(counselor_client, call_data["emails"]["counselor"])
     return appointment_id, committed_client, counselor_client
 
 
-def test_expression_messages_relay_label_and_confidence_only(
+def _observation_message(event, request_id="request-1", **extra):
+    return {
+        "type": "facial-observation",
+        "version": 1,
+        "event": event,
+        "request_id": request_id,
+        **extra,
+    }
+
+
+def _observation_slot(seq=0, movements=None, request_id="request-1", **extra):
+    return _observation_message(
+        "observation",
+        request_id,
+        seq=seq,
+        elapsed_ms=seq * 1000,
+        valid=True,
+        movements=movements if movements is not None else ["smile"],
+        **extra,
+    )
+
+
+def test_facial_observation_relay_consent_and_stale_drop(
     committed_client, app, call_data, mysql_test_engine, socket_engine
 ):
     appointment_id, student_client, counselor_client = _paired_sockets(
@@ -524,103 +559,73 @@ def test_expression_messages_relay_label_and_confidence_only(
             assert counselor.receive_json()["initiator"] is True
             assert student.receive_json()["type"] == "peer-joined"
 
-            counselor.send_json({"type": "expression", "event": "request", "id": "request-1"})
-            assert student.receive_json() == {
-                "type": "expression",
-                "event": "request",
-                "id": "request-1",
-            }
+            counselor.send_json(_observation_message("request"))
+            assert student.receive_json() == _observation_message("request")
 
-            student.send_json({"type": "expression", "event": "consent", "id": "request-1"})
-            assert counselor.receive_json() == {
-                "type": "expression",
-                "event": "consent",
-                "id": "request-1",
-            }
+            student.send_json(_observation_message("consent"))
+            assert counselor.receive_json() == _observation_message("consent")
 
-            student.send_json({
-                "type": "expression",
-                "event": "result",
-                "id": "request-1",
-                "label": "neutral",
-                "confidence": 0.7233333,
-                "frames": ["never-relayed"],
-                "embedding": "[1,2,3]",
-            })
-            assert counselor.receive_json() == {
-                "type": "expression",
-                "event": "result",
-                "id": "request-1",
-                "label": "neutral",
-                "confidence": 0.723,
-            }
+            student.send_json(_observation_slot(0, ["smile"]))
+            assert counselor.receive_json() == _observation_message(
+                "observation",
+                seq=0,
+                elapsed_ms=0,
+                valid=True,
+                movements=["smile"],
+                unavailable_reason=None,
+            )
 
-            student.send_json({
-                "type": "expression",
-                "event": "result",
-                "id": "request-1",
-                "label": "happy",
-                "confidence": 0.81,
-            })
-            assert counselor.receive_json() == {
-                "type": "expression",
-                "event": "result",
-                "id": "request-1",
-                "label": "happy",
-                "confidence": 0.81,
-            }
+            student.send_json(_observation_message(
+                "observation",
+                seq=1,
+                elapsed_ms=1_000,
+                valid=False,
+                movements=[],
+                unavailable_reason="NO_FACE",
+            ))
+            assert counselor.receive_json() == _observation_message(
+                "observation",
+                seq=1,
+                elapsed_ms=1_000,
+                valid=False,
+                movements=[],
+                unavailable_reason="NO_FACE",
+            )
 
-            counselor.send_json({"type": "expression", "event": "stop"})
-            assert student.receive_json() == {"type": "expression", "event": "stop"}
+            # A stale request id is dropped, not relayed.
+            student.send_json(_observation_slot(1, ["smile"], request_id="other"))
+            student.send_json(_observation_slot(2, ["smile"]))
+            assert counselor.receive_json() == _observation_message(
+                "observation",
+                seq=2,
+                elapsed_ms=2_000,
+                valid=True,
+                movements=["smile"],
+                unavailable_reason=None,
+            )
 
+            counselor.send_json(_observation_message("finish"))
+            assert student.receive_json() == _observation_message("finish")
 
-def test_expression_student_events_relay_and_student_can_stop(
-    committed_client, app, call_data, mysql_test_engine, socket_engine
-):
-    appointment_id, student_client, counselor_client = _paired_sockets(
-        committed_client, app, call_data, mysql_test_engine
-    )
-    with _ready(appointment_id, student_client) as student:
-        assert student.receive_json()["type"] == "room-state"
-        student.send_json({"type": "ready"})
-        with _ready(appointment_id, counselor_client) as counselor:
-            assert counselor.receive_json()["type"] == "room-state"
-            counselor.send_json({"type": "ready"})
-            assert counselor.receive_json()["initiator"] is True
-            assert student.receive_json()["type"] == "peer-joined"
+            # After finish, the old id is inactive and a new consent cycle is required.
+            student.send_json(_observation_slot(3, ["smile"]))
+            counselor.send_json(_observation_message("request", "request-2"))
+            assert student.receive_json() == _observation_message("request", "request-2")
+            student.send_json(_observation_message("consent", "request-2"))
+            assert counselor.receive_json() == _observation_message("consent", "request-2")
 
-            counselor.send_json({"type": "expression", "event": "request", "id": "request-1"})
-            assert student.receive_json()["event"] == "request"
-            student.send_json({"type": "expression", "event": "decline", "id": "request-1"})
-            assert counselor.receive_json() == {
-                "type": "expression",
-                "event": "decline",
-                "id": "request-1",
-            }
-
-            counselor.send_json({"type": "expression", "event": "request", "id": "request-2"})
-            assert student.receive_json()["event"] == "request"
-            student.send_json({"type": "expression", "event": "unavailable", "id": "request-2"})
-            assert counselor.receive_json() == {
-                "type": "expression",
-                "event": "unavailable",
-                "id": "request-2",
-            }
-
-            counselor.send_json({"type": "expression", "event": "request", "id": "request-3"})
-            assert student.receive_json()["event"] == "request"
-            student.send_json({"type": "expression", "event": "stop"})
-            assert counselor.receive_json() == {"type": "expression", "event": "stop"}
+            student.send_json(_observation_message("stop", "request-2"))
+            assert counselor.receive_json() == _observation_message("stop", "request-2")
 
 
-def test_expression_role_matrix_is_enforced(
+def test_facial_observation_role_and_inactive_messages(
     committed_client, app, call_data, mysql_test_engine, socket_engine
 ):
     appointment_id = _appointment(mysql_test_engine, call_data)
     _login(committed_client, call_data["emails"]["student"])
     with _ready(appointment_id, committed_client) as student:
         assert student.receive_json()["type"] == "room-state"
-        student.send_json({"type": "expression", "event": "request", "id": "request-1"})
+        student.send_json(_observation_message("request"))
         with pytest.raises(WebSocketDisconnect):
             student.receive_json()
 
@@ -631,42 +636,68 @@ def test_expression_role_matrix_is_enforced(
     _login(counselor_client, call_data["emails"]["counselor"])
     with _ready(appointment_id, counselor_client) as counselor:
         assert counselor.receive_json()["type"] == "room-state"
-        counselor.send_json({"type": "expression", "event": "consent", "id": "request-1"})
+        counselor.send_json(_observation_message("consent"))
         with pytest.raises(WebSocketDisconnect):
             counselor.receive_json()
 
-    with _ready(appointment_id, counselor_client) as counselor:
-        assert counselor.receive_json()["type"] == "room-state"
-        counselor.send_json({
-            "type": "expression",
-            "event": "result",
-            "id": "request-1",
-            "label": "neutral",
-            "confidence": 0.9,
-        })
-        with pytest.raises(WebSocketDisconnect):
-            counselor.receive_json()
+    appointment_id, student_client, counselor_client = _paired_sockets(
+        committed_client, app, call_data, mysql_test_engine,
+        start_minutes=-20, end_minutes=40,
+    )
+    with _ready(appointment_id, student_client) as student:
+        assert student.receive_json()["type"] == "room-state"
+        student.send_json({"type": "ready"})
+        with _ready(appointment_id, counselor_client) as counselor:
+            assert counselor.receive_json()["type"] == "room-state"
+            counselor.send_json({"type": "ready"})
+            assert counselor.receive_json()["initiator"] is True
+            assert student.receive_json()["type"] == "peer-joined"
+
+            counselor.send_json(_observation_message("request", "decline-1"))
+            assert student.receive_json() == _observation_message("request", "decline-1")
+            student.send_json(_observation_message("decline", "decline-1"))
+            assert counselor.receive_json() == _observation_message("decline", "decline-1")
+
+            # No active consent after decline: the observation is dropped, then hangup still ends the call.
+            student.send_json(_observation_slot(0, ["smile"]))
+            student.send_json({"type": "hangup"})
+            ended = counselor.receive_json()
+            assert ended["type"] == "call-ended"
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        {"type": "expression", "event": "unknown", "id": "request-1"},
-        {"type": "expression", "event": "request"},
-        {"type": "expression", "event": "request", "id": ""},
-        {"type": "expression", "event": "request", "id": "x" * 65},
-        {"type": "expression", "event": "result", "id": "request-1", "confidence": 0.9},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "depressed", "confidence": 0.9},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": 1.1},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": -0.1},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": "0.9"},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": True},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": 10 ** 1000},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": float("nan")},
-        {"type": "expression", "event": "result", "id": "request-1", "label": "neutral", "confidence": float("inf")},
+        {"type": "facial-observation", "version": 2, "event": "request", "request_id": "r"},
+        _observation_message("unknown"),
+        {"type": "facial-observation", "version": 1, "event": "request", "request_id": ""},
+        {"type": "facial-observation", "version": 1, "event": "request", "request_id": "x" * 65},
+        _observation_slot(0, [], extra=True),
+        _observation_slot(0, ["jaw_open"]),
+        _observation_slot(-1),
+        _observation_slot(1.5),
+        _observation_message(
+            "observation", seq=0, elapsed_ms=0, valid=True, movements=["angry"]
+        ),
+        _observation_message(
+            "observation", seq=0, elapsed_ms=0, valid=True, movements=["smile", "smile"]
+        ),
+        _observation_message(
+            "observation", seq=0, elapsed_ms=0, valid=False, movements=["smile"],
+            unavailable_reason="NO_FACE",
+        ),
+        _observation_message(
+            "observation", seq=0, elapsed_ms=0, valid=False, movements=[],
+            unavailable_reason="NOPE",
+        ),
+        _observation_message(
+            "observation", seq=0, elapsed_ms=0, valid=True, movements=[],
+            unavailable_reason="NO_FACE",
+        ),
+        {**_observation_message("request"), "extra": 1},
     ],
 )
-def test_expression_rejects_invalid_payloads(
+def test_facial_observation_rejects_invalid_payloads(
     committed_client, call_data, mysql_test_engine, socket_engine, payload
 ):
     appointment_id = _appointment(mysql_test_engine, call_data)
@@ -678,14 +709,15 @@ def test_expression_rejects_invalid_payloads(
             socket.receive_json()
 
 
-def test_expression_rejects_a_parser_limited_integer(
+def test_facial_observation_rejects_a_parser_limited_integer(
     committed_client, call_data, mysql_test_engine, socket_engine
 ):
     appointment_id = _appointment(mysql_test_engine, call_data)
     _login(committed_client, call_data["emails"]["student"])
     raw = (
-        '{"type":"expression","event":"result","id":"request-1",'
-        '"label":"neutral","confidence":' + ("9" * 5_000) + "}"
+        '{"type":"facial-observation","version":1,"event":"observation",'
+        '"request_id":"r","seq":' + ("9" * 5_000) + ',"elapsed_ms":0,'
+        '"valid":true,"movements":[]}'
     )
     with _ready(appointment_id, committed_client) as socket:
         assert socket.receive_json()["type"] == "room-state"

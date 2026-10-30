@@ -76,7 +76,7 @@ Application services must enforce cross-table rules that a row-local SQL `CHECK`
 
 ## Forbidden persistence
 
-No COR blob/base64, raw camera media, embeddings/biometric templates, observed-expression history, assistant history, recordings/transcripts/summaries, or mirrored third-party article bodies.
+No COR blob/base64, raw camera media, embeddings/biometric templates, facial-observation history, assistant history, recordings/transcripts/summaries, or mirrored third-party article bodies.
 
 ## Intentionally absent in V1
 
