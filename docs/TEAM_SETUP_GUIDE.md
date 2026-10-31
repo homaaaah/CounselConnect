@@ -158,12 +158,37 @@ In a **second terminal** (keep the backend running):
 
 ```bash
 cd frontend
-npm install
+npm ci
 copy .env.example .env      # Mac/Linux: cp .env.example .env
 npm run dev
 ```
 
 Success = http://localhost:5173 shows the CounselConnect landing page with the hero text, FAQs, and announcement from the seed data.
+
+### Refresh frontend dependencies after pulling updates (Windows)
+
+Git updates source files, but it does not install or replace packages in `node_modules`. After pulling a change to `frontend/package.json` or `frontend/package-lock.json`, install the exact locked dependencies before starting Vite:
+
+```powershell
+cd "$env:USERPROFILE\OneDrive\Desktop\COUNSELCONNECT\frontend"
+npm ci
+npm run build
+npm run dev
+```
+
+Run only the commands, not the `PS C:\...>` prompt text shown by PowerShell. If your checkout is in a different folder, change the `cd` path to its `frontend` directory. `npm ci` recreates `node_modules` from `package-lock.json`; it does not change the lockfile. A successful build ends with `built in ...` and Vite's dev server prints a local URL, usually `http://localhost:5173/`.
+
+If `npm run build` says `'vite' is not recognized` or Vite cannot resolve a package that is listed in `package.json`, the dependency install is missing or incomplete. Return to the `frontend` directory and run `npm ci` again. Do not run the build until `npm ci` completes successfully.
+
+If `npm ci` fails with Windows `EPERM` while unlinking a file under `node_modules` (often an esbuild `.exe` or Rollup `.node` file):
+
+1. Stop this project's Vite server by pressing **Ctrl+C** in the terminal where it is running. Close other terminals running this project's frontend.
+2. If the project is under OneDrive, pause syncing temporarily from the OneDrive cloud icon, then choose **Pause syncing**. Resume syncing after installation.
+3. Retry `npm ci` from `frontend/`. Do not manually delete a locked file or stop unrelated Node processes.
+4. If the lock persists, restart Windows, then run `npm ci` and `npm run build` before starting Vite.
+5. If this keeps happening in a OneDrive folder, clone/move the working copy to a development folder outside OneDrive (for example, `C:\dev\COUNSELCONNECT`) and install dependencies there. Keep private `.env` values local; do not copy them into Git.
+
+When sharing the site with another device on the same network, start Vite with `npm run dev -- --host 0.0.0.0`; use the network URL it prints on that device. `localhost` remains the URL for this computer.
 
 ## 6. Demo flow to verify your setup (5 minutes)
 
@@ -178,6 +203,7 @@ Success = http://localhost:5173 shows the CounselConnect landing page with the h
 
 | Symptom | Cause → Fix |
 |---|---|
+| `npm run build` says `'vite' is not recognized`, or Vite cannot resolve a declared package after a pull | From `frontend/`, stop the project's Vite process and run `npm ci`, then `npm run build`. If `npm ci` reports Windows `EPERM` unlinking a `.exe`/`.node` in `node_modules`, follow **Refresh frontend dependencies after pulling updates (Windows)** above. |
 | `Access denied for user` on backend start or any DB call | Wrong MySQL user/password in `.env` → fix and **restart uvicorn** (`.env` is read only at startup) |
 | Landing page empty (no hero/FAQs) | Seed not loaded → re-run step 3 (`dev_seed.sql`) |
 | Registration form has no program options | Same seed issue as above |
@@ -196,7 +222,7 @@ From `backend/`, `python -m pytest app/tests -q` runs database-free tests and sk
 
 Use a test-only MySQL server/account and a URL with driver `mysql+pymysql` and database name `counselconnect_test`. For example, the URL shape is `mysql+pymysql://TEST_USER:URL_ENCODED_PASSWORD@localhost:3306/counselconnect_test?charset=utf8mb4`. Supply your credentials privately through the environment. The account must be able to create/drop the run's `counselconnect_test_<random UUID>` schema (a grant on `counselconnect_test%` is enough; no access to the `mysql` system schema is required). The fixture never drops a pre-existing schema and removes only the schema it created. It applies the canonical baseline and real session migration automatically; a MySQL CLI is not required. COR tests use temporary directories and disable SMTP.
 
-From `frontend/`, run `npm test` for session/registration component regressions and `npm run build` for the Vite production compilation. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
+From `frontend/`, run `npm ci` when `package.json` or `package-lock.json` changes (including after pulling dependency updates), then `npm test` for session/registration component regressions and `npm run build` for the Vite production compilation. After API changes, run `python scripts/export_openapi.py --check` from `backend/`.
 
 The backend automatically runs COR expiry/deletion retries while serving requests. See `REGISTRATION_VERIFICATION.md` for cleanup monitoring and one-shot scheduling when the application is offline.
 

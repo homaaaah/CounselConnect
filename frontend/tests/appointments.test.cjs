@@ -615,6 +615,36 @@ test("calendar permits a weekend date when it has counselor availability", async
   assert.deepEqual(picks, [["2099-01-03", "09:00"]]);
 });
 
+test("booking calendar only offers times confirmed by the selected counselor slot search", async t => {
+  setup(t);
+  const cal = { business_hours: "Availability set by counselors", days: [{
+    calendar_date: "2099-01-03", is_weekday: false, is_blocked: false, is_past: false,
+    available_times: ["09:00"],
+  }] };
+  const root = await mount(t, React.createElement(CalendarGrid, {
+    variant: "modal", calendar: cal, freshSlots: [],
+  }));
+  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-03"));
+  await act(async () => saturday.props.onClick());
+  assert.equal(button(root, "9:00 AM"), undefined,
+    "a stale calendar time hidden by the selected Counselor's fresh slot search is not selectable");
+  assert.ok(JSON.stringify(root.toJSON()).includes("There are no available appointment time slots"));
+});
+
+test("booking calendar disables stale time choices while selected Counselor availability reloads", async t => {
+  setup(t);
+  const cal = { business_hours: "Availability set by counselors", days: [{
+    calendar_date: "2099-01-03", is_weekday: false, is_blocked: false, is_past: false,
+    available_times: ["09:00"],
+  }] };
+  const root = await mount(t, React.createElement(CalendarGrid, {
+    variant: "modal", calendar: cal, loading: true,
+  }));
+  const saturday = root.root.findAllByType("button").find(b => b.props["aria-label"]?.startsWith("2099-01-03"));
+  await act(async () => saturday.props.onClick());
+  assert.equal(button(root, "9:00 AM").props.disabled, true);
+});
+
 test("calendar month navigation stays within loaded data", async t => {
   setup(t);
   const root = await mount(t, React.createElement(CalendarGrid, { calendar: calendarWithDays() }));

@@ -34,7 +34,7 @@ function timeLabel(value) {
  * under `.booking-calendar`, so the default rendering — used by the
  * Counselor availability panel — is visually unchanged.
  */
-export default function CalendarGrid({ calendar, month: visibleMonth, onMonthChange, onRetry, loading = false, onSelect, onPickTime, variant, counselorView = false }) {
+export default function CalendarGrid({ calendar, month: visibleMonth, onMonthChange, onRetry, loading = false, freshSlots, onSelect, onPickTime, variant, counselorView = false }) {
   const inModal = variant === "modal";
   const monthInputId = useId();
   const [selected, setSelected] = useState(null);
@@ -158,14 +158,15 @@ export default function CalendarGrid({ calendar, month: visibleMonth, onMonthCha
       {selectedDateLabel && <p className="booking-times-date">{selectedDateLabel}</p>}
       {!counselorView
         ? <>
-            <div className="booking-times-list mt-3 flex flex-col gap-2">{slotsForDay(selectedDay).map(slot =>
+            <div className="booking-times-list mt-3 flex flex-col gap-2">{slotsForDay(selectedDay, freshSlots).map(slot =>
               <button key={slot.start_time + "-" + (slot.end_time || "start")} type="button"
+                disabled={loading}
                 aria-pressed={pickedTime === slot.start_time}
                 className={"booking-time " + secondaryClass + (pickedTime === slot.start_time ? " booking-time--selected" : "")}
                 onClick={() => { setPickedTime(slot.start_time); onPickTime?.(selectedDay.calendar_date, slot.start_time); }}>
                 <span>{timeLabel(slot.start_time)}{slot.end_time ? ` – ${timeLabel(slot.end_time)}` : ""}</span>
               </button>)}</div>
-            {slotsForDay(selectedDay).length === 0
+            {slotsForDay(selectedDay, freshSlots).length === 0
               ? <p className="mt-3 text-sm text-amber-700">There are no available appointment time slots for this date. Please select another date.</p>
               : <p className="booking-times-note mt-3 text-xs text-slate-500">Select a time to continue.</p>}
           </>
@@ -184,8 +185,29 @@ export default function CalendarGrid({ calendar, month: visibleMonth, onMonthCha
   </div>;
 }
 
-function slotsForDay(day) {
+function slotsForDay(day, freshSlots) {
+  if (freshSlots !== undefined) {
+    const times = new Set(freshSlots
+      .map(slot => manilaDateTime(slot.starts_at))
+      .filter(value => value.date === day.calendar_date)
+      .map(value => value.time));
+    return [...times].sort().map(start_time => ({ start_time, end_time: null }));
+  }
   return day.available_slots.length > 0
     ? day.available_slots
     : day.available_times.map(time => ({ start_time: time, end_time: null }));
+}
+
+function manilaDateTime(value) {
+  const date = new Date(value);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const fields = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return {
+    date: `${fields.year}-${fields.month}-${fields.day}`,
+    time: new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).format(date),
+  };
 }

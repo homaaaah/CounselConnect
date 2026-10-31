@@ -189,6 +189,7 @@ export default function BookingModal({ open, onClose, state, rescheduleId = null
               <p className="booking-hint">Counselor: {state.bookingCounselors.find(item => item.counselor_user_id === selectedCounselorId)?.counselor_name ?? selfCounselorName}</p>
               <CalendarGrid variant="modal" calendar={state.calendar} month={state.calendarMonth}
                 loading={state.loading} onRetry={state.refresh} onMonthChange={onCalendarMonthChange}
+                freshSlots={state.date === selectedDate ? state.slots.items : undefined}
                 onSelect={onCalendarSelect} onPickTime={onCalendarPickTime} />
               <div className="booking-legend">
                 <span className="booking-legend-item"><span className="booking-dot booking-dot--selected" aria-hidden="true" />Selected</span>
