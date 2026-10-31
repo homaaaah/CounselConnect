@@ -6,6 +6,7 @@ const { create, act } = require("react-test-renderer");
 require("./register-app.cjs");
 
 const App = require("../src/App.jsx").default;
+const LoginPage = require("../src/pages/LoginPage.jsx").default;
 const { setCsrfToken, getCsrfToken, request, ApiError } = require("../src/services/apiClient.js");
 
 const auth = {
@@ -96,13 +97,42 @@ test("student login link opens the staff email form and switches back", async (t
   fakeApi(t, () => failure(401));
   const root = await mount(t);
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number or email");
+  assert.equal(root.root.findAllByProps({ href: "#superadmin-login" }).length, 0,
+    "Student full-page sign-in does not expose the Superadmin route");
+  assert.equal(root.root.findAllByProps({ href: "#register" }).length, 1,
+    "Students retain the registration link");
   const staffLink = root.root.findByProps({ href: "#staff-login" });
   await act(async () => { window.location.hash = staffLink.props.href; });
   assert.equal(root.root.findByType("h1").children.join(""), "Guidance sign in");
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Email");
   assert.equal(root.root.findByProps({ id: "identifier" }).props.type, "email");
+  assert.equal(root.root.findAllByProps({ href: "#register" }).length, 0,
+    "the staff sign-in page does not offer public registration");
   await act(async () => { window.location.hash = "#login"; });
   assert.equal(root.root.findByProps({ htmlFor: "identifier" }).children.join(""), "Student number or email");
+});
+
+test("Student login modal does not expose a Guidance sign-in switch", async t => {
+  environment(t, "#landing");
+  fakeApi(t, () => json(null));
+  const root = await mount(t);
+  const openLogin = root.root.findAllByType("button").find(node => node.children.join("") === "LOG IN");
+  await act(async () => openLogin.props.onClick());
+  const dialog = root.root.findByProps({ role: "dialog" });
+  assert.equal(dialog.findByType("h1").children.join(""), "Student sign in");
+  assert.equal(dialog.findAllByType("button").filter(node => node.children.join("") === "Guidance sign in").length, 0);
+  assert.equal(dialog.findAllByType("button").filter(node => node.children.join("") === "Superadmin sign in").length, 0);
+  assert.equal(dialog.findAllByType("button").filter(node => node.children.join("") === "Register").length, 1);
+});
+
+test("staff sign-in modal does not offer self-registration", async t => {
+  environment(t, "#landing");
+  const root = await mount(t, React.createElement(LoginPage, { audience: "staff", inModal: true }));
+  const modalText = JSON.stringify(root.toJSON());
+  assert.doesNotMatch(modalText, /No account yet\?/);
+  assert.doesNotMatch(modalText, /Register/);
+  assert.doesNotMatch(modalText, /Superadmin sign in/);
+  assert.match(modalText, /Student sign in/);
 });
 
 test("the reviewer console and its hook no longer exist", async (t) => {
@@ -221,11 +251,11 @@ test("dedicated Superadmin sign-in accepts SUPERADMIN and reaches Users with CSR
   assert.equal(root.root.findByType("h1").children.join(""), "Users");
 });
 
-test("Guidance sign-in rejects Superadmin and exposes the separate entry", async t => {
+test("Guidance sign-in rejects Superadmin without exposing its sign-in entry", async t => {
   environment(t, "#staff-login");
   const calls = fakeApi(t, () => json(null), { ...auth, user: { ...auth.user, role_code: "SUPERADMIN" } });
   const root = await mount(t);
-  assert.ok(root.root.findByProps({ href: "#superadmin-login" }));
+  assert.equal(root.root.findAllByProps({ href: "#superadmin-login" }).length, 0);
   await act(async () => {
     root.root.findByProps({ id: "identifier" }).props.onChange({ target: { value: "super@example.edu" } });
     root.root.findByProps({ id: "password" }).props.onChange({ target: { value: "synthetic-password" } });

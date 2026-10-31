@@ -7,7 +7,7 @@ import { useLogin, PasswordInput } from "../features/auth";
  * audience/register switches and a close button (landing overlay).
  */
 export default function LoginPage({ onSignedIn, audience = "student", inModal = false,
-  onClose, onSwitchAudience, onSwitchToRegister, onSwitchToSuperadmin }) {
+  onClose, onSwitchAudience, onSwitchToRegister }) {
   const isStudent = audience === "student";
   const isSuperadmin = audience === "superadmin";
   const { login, submitting } = useLogin();
@@ -85,15 +85,14 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
 
       {!isSuperadmin && (inModal ? (
         <>
-          <p className="signup-text">
+          {!isStudent && <p className="signup-text">
             <button type="button" className="linklike" onClick={onSwitchAudience}>
-              {isStudent ? "Guidance sign in" : "Student sign in"}
+              Student sign in
             </button>
-          </p>
-          <p className="signup-text">
+          </p>}
+          {isStudent && <p className="signup-text">
             No account yet? <button type="button" className="linklike" onClick={onSwitchToRegister}>Register</button>
-          </p>
-          {!isSuperadmin && <p className="signup-text"><button type="button" className="linklike" onClick={onSwitchToSuperadmin}>Superadmin sign in</button></p>}
+          </p>}
         </>
       ) : (
         <>
@@ -102,10 +101,9 @@ export default function LoginPage({ onSignedIn, audience = "student", inModal = 
               {isStudent ? "Guidance sign in" : "Student sign in"}
             </a>
           </p>
-          <p className="signup-text">
+          {isStudent && <p className="signup-text">
             No account yet? <a href="#register">Register</a>
-          </p>
-          {!isSuperadmin && <p className="signup-text"><a href="#superadmin-login">Superadmin sign in</a></p>}
+          </p>}
         </>
       ))}
       {!inModal && <p className="footer-link" style={{ textAlign: "center" }}>

@@ -328,7 +328,6 @@ export default function LandingPage({ onSignedIn }) {
               onSignedIn={onSignedIn}
               onClose={() => setModal(null)}
               onSwitchAudience={() => openLogin(modal.audience === "student" ? "staff" : "student")}
-              onSwitchToSuperadmin={() => openLogin("superadmin")}
               onSwitchToRegister={() => setModal({ kind: "register", audience: "student" })}
             />
           ) : (
