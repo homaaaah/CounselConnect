@@ -26,9 +26,17 @@ QUEUE_SIZE = 100
 
 OBSERVATION_TYPE = "facial-observation"
 OBSERVATION_VERSION = 1
-OBSERVATION_EVENTS = {"request", "consent", "decline", "observation", "finish", "stop"}
-OBSERVATION_MOVEMENTS = {"smile", "brow_raise", "brow_furrow"}
-OBSERVATION_ENABLED_MOVEMENTS = {"smile", "brow_raise", "brow_furrow"}
+OBSERVATION_EVENTS = {
+    "request",
+    "consent",
+    "decline",
+    "observation",
+    "suggestion",
+    "finish",
+    "stop",
+}
+OBSERVATION_MOVEMENTS = {"smile", "brow_raise", "brow_furrow", "lip_corners_lowered"}
+OBSERVATION_ENABLED_MOVEMENTS = {"smile", "brow_raise", "brow_furrow", "lip_corners_lowered"}
 OBSERVATION_REASONS = {
     "NO_FACE",
     "MULTIPLE_FACES",
@@ -36,6 +44,7 @@ OBSERVATION_REASONS = {
     "MODEL_ERROR",
     "BUSY",
     "LOW_QUALITY",
+    "READING_UNAVAILABLE",
 }
 OBSERVATION_CONTROL_FIELDS = {"type", "version", "event", "request_id"}
 OBSERVATION_SLOT_FIELDS = OBSERVATION_CONTROL_FIELDS | {
@@ -45,6 +54,21 @@ OBSERVATION_SLOT_FIELDS = OBSERVATION_CONTROL_FIELDS | {
     "movements",
     "unavailable_reason",
 }
+OBSERVATION_SUGGESTION_FIELDS = OBSERVATION_CONTROL_FIELDS | {
+    "seq",
+    "suggested_expression",
+    "unavailable_reason",
+}
+SUGGESTED_EXPRESSIONS = {
+    "neutral",
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgusted",
+    "surprised",
+}
+SUGGESTION_UNAVAILABLE = "SUGGESTION_UNAVAILABLE"
 OBSERVATION_MAX_SEQ = 86_400
 OBSERVATION_MAX_ELAPSED_MS = 86_400_000
 
@@ -118,6 +142,30 @@ def _validate_facial_observation(message: dict) -> dict | None:
     request_id = message.get("request_id")
     if not isinstance(request_id, str) or not 1 <= len(request_id) <= 64:
         return None
+    if event == "suggestion":
+        if set(message) - OBSERVATION_SUGGESTION_FIELDS:
+            return None
+        seq = message.get("seq")
+        expression = message.get("suggested_expression")
+        reason = message.get("unavailable_reason")
+        if isinstance(seq, bool) or not isinstance(seq, int) or not 0 <= seq <= OBSERVATION_MAX_SEQ:
+            return None
+        if expression is not None:
+            if not isinstance(expression, str) or expression not in SUGGESTED_EXPRESSIONS:
+                return None
+            if reason is not None:
+                return None
+        elif reason != SUGGESTION_UNAVAILABLE:
+            return None
+        return {
+            "type": OBSERVATION_TYPE,
+            "version": OBSERVATION_VERSION,
+            "event": "suggestion",
+            "request_id": request_id,
+            "seq": seq,
+            "suggested_expression": expression,
+            "unavailable_reason": reason,
+        }
     if event != "observation":
         if set(message) - OBSERVATION_CONTROL_FIELDS:
             return None
@@ -171,7 +219,7 @@ def observation_allowed(role_code: str, event: str) -> bool:
     """Enforce the facial-observation role matrix on the server."""
     if event in ("request", "finish"):
         return role_code == "COUNSELOR"
-    if event in ("consent", "decline", "observation"):
+    if event in ("consent", "decline", "observation", "suggestion"):
         return role_code == "STUDENT"
     if event == "stop":
         return role_code in ("STUDENT", "COUNSELOR")

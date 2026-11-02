@@ -5,7 +5,7 @@
  * only a valid/invalid slot with bounded movement flags and a reason.
  */
 
-import { detectMovements } from "./observation";
+import { detectMovements, missingRequiredScores } from "./observation";
 
 const MODEL_VERSION = "mediapipe-face-landmarker-1";
 let landmarkerPromise = null;
@@ -78,14 +78,24 @@ function scoreMap(result) {
   );
 }
 
-export async function detectObservation(video, { signal } = {}) {
+export function captureFrame(video) {
+  if (typeof document === "undefined" || !video || video.readyState < 2) return null;
+  if (!video.videoWidth || !video.videoHeight) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d")?.drawImage(video, 0, 0);
+  return canvas;
+}
+
+export async function detectObservation(frame, { signal } = {}) {
   throwIfAborted(signal);
-  if (!video || typeof video.readyState !== "number" || video.readyState < 2) {
+  if (!frame) {
     return { valid: false, movements: [], unavailable_reason: "LOW_QUALITY" };
   }
   const landmarker = await loadLandmarker();
   throwIfAborted(signal);
-  const result = landmarker.detectForVideo(video, nextTimestamp());
+  const result = landmarker.detectForVideo(frame, nextTimestamp());
   throwIfAborted(signal);
   const faces = result?.faceLandmarks ?? [];
   if (faces.length === 0) {
@@ -94,9 +104,13 @@ export async function detectObservation(video, { signal } = {}) {
   if (faces.length > 1) {
     return { valid: false, movements: [], unavailable_reason: "MULTIPLE_FACES" };
   }
+  const scores = scoreMap(result);
+  if (missingRequiredScores(scores)) {
+    return { valid: false, movements: [], unavailable_reason: "READING_UNAVAILABLE" };
+  }
   return {
     valid: true,
-    movements: detectMovements(scoreMap(result)),
+    movements: detectMovements(scores),
     unavailable_reason: null,
   };
 }

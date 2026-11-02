@@ -1,4 +1,47 @@
-# Current work: Performance — request fan-out and per-request re-renders
+# Current work: Restore Phase 1/2 facial observation
+
+## Task: Reapply lost facial-observation implementation (2026-11-02)
+
+**Status: COMPLETED.**
+The committed tree regressed to the pre-Phase-1 implementation while keeping the new
+Human files. Restored `observation.js`, `observationModel.js`, `FacialObservationPanel.jsx`,
+the call-hook queue, backend lip/suggestion/READING validation, and the related tests. The
+old `ExpressionCuePanel` was not reintroduced.
+
+Verification:
+- Focused facial/call tests: 31 passed.
+- Full frontend: 191 passed, 2 known calendar/date-drift failures in
+  `appointments.test.cjs` (unrelated, untouched).
+- Production build: passed; MediaPipe + Human remain lazy chunks.
+- Backend calls: 41 passed; OpenAPI snapshot matches.
+- `git diff --check`: no errors (LF/CRLF warnings only).
+
+Remaining: two-device manual checks and real-device Human validation.
+Unrelated working-tree changes (`CounselorSchedulePage.jsx`, `appointments.test.cjs`,
+`backend/app/tests/unit/test_call_debug_open.py`, `Reference/`) were not modified by this
+recovery and remain uncommitted.
+
+# Prior work: Unblock a counselor-blocked date
+
+## Task: Add the missing Unblock action to the Schedule page (2026-11-02)
+
+**Status: COMPLETED**
+**Risk: LOW** (presentation action over an existing endpoint; no contract change).
+**Route:** `appointments` (`.ai/CONTEXT_MAP.md`).
+
+Cause: `CounselorSchedulePage.jsx` only POSTed `/calendar/blocks`; nothing called the
+existing `DELETE /calendar/blocks/{blocked_date}`.
+Change: `BlockDateForm` lists `state.calendar.days` where `is_blocked` and offers an
+Unblock button per date (DELETE, then `useAppointments` refreshes).
+
+Scope: `frontend/src/pages/counselor/CounselorSchedulePage.jsx`,
+`frontend/tests/appointments.test.cjs`.
+Verification: `node --test tests/appointments.test.cjs` — 33 pass, 2 pre-existing
+date-drift failures (calendar month grid/navigation); the new unblock test passes.
+
+---
+
+# Prior work: Performance — request fan-out and per-request re-renders
 
 ## Task: Reduce dashboard request fan-out and per-request re-renders (2026-11-02)
 

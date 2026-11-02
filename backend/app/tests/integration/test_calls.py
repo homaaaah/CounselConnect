@@ -724,3 +724,71 @@ def test_facial_observation_rejects_a_parser_limited_integer(
         socket.send_text(raw)
         with pytest.raises(WebSocketDisconnect):
             socket.receive_json()
+
+
+def test_facial_observation_relays_lip_corners_and_suggestion(
+    committed_client, app, call_data, mysql_test_engine, socket_engine
+):
+    appointment_id, student_client, counselor_client = _paired_sockets(
+        committed_client, app, call_data, mysql_test_engine
+    )
+    with _ready(appointment_id, student_client) as student:
+        assert student.receive_json()["type"] == "room-state"
+        student.send_json({"type": "ready"})
+        with _ready(appointment_id, counselor_client) as counselor:
+            assert counselor.receive_json()["type"] == "room-state"
+            counselor.send_json({"type": "ready"})
+            assert counselor.receive_json()["initiator"] is True
+            assert student.receive_json()["type"] == "peer-joined"
+
+            counselor.send_json(_observation_message("request"))
+            assert student.receive_json() == _observation_message("request")
+            student.send_json(_observation_message("consent"))
+            assert counselor.receive_json() == _observation_message("consent")
+
+            student.send_json(_observation_message(
+                "observation",
+                seq=0,
+                elapsed_ms=0,
+                valid=True,
+                movements=["lip_corners_lowered"],
+                unavailable_reason=None,
+            ))
+            assert counselor.receive_json() == _observation_message(
+                "observation",
+                seq=0,
+                elapsed_ms=0,
+                valid=True,
+                movements=["lip_corners_lowered"],
+                unavailable_reason=None,
+            )
+
+            student.send_json(_observation_message(
+                "suggestion",
+                seq=0,
+                suggested_expression="surprised",
+                unavailable_reason=None,
+            ))
+            assert counselor.receive_json() == _observation_message(
+                "suggestion",
+                seq=0,
+                suggested_expression="surprised",
+                unavailable_reason=None,
+            )
+
+            student.send_json(_observation_message(
+                "observation",
+                seq=1,
+                elapsed_ms=1_000,
+                valid=False,
+                movements=[],
+                unavailable_reason="READING_UNAVAILABLE",
+            ))
+            assert counselor.receive_json() == _observation_message(
+                "observation",
+                seq=1,
+                elapsed_ms=1_000,
+                valid=False,
+                movements=[],
+                unavailable_reason="READING_UNAVAILABLE",
+            )

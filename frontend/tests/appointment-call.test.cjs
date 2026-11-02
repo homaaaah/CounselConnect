@@ -161,7 +161,7 @@ async function flush() {
 
 async function connectedPanel(t, overrides = {}) {
   const env = installCallEnvironment(t);
-  const root = await mountPanel(t, overrides);
+  const root = await mountPanel(t, { observationCapture: () => ({ frame: true }), ...overrides });
   await act(async () => { button(root, "Join video call").props.onClick(); });
   await flush();
   const socket = FakeWebSocket.instances[0];
@@ -400,150 +400,193 @@ test("outside the call window shows a message and does not request media", async
   assert.equal(button(root, "Join video call"), undefined);
 });
 
-test("student allows the live cue and shares only a label and confidence", async t => {
-  const scans = [];
+const observationMessage = (event, requestId, extra = {}) => ({
+  type: "facial-observation",
+  version: 1,
+  event,
+  request_id: requestId,
+  ...extra,
+});
+
+const observationSlot = (requestId, seq, movements = ["smile"]) => observationMessage("observation", requestId, {
+  seq,
+  elapsed_ms: seq * 1000,
+  valid: true,
+  movements,
+  unavailable_reason: null,
+});
+
+const suggestionMessage = (requestId, seq, expression = null, reason = null) => observationMessage(
+  "suggestion",
+  requestId,
+  {
+    seq,
+    suggested_expression: expression,
+    unavailable_reason: expression ? null : (reason ?? "SUGGESTION_UNAVAILABLE"),
+  },
+);
+
+test("student consents to facial observation and never sees results", async t => {
+  const detections = [];
   const { root, socket } = await connectedPanel(t, {
     role: "STUDENT",
-    expressionScan: async () => {
-      scans.push(Date.now());
-      return { label: "happy", confidence: 0.81 };
+    observationDetector: async () => {
+      detections.push(Date.now());
+      return { valid: true, movements: ["smile"], unavailable_reason: null };
     },
   });
-
-  await act(async () => {
-    socket.message({ type: "expression", event: "request", id: "req-1" });
-  });
+  await act(async () => { socket.message(observationMessage("request", "req-1")); });
   await flush();
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], true, "a request opens the popup");
+  assert.equal(byLabel(root, "Facial observation").props["aria-expanded"], true);
   assert.ok(button(root, "Allow for this session"));
-  assert.equal(scans.length, 0, "a request never auto-scans");
-  assert.equal(socket.sent.some(message => message.type === "expression"), false);
+  assert.equal(detections.length, 0);
+  assert.equal(socket.sent.some(message => message.type === "facial-observation"), false);
 
   await act(async () => { button(root, "Allow for this session").props.onClick(); });
   await flush();
-
-  const expressionMessages = socket.sent.filter(message => message.type === "expression");
-  assert.deepEqual(expressionMessages[0], { type: "expression", event: "consent", id: "req-1" });
-  assert.deepEqual(expressionMessages[1], {
-    type: "expression", event: "result", id: "req-1", label: "happy", confidence: 0.81,
-  });
-  assert.equal(scans.length, 1);
-  assert.ok(
-    !JSON.stringify(root.toJSON()).includes("Happy (81% confidence)"),
-    "the Student never sees the result",
-  );
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], false, "accepting closes the popup");
-  assert.equal(byLabel(root, "Expression cue").props.title, "Expression cue is live");
-  assert.equal(root.root.findAllByProps({ "data-testid": "expression-cue-badge" }).length, 0);
-  assert.ok(button(root, "Stop sharing"), "closing keeps the live panel mounted");
-
-  const resultsBeforeClose = socket.sent.filter(message => message.event === "result").length;
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 2300)); });
-  const resultsAfterClose = socket.sent.filter(message => message.event === "result").length;
-  assert.equal(resultsAfterClose, resultsBeforeClose + 1, "the scan continues while closed");
-
-  const beforeReopen = socket.sent.length;
-  await act(async () => { byLabel(root, "Expression cue").props.onClick(); });
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], true);
-  assert.equal(socket.sent.length, beforeReopen, "reopening sends nothing");
+  await flush();
+  const messages = socket.sent.filter(message => message.type === "facial-observation");
+  assert.deepEqual(messages[0], observationMessage("consent", "req-1"));
+  assert.equal(messages[1].event, "observation");
+  assert.equal(messages[1].seq, 0);
+  assert.equal(messages[1].valid, true);
+  assert.deepEqual(messages[1].movements, ["smile"]);
+  assert.equal(messages.some(message => message.event === "suggestion"), false);
+  assert.ok(!JSON.stringify(root.toJSON()).includes("Smile"));
+  assert.equal(byLabel(root, "Facial observation").props.title, "Facial observations are active");
+  assert.ok(button(root, "Stop sharing"));
 
   await act(async () => { button(root, "Stop sharing").props.onClick(); });
   await flush();
-  assert.deepEqual(socket.sent.at(-1), { type: "expression", event: "stop" });
-  assert.equal(byLabel(root, "Expression cue").props.title, "Hide expression cue");
-  assert.equal(root.root.findAllByProps({ "data-testid": "expression-cue-badge" }).length, 0);
+  assert.deepEqual(socket.sent.at(-1), observationMessage("stop", "req-1"));
 });
 
-test("counselor starts the live cue, sees updates, and stops", async t => {
-  const { root, socket } = await connectedPanel(t, { role: "COUNSELOR", peerRole: "STUDENT" });
-
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], false);
-  await act(async () => { byLabel(root, "Expression cue").props.onClick(); });
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], true);
-  const popover = root.root.findByProps({ id: "expression-cue-popover" });
-  assert.equal(popover.props.tabIndex, -1);
-  assert.equal(popover.props["aria-labelledby"], "expression-cue-heading");
-  await act(async () => {
-    popover.props.onKeyDown({ key: "Escape" });
+test("student sends a separate short-lag suggestion after movement", async t => {
+  const { root, socket } = await connectedPanel(t, {
+    role: "STUDENT",
+    observationDetector: async () => ({ valid: true, movements: ["smile"], unavailable_reason: null }),
+    observationSuggestionsEnabled: true,
+    observationSuggestionDetector: () => new Promise(resolve => {
+      setTimeout(() => resolve({ suggested_expression: "happy", unavailable_reason: null }), 1_300);
+    }),
   });
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], false);
-  await act(async () => { byLabel(root, "Expression cue").props.onClick(); });
-  assert.ok(button(root, "Start live expression cue"));
-  await act(async () => { button(root, "Start live expression cue").props.onClick(); });
-  const request = socket.sent.find(message => message.type === "expression");
-  assert.equal(request.event, "request");
-  assert.ok(request.id.length >= 1 && request.id.length <= 64);
-
-  await act(async () => {
-    socket.message({ type: "expression", event: "consent", id: request.id });
-  });
+  await act(async () => { socket.message(observationMessage("request", "req-1")); });
   await flush();
-  assert.ok(JSON.stringify(root.toJSON()).includes("allowed the live cue"));
-  assert.equal(byLabel(root, "Expression cue").props["aria-expanded"], false, "consent closes the popup");
-  assert.equal(byLabel(root, "Expression cue").props.title, "Expression cue is live");
-
-  await act(async () => {
-    socket.message({
-      type: "expression", event: "result", id: request.id, label: "neutral", confidence: 0.72,
-    });
-  });
+  assert.ok(JSON.stringify(root.toJSON()).includes("separate local expression suggestion"));
+  await act(async () => { button(root, "Allow for this session").props.onClick(); });
   await flush();
-  assert.ok(JSON.stringify(root.toJSON()).includes("Neutral (72% confidence)"));
-  assert.ok(JSON.stringify(root.toJSON()).includes("fa-face-meh"));
-  assert.ok(JSON.stringify(root.toJSON()).includes("not diagnostic accuracy"));
-  assert.match(
-    textOf(root.root.findByProps({ "data-testid": "expression-cue-badge" })),
-    /Live student cue: Neutral \(72% confidence\)/,
-  );
-
-  await act(async () => {
-    socket.message({
-      type: "expression", event: "result", id: request.id, label: "happy", confidence: 0.81,
-    });
-  });
   await flush();
-  assert.ok(JSON.stringify(root.toJSON()).includes("Happy (81% confidence)"));
-  assert.ok(!JSON.stringify(root.toJSON()).includes("Neutral (72% confidence)"));
-  assert.match(
-    textOf(root.root.findByProps({ "data-testid": "expression-cue-badge" })),
-    /Live student cue: Happy \(81% confidence\)/,
-  );
-
-  await act(async () => { byLabel(root, "Expression cue").props.onClick(); });
-  await act(async () => { button(root, "Stop").props.onClick(); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_400)); });
+  const messages = socket.sent.filter(message => message.type === "facial-observation");
+  const observationIndex = messages.findIndex(message => message.event === "observation");
+  const suggestionIndex = messages.findIndex(message => message.event === "suggestion");
+  assert.ok(observationIndex >= 0);
+  assert.ok(suggestionIndex > observationIndex);
+  assert.equal(messages[suggestionIndex].seq, 0);
+  assert.equal(messages[suggestionIndex].suggested_expression, "happy");
+  assert.ok(!JSON.stringify(root.toJSON()).includes("Suggested expression"));
+  await act(async () => { button(root, "Stop sharing").props.onClick(); });
   await flush();
-  assert.deepEqual(socket.sent.at(-1), { type: "expression", event: "stop" });
-  assert.ok(!JSON.stringify(root.toJSON()).includes("Happy (81% confidence)"));
-  assert.equal(byLabel(root, "Expression cue").props.title, "Hide expression cue");
-  assert.equal(root.root.findAllByProps({ "data-testid": "expression-cue-badge" }).length, 0);
 });
 
-test("expression stop and unknown roles do not leak UI or messages", async t => {
+test("counselor sees suggestions separately from movements", async t => {
   const { root, socket } = await connectedPanel(t, {
     role: "COUNSELOR",
     peerRole: "STUDENT",
-    expressionScan: async () => null,
+    observationSuggestionsEnabled: true,
   });
-
-  await act(async () => { byLabel(root, "Expression cue").props.onClick(); });
-  await act(async () => { button(root, "Start live expression cue").props.onClick(); });
-  const request = socket.sent.find(message => message.type === "expression");
+  await act(async () => { byLabel(root, "Facial observation").props.onClick(); });
+  await act(async () => { button(root, "Request facial observations").props.onClick(); });
+  const request = socket.sent.find(message => message.type === "facial-observation");
+  await act(async () => { socket.message(observationMessage("consent", request.request_id)); });
+  await flush();
   await act(async () => {
-    socket.message({ type: "expression", event: "result", id: request.id, label: "sad", confidence: 0.7 });
+    socket.message(observationSlot(request.request_id, 0));
+    socket.message(suggestionMessage(request.request_id, 0, "happy"));
   });
   await flush();
-  assert.ok(JSON.stringify(root.toJSON()).includes("Sad (70% confidence)"));
+  assert.ok(JSON.stringify(root.toJSON()).includes("Suggested expression"));
+  assert.ok(JSON.stringify(root.toJSON()).includes("Happy"));
 
   await act(async () => {
-    socket.message({ type: "expression", event: "stop" });
+    socket.message(observationSlot(request.request_id, 1, []));
+    socket.message(observationSlot(request.request_id, 2));
+    socket.message(suggestionMessage(request.request_id, 2, "sad"));
   });
   await flush();
-  assert.ok(!JSON.stringify(root.toJSON()).includes("Sad (70% confidence)"));
+  await act(async () => { button(root, "Finish observations and review").props.onClick(); });
+  await flush();
+  const text = JSON.stringify(root.toJSON());
+  assert.ok(text.includes("Suggested expressions (estimates)"));
+  assert.ok(text.includes("Movements detected"));
+  assert.ok(text.includes("Suggested expression"));
+  assert.ok(text.includes("Happy"));
+  assert.ok(text.includes("Sad"));
+  assert.ok(text.includes("View details"));
+  assert.ok(text.includes("These are estimates based on facial appearance"));
+  assert.ok(text.includes("Facial observation summary"));
+});
+
+test("counselor finishes the movement review and latest invalid clears the current movement", async t => {
+  const { root, socket } = await connectedPanel(t, { role: "COUNSELOR", peerRole: "STUDENT" });
+  await act(async () => { byLabel(root, "Facial observation").props.onClick(); });
+  await act(async () => { button(root, "Request facial observations").props.onClick(); });
+  const request = socket.sent.find(message => message.type === "facial-observation");
+  await act(async () => { socket.message(observationMessage("consent", request.request_id)); });
+  await flush();
+  for (let seq = 0; seq < 30; seq += 1) {
+    await act(async () => { socket.message(observationSlot(request.request_id, seq)); });
+    await flush();
+  }
+  assert.ok(JSON.stringify(root.toJSON()).includes("Latest check"));
+  await act(async () => {
+    socket.message(observationMessage("observation", request.request_id, {
+      seq: 30, elapsed_ms: 30_000, valid: false, movements: [], unavailable_reason: "CAMERA_OFF",
+    }));
+  });
+  await flush();
+  const latest = textOf(root.root.findByProps({ "data-testid": "latest-check" }));
+  assert.ok(latest.includes("No tracked movement"));
+  assert.ok(latest.includes("Camera off"));
+  assert.ok(!latest.includes("Smile"));
+
+  await act(async () => { button(root, "Finish observations and review").props.onClick(); });
+  await flush();
+  assert.ok(JSON.stringify(root.toJSON()).includes("Facial observation summary"));
+  assert.ok(JSON.stringify(root.toJSON()).includes("Sustained events:"));
+  assert.ok(JSON.stringify(root.toJSON()).includes("Temporary timeline"));
+});
+
+test("student finish, tab hiding, and detector failure keep the call usable", async t => {
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const listeners = {};
+  globalThis.document = {
+    visibilityState: "visible",
+    addEventListener: (type, listener) => { listeners[type] = listener; },
+    removeEventListener: (type, listener) => { if (listeners[type] === listener) delete listeners[type]; },
+  };
+  t.after(() => {
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
+    else delete globalThis.document;
+  });
+
+  const { root, socket } = await connectedPanel(t, {
+    role: "STUDENT",
+    observationDetector: async () => ({ valid: true, movements: ["smile"], unavailable_reason: null }),
+  });
+  await act(async () => { socket.message(observationMessage("request", "req-1")); });
+  await flush();
+  await act(async () => { button(root, "Allow for this session").props.onClick(); });
+  await flush();
+  await flush();
+  document.visibilityState = "hidden";
+  await act(async () => { listeners.visibilitychange(); });
+  await flush();
+  assert.deepEqual(socket.sent.at(-1), observationMessage("stop", "req-1"));
+  assert.equal(button(root, "Stop sharing"), undefined);
 
   await act(async () => {
     root.update(React.createElement(AppointmentCallPanel, { ...props, role: "GUIDANCE_STAFF" }));
   });
-  assert.ok(!JSON.stringify(root.toJSON()).includes("Expression cue"));
-  assert.equal(byLabel(root, "Expression cue"), undefined);
-  assert.equal(button(root, "Start live expression cue"), undefined);
+  assert.equal(byLabel(root, "Facial observation"), undefined);
 });

@@ -131,7 +131,7 @@ async def call_socket(websocket: WebSocket, appointment_id: int):
                 elif kind == "decline":
                     if not call_realtime.registry.decline_observation(appointment_id, request_id):
                         continue
-                elif kind == "observation":
+                elif kind in ("observation", "suggestion"):
                     if not call_realtime.registry.observation_active(appointment_id, request_id):
                         continue
                 elif kind == "finish":

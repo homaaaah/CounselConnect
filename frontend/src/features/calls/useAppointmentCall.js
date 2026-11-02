@@ -37,7 +37,8 @@ export function useAppointmentCall({ appointmentId, canCall }) {
   const [micOn, setMicOn] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [peerRole, setPeerRole] = useState(null);
-  const [observationEvent, setObservationEvent] = useState(null);
+  const [observationVersion, setObservationVersion] = useState(0);
+  const observationQueue = useRef([]);
 
   const mounted = useRef(false);
   const runRef = useRef(0);
@@ -60,6 +61,12 @@ export function useAppointmentCall({ appointmentId, canCall }) {
   const sendObservation = useCallback((payload) => {
     return send({ type: "facial-observation", version: 1, ...payload });
   }, [send]);
+
+  const drainObservationEvents = useCallback(() => {
+    const events = observationQueue.current;
+    observationQueue.current = [];
+    return events;
+  }, []);
 
   const cleanupCall = useCallback(() => {
     const socketInstance = socket.current;
@@ -98,7 +105,8 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     setMicOn(false);
     setCamOn(false);
     setPeerRole(null);
-    setObservationEvent(null);
+    observationQueue.current = [];
+    setObservationVersion(0);
   }, []);
 
   const endLocally = useCallback((reason = "") => {
@@ -241,7 +249,8 @@ export function useAppointmentCall({ appointmentId, canCall }) {
           break;
         case "facial-observation":
           if (mounted.current && run === runRef.current && socket.current === activeSocket) {
-            setObservationEvent(message);
+            observationQueue.current = [...observationQueue.current.slice(-31), message];
+            setObservationVersion(version => version + 1);
           }
           break;
         default:
@@ -374,7 +383,8 @@ export function useAppointmentCall({ appointmentId, canCall }) {
     micOn,
     camOn,
     peerRole,
-    observationEvent,
+    observationVersion,
+    drainObservationEvents,
     active: Boolean(localStream) || ["joining", "waiting", "negotiating", "connected"].includes(phase),
     join,
     hangUp,

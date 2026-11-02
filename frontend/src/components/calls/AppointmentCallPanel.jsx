@@ -57,6 +57,9 @@ export default function AppointmentCallPanel({
   selfName,
   role,
   observationDetector,
+  observationSuggestionDetector,
+  observationSuggestionsEnabled,
+  observationCapture,
 }) {
   const call = useAppointmentCall({ appointmentId, canCall });
   const localVideoRef = useRef(null);
@@ -68,6 +71,7 @@ export default function AppointmentCallPanel({
   const observationButtonRef = useRef(null);
   const observationWasOpenRef = useRef(false);
   const handleObservationStatus = useCallback(next => setObservationStatus(next), []);
+  const openObservation = useCallback(() => setObservationOpen(true), []);
 
   useEffect(() => {
     const video = remoteVideoRef.current;
@@ -87,12 +91,6 @@ export default function AppointmentCallPanel({
       cancelled = true;
     };
   }, [call.remoteStream]);
-
-  useEffect(() => {
-    if (role === "STUDENT" && call.observationEvent?.event === "request") {
-      setObservationOpen(true);
-    }
-  }, [call.observationEvent, role]);
 
   useEffect(() => {
     if (call.phase !== "connected") {
@@ -300,10 +298,15 @@ export default function AppointmentCallPanel({
                         localStream={call.localStream}
                         camOn={call.camOn}
                         phase={call.phase}
-                        observationEvent={call.observationEvent}
+                        observationVersion={call.observationVersion}
+                        drainObservationEvents={call.drainObservationEvents}
                         sendObservation={call.sendObservation}
                         onStatusChange={handleObservationStatus}
+                        onOpen={openObservation}
                         detector={observationDetector}
+                        suggestionDetector={observationSuggestionDetector}
+                        suggestionsEnabled={observationSuggestionsEnabled}
+                        capture={observationCapture}
                       />
                     </div>
                   </div>

@@ -7,24 +7,75 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  MOVEMENTS,
   MOVEMENT_LABELS,
+  SUGGESTED_EXPRESSIONS,
+  SUGGESTION_LABELS,
+  SUGGESTION_UNAVAILABLE,
   UNAVAILABLE_LABELS,
   applyObservationSlot,
+  applySuggestion,
   buildFacts,
+  buildReviewRows,
+  buildSuggestionStats,
   buildTimeline,
   createObservationState,
   finishObservation,
   formatElapsed,
   formatPercent,
+  latestCheck,
+  latestSuggestion,
   renderObservationBullets,
   renderObservationSentence,
   startCollecting,
 } from "../../features/facialObservation/observation";
-import { detectObservation } from "../../features/facialObservation/observationModel";
+import { captureFrame, detectObservation } from "../../features/facialObservation/observationModel";
+import { SUGGESTIONS_ENABLED, detectSuggestion, warmSuggestionModel } from "../../features/facialObservation/suggestionModel";
 
 const primaryButton = "rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50";
 const secondaryButton = "rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50";
 const quietButton = "rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100";
+const SUGGESTION_MAX_LAG_TICKS = 5;
+
+function ObservationTimeline({ timeline, truncated }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-sm font-medium text-slate-800">Temporary timeline</p>
+      {timeline.length ? (
+        <ul className="mt-2 space-y-1 text-xs text-slate-600">
+          {timeline.slice(-8).map((event, index) => (
+            <li key={`${event.movement}-${event.startMs}-${index}`}>
+              {formatElapsed(event.startMs)}–{formatElapsed(event.endMs)} · {MOVEMENT_LABELS[event.movement]}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs text-slate-500">No supported movement events yet.</p>
+      )}
+      {truncated && <p className="mt-2 text-xs text-amber-700">The visible timeline is truncated; full-cycle counts are preserved.</p>}
+    </div>
+  );
+}
+
+function suggestionRowText(row) {
+  if (row.tie) return "No single most common suggestion";
+  if (row.suggestion) return SUGGESTION_LABELS[row.suggestion];
+  if (row.checks === row.missing) return "No suggestion";
+  if (row.unavailable > 0) return "Suggestion unavailable";
+  return "No suggestion";
+}
+
+function suggestionDetails(stats) {
+  const counts = SUGGESTED_EXPRESSIONS
+    .filter(expression => stats.counts[expression] > 0)
+    .map(expression => `${SUGGESTION_LABELS[expression]}: ${stats.counts[expression]}`);
+  return {
+    counts: counts.length ? counts.join("; ") : "No expression suggestions",
+    missing: stats.missing,
+    unavailable: stats.unavailable,
+    tied: stats.tied,
+  };
+}
 
 function newRequestId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -33,23 +84,20 @@ function newRequestId() {
   return `obs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function latestMovements(state) {
-  for (let index = state.slots.length - 1; index >= 0; index -= 1) {
-    const slot = state.slots[index];
-    if (slot.valid) return slot.movements;
-  }
-  return [];
-}
-
 export default function FacialObservationPanel({
   role,
   localStream,
   camOn,
   phase,
-  observationEvent,
+  observationVersion,
+  drainObservationEvents,
   sendObservation,
   onStatusChange,
+  onOpen,
   detector = detectObservation,
+  suggestionDetector = detectSuggestion,
+  suggestionsEnabled = SUGGESTIONS_ENABLED,
+  capture = captureFrame,
 }) {
   const isCounselor = role === "COUNSELOR";
   const isStudent = role === "STUDENT";
@@ -69,7 +117,7 @@ export default function FacialObservationPanel({
   const inFlightRef = useRef(false);
   const requestIdRef = useRef(null);
   const camOnRef = useRef(camOn);
-  const lastEventRef = useRef(null);
+  const suggestionInFlightRef = useRef(false);
 
   useEffect(() => {
     camOnRef.current = camOn;
@@ -84,6 +132,7 @@ export default function FacialObservationPanel({
     abortRef.current = null;
     controller?.abort();
     inFlightRef.current = false;
+    suggestionInFlightRef.current = false;
   }, []);
 
   const resetLocal = useCallback((message = "") => {
@@ -111,7 +160,8 @@ export default function FacialObservationPanel({
     startedAtRef.current = Date.now();
     setStatus("collecting");
     setStatusText("Sharing facial observations.");
-    setTrackingStatus("Starting local observation…");
+    setTrackingStatus("Starting local observation...");
+    if (suggestionsEnabled) warmSuggestionModel();
 
     const tick = async () => {
       if (controller.signal.aborted) return;
@@ -131,9 +181,17 @@ export default function FacialObservationPanel({
         setTrackingStatus("Camera off.");
         return;
       }
+      const frame = capture(videoRef.current);
+      if (!frame) {
+        send("observation", id, {
+          seq, elapsed_ms, valid: false, movements: [], unavailable_reason: "LOW_QUALITY",
+        });
+        setTrackingStatus("Reading unavailable.");
+        return;
+      }
       inFlightRef.current = true;
       try {
-        const result = await detector(videoRef.current, { signal: controller.signal });
+        const result = await detector(frame, { signal: controller.signal });
         if (controller.signal.aborted) return;
         const valid = Boolean(result?.valid);
         const movements = valid ? (result?.movements ?? []) : [];
@@ -154,6 +212,34 @@ export default function FacialObservationPanel({
         setTrackingStatus(valid
           ? "Local observation active."
           : (UNAVAILABLE_LABELS[slot.unavailable_reason] || "Unable to observe."));
+        if (valid && suggestionsEnabled && !suggestionInFlightRef.current) {
+          suggestionInFlightRef.current = true;
+          const suggestionSeq = seq;
+          Promise.resolve()
+            .then(() => suggestionDetector(frame, { signal: controller.signal }))
+            .then((suggestion) => {
+              if (controller.signal.aborted || seqRef.current - suggestionSeq > SUGGESTION_MAX_LAG_TICKS) return;
+              const expression = SUGGESTED_EXPRESSIONS.includes(suggestion?.suggested_expression)
+                ? suggestion.suggested_expression
+                : null;
+              send("suggestion", id, {
+                seq: suggestionSeq,
+                suggested_expression: expression,
+                unavailable_reason: expression ? null : SUGGESTION_UNAVAILABLE,
+              });
+            })
+            .catch(() => {
+              if (controller.signal.aborted || seqRef.current - suggestionSeq > SUGGESTION_MAX_LAG_TICKS) return;
+              send("suggestion", id, {
+                seq: suggestionSeq,
+                suggested_expression: null,
+                unavailable_reason: SUGGESTION_UNAVAILABLE,
+              });
+            })
+            .finally(() => {
+              suggestionInFlightRef.current = false;
+            });
+        }
       } catch {
         if (!controller.signal.aborted) {
           send("observation", id, {
@@ -174,7 +260,7 @@ export default function FacialObservationPanel({
 
     timerRef.current = setInterval(tick, 1000);
     void tick();
-  }, [detector, send, stopDetector]);
+  }, [capture, detector, send, stopDetector, suggestionDetector, suggestionsEnabled]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -190,64 +276,73 @@ export default function FacialObservationPanel({
   }, [localStream]);
 
   useEffect(() => {
-    const event = observationEvent;
-    if (!event || lastEventRef.current === event || event.version !== 1) return;
-    lastEventRef.current = event;
-
-    if (isStudent) {
-      if (event.event === "request") {
-        stopDetector();
-        setRequestId(event.request_id);
-        requestIdRef.current = event.request_id;
-        setConsentOpen(true);
-        setStatus("requested");
-        setStatusText("The Counselor requested facial observations.");
-        setTrackingStatus("");
-        setError("");
+    const events = drainObservationEvents?.() ?? [];
+    if (!events.length) return;
+    const handleEvent = (event) => {
+      if (isStudent) {
+        if (event.event === "request") {
+          stopDetector();
+          setRequestId(event.request_id);
+          requestIdRef.current = event.request_id;
+          setConsentOpen(true);
+          setStatus("requested");
+          setStatusText("The Counselor requested facial observations.");
+          setTrackingStatus("");
+          setError("");
+          onOpen?.();
+          return;
+        }
+        if (event.event === "finish" && event.request_id === requestIdRef.current) {
+          stopDetector();
+          setRequestId(null);
+          requestIdRef.current = null;
+          setConsentOpen(false);
+          setStatus("finished");
+          setStatusText("The Counselor finished the observations.");
+          setTrackingStatus("");
+          return;
+        }
+        if (event.event === "stop") {
+          resetLocal("Facial observations stopped.");
+          setStatus("stopped");
+        }
         return;
       }
-      if (event.event === "finish" && event.request_id === requestIdRef.current) {
-        stopDetector();
+
+      if (!isCounselor) return;
+      if (event.event === "consent" && event.request_id === requestIdRef.current) {
+        setStatus("collecting");
+        setObservation(prev => startCollecting(prev));
+        setStatusText("The Student allowed facial observations.");
+        return;
+      }
+      if (event.event === "decline" && event.request_id === requestIdRef.current) {
         setRequestId(null);
         requestIdRef.current = null;
-        setConsentOpen(false);
-        setStatus("finished");
-        setStatusText("The Counselor finished the observations.");
-        setTrackingStatus("");
+        setObservation(createObservationState());
+        setStatus("declined");
+        setStatusText("The Student declined facial observations. The call is unaffected.");
+        return;
+      }
+      if (event.event === "observation" && event.request_id === requestIdRef.current) {
+        setObservation(prev => applyObservationSlot(prev, event));
+        setStatus("collecting");
+        return;
+      }
+      if (event.event === "suggestion" && event.request_id === requestIdRef.current) {
+        setObservation(prev => applySuggestion(prev, event));
+        setStatus("collecting");
         return;
       }
       if (event.event === "stop") {
         resetLocal("Facial observations stopped.");
         setStatus("stopped");
       }
-      return;
+    };
+    for (const event of events) {
+      if (event?.version === 1) handleEvent(event);
     }
-
-    if (!isCounselor) return;
-    if (event.event === "consent" && event.request_id === requestIdRef.current) {
-      setStatus("collecting");
-      setObservation(prev => startCollecting(prev));
-      setStatusText("The Student allowed facial observations.");
-      return;
-    }
-    if (event.event === "decline" && event.request_id === requestIdRef.current) {
-      setRequestId(null);
-      requestIdRef.current = null;
-      setObservation(createObservationState());
-      setStatus("declined");
-      setStatusText("The Student declined facial observations. The call is unaffected.");
-      return;
-    }
-    if (event.event === "observation" && event.request_id === requestIdRef.current) {
-      setObservation(prev => applyObservationSlot(prev, event));
-      setStatus("collecting");
-      return;
-    }
-    if (event.event === "stop") {
-      resetLocal("Facial observations stopped.");
-      setStatus("stopped");
-    }
-  }, [isCounselor, isStudent, observationEvent, resetLocal, stopDetector]);
+  }, [drainObservationEvents, isCounselor, isStudent, observationVersion, onOpen, resetLocal, stopDetector]);
 
   useEffect(() => {
     if (phase === "connected") return;
@@ -357,9 +452,28 @@ export default function FacialObservationPanel({
     setStatus("idle");
   }
 
-  const facts = buildFacts(observation);
   const timeline = buildTimeline(observation.slots);
-  const current = latestMovements(observation);
+  const facts = buildFacts(observation, timeline);
+  const reviewRows = buildReviewRows(observation);
+  const suggestionStats = buildSuggestionStats(observation);
+  const latestSuggestionValue = latestSuggestion(observation);
+  const latest = latestCheck(observation);
+  const currentLabel = latest
+    ? (latest.valid && latest.movements.length
+      ? latest.movements.map(movement => MOVEMENT_LABELS[movement]).join(", ")
+      : "No tracked movement")
+    : "No observations yet";
+  const readingLabel = latest
+    ? (latest.valid ? "Usable reading" : (UNAVAILABLE_LABELS[latest.unavailable_reason] || "Reading unavailable"))
+    : "Waiting for the first check.";
+  const latestSuggestionLabel = latestSuggestionValue?.status === "label"
+    ? SUGGESTION_LABELS[latestSuggestionValue.expression]
+    : latestSuggestionValue?.status === "unavailable"
+      ? "Suggestion unavailable"
+      : "No suggestion yet";
+  const suggestionInfo = suggestionDetails(suggestionStats);
+  const positiveSummary = MOVEMENTS.map(movement => `${MOVEMENT_LABELS[movement]}: ${facts.counts[movement]}`).join("; ");
+  const eventSummary = MOVEMENTS.map(movement => `${MOVEMENT_LABELS[movement]}: ${facts.eventCounts[movement]}`).join("; ");
   const expiresLabel = observation.expiresAt
     ? new Date(observation.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "";
@@ -386,7 +500,8 @@ export default function FacialObservationPanel({
       {isStudent && consentOpen && (
         <div className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
           <p role="status" className="text-sm text-slate-800">
-            With your permission, your device will detect selected visible facial movements during this call and share observation data with your assigned Counselor. These observations do not determine how you feel. The Counselor can view a temporary timeline and summary. No images or observation history are saved. You can decline or stop without losing access to counseling.
+            With your permission, your device will detect selected visible facial movements during this call
+            {suggestionsEnabled ? " and a separate local expression suggestion" : ""} and share observation data with your assigned Counselor. These observations and suggestions do not determine how you feel. The Counselor can view a temporary timeline and summary. No images or observation history are saved. You can decline or stop without losing access to counseling.
           </p>
           {!camOn && <p role="status" className="text-sm text-slate-700">Turn your camera on to allow this.</p>}
           <div className="flex flex-wrap gap-2">
@@ -432,29 +547,20 @@ export default function FacialObservationPanel({
 
           {status === "collecting" && (
             <>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div data-testid="latest-check" className="rounded-lg border border-slate-200 bg-white p-3">
                 <p className="text-sm text-slate-800">
-                  Current supported movement: <strong>{current.length ? current.map(movement => MOVEMENT_LABELS[movement]).join(", ") : "None in the latest usable sample"}</strong>
+                  Latest check: <strong>{currentLabel}</strong>
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Usable samples: {facts.valid} of {facts.expected} ({formatPercent(facts.coverage)}% coverage).
+                  Reading: {readingLabel} · Usable samples: {facts.valid} of {facts.expected} ({formatPercent(facts.coverage)}% coverage).
                 </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-sm font-medium text-slate-800">Temporary timeline</p>
-                {timeline.length ? (
-                  <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                    {timeline.slice(-8).map((event, index) => (
-                      <li key={`${event.movement}-${event.startMs}-${index}`}>
-                        {formatElapsed(event.startMs)}–{formatElapsed(event.endMs)} · {MOVEMENT_LABELS[event.movement]}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500">No supported movement events yet.</p>
+                {suggestionsEnabled && (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Suggested expression: <strong>{latestSuggestionLabel}</strong>
+                  </p>
                 )}
-                {observation.truncated && <p className="mt-2 text-xs text-amber-700">The visible timeline is truncated; full-cycle counts are preserved.</p>}
               </div>
+              <ObservationTimeline timeline={timeline} truncated={observation.truncated} />
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={primaryButton} onClick={finishObservations}>
                   Finish observations and review
@@ -493,6 +599,50 @@ export default function FacialObservationPanel({
                     </ul>
                   )}
                 </div>
+              </div>
+              {suggestionsEnabled && (
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-sm font-medium text-slate-800">Suggested expressions (estimates)</p>
+                  {reviewRows.length ? (
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-600">
+                        <thead>
+                          <tr>
+                            <th className="pr-3 font-medium">Time</th>
+                            <th className="pr-3 font-medium">Movements detected</th>
+                            <th className="font-medium">Suggested expression</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reviewRows.slice(-12).map((row, index) => (
+                            <tr key={`${row.startMs}-${row.endMs}-${index}`}>
+                              <td className="pr-3 align-top">{formatElapsed(row.startMs)}–{formatElapsed(row.endMs)}</td>
+                              <td className="pr-3 align-top">{row.movements.map(movement => MOVEMENT_LABELS[movement]).join(", ")}</td>
+                              <td className="align-top">{suggestionRowText(row)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">No movement intervals to review.</p>
+                  )}
+                  <details className="mt-3 text-xs text-slate-600">
+                    <summary className="cursor-pointer font-medium text-slate-700">View details</summary>
+                    <p className="mt-2">Suggestions: {suggestionInfo.counts}</p>
+                    <p>Missing checks: {suggestionInfo.missing} · Unavailable checks: {suggestionInfo.unavailable}</p>
+                    {suggestionInfo.tied && <p>No single most common suggestion.</p>}
+                  </details>
+                  <p className="mt-2 text-xs text-slate-500">
+                    These are estimates based on facial appearance. They do not tell us how the student felt.
+                  </p>
+                </div>
+              )}
+              <ObservationTimeline timeline={timeline} truncated={observation.truncated} />
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-sm font-medium text-slate-800">Details</p>
+                <p className="mt-1 text-xs text-slate-600">Positive checks: {positiveSummary}</p>
+                <p className="mt-1 text-xs text-slate-600">Sustained events: {eventSummary}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={quietButton} onClick={clearReview}>Clear review</button>
