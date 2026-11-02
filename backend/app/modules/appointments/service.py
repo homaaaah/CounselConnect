@@ -77,29 +77,45 @@ class AppointmentsService(BaseService[Appointment]):
     def ensure_schedule_slots(self, start_date, end_date, counselor_id=None):
         """Materialize only the searched dates from active weekly schedules."""
         schedules = self.repository.active_weekly_schedules(counselor_id)
+        if not schedules:
+            return
+        manila = ZoneInfo("Asia/Manila")
+        range_start = db_time(datetime.combine(start_date, time.min, tzinfo=manila))
+        range_end = db_time(datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=manila))
+        counselor_ids = {schedule.counselor_user_id for schedule in schedules}
+        # One read each for the whole range instead of two queries per candidate
+        # slot. The in-memory key set already includes slots added this call, so
+        # repeated schedules cannot double-insert.
+        blocked_by_counselor = {}
+        for block in self.repository.availability_blocks_in_range(
+            counselor_ids, range_start, range_end
+        ):
+            blocked_by_counselor.setdefault(block.counselor_user_id, []).append(block)
+        existing_by_key = {
+            (slot.counselor_user_id, slot.campus_id, slot.starts_at, slot.ends_at): slot
+            for slot in self.repository.slots_in_range(counselor_ids, range_start, range_end)
+        }
         changed = 0
         for offset in range((end_date - start_date).days + 1):
             day = start_date + timedelta(days=offset)
             for schedule in schedules:
                 if day.isoweekday() != schedule.day_of_week:
                     continue
-                local_start = datetime.combine(day, schedule.start_time, tzinfo=ZoneInfo("Asia/Manila"))
-                local_end = datetime.combine(day, schedule.end_time, tzinfo=ZoneInfo("Asia/Manila"))
+                local_start = datetime.combine(day, schedule.start_time, tzinfo=manila)
+                local_end = datetime.combine(day, schedule.end_time, tzinfo=manila)
                 duration = timedelta(minutes=schedule.slot_duration_minutes)
                 while local_start < local_end:
                     start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
                     end = (local_start + duration).astimezone(timezone.utc).replace(tzinfo=None)
-                    if not self.repository.overlapping_availability_blocks(
-                        schedule.counselor_user_id, start, end
+                    blocked = blocked_by_counselor.get(schedule.counselor_user_id, ())
+                    if not any(
+                        block.starts_at < end and block.ends_at > start
+                        for block in blocked
                     ):
-                        existing = self.repository.find_slot_exact(
-                            schedule.counselor_user_id,
-                            schedule.campus_id,
-                            start,
-                            end,
-                        )
+                        key = (schedule.counselor_user_id, schedule.campus_id, start, end)
+                        existing = existing_by_key.get(key)
                         if existing is None:
-                            self.repository.session.add(AvailabilitySlot(
+                            slot = AvailabilitySlot(
                                 counselor_user_id=schedule.counselor_user_id,
                                 campus_id=schedule.campus_id,
                                 delivery_mode=schedule.delivery_mode,
@@ -107,7 +123,9 @@ class AppointmentsService(BaseService[Appointment]):
                                 ends_at=end,
                                 status="AVAILABLE",
                                 weekly_schedule_id=schedule.weekly_schedule_id,
-                            ))
+                            )
+                            self.repository.session.add(slot)
+                            existing_by_key[key] = slot
                             changed += 1
                         elif existing.status == "AVAILABLE" and (
                             existing.delivery_mode != schedule.delivery_mode
@@ -461,7 +479,12 @@ class AppointmentsService(BaseService[Appointment]):
         starts_at = db_time(slot.starts_at)
         ends_at = db_time(slot.ends_at)
         student_window = self._student_change_window_open(actor, starts_at, moment)
-        has_activity = self._has_chat_activity(appointment)
+        # Chat activity only feeds can_reschedule / can_change_mode, both
+        # CONFIRMED-only; every other row skips two queries.
+        has_activity = (
+            appointment.status == "CONFIRMED"
+            and self._has_chat_activity(appointment)
+        )
         return AppointmentResponse(
             **{
                 name: getattr(appointment, name)
@@ -576,6 +599,7 @@ class AppointmentsService(BaseService[Appointment]):
             db_time(starts_after) if starts_after else None,
             db_time(ends_before) if ends_before else None,
         )
+        self.repository.preload_appointment_refs(items)
         return dict(
             items=[self.appointment_response(a, actor) for a in items],
             total=total,

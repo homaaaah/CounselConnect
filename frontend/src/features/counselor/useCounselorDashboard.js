@@ -50,27 +50,18 @@ const dayOffset = (start, day) =>
   Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000);
 
 const PAGE_SIZE = 100;
-const MAX_PAGES = 20;
 
 /**
- * Read every page of a ranged appointment query.
+ * Read one page of a ranged appointment query.
  *
- * One page is not the complete set: the documented maximum is 100 records, so
- * a full page means "more may follow" until the envelope total is reached.
+ * ponytail: this used to page. Every extra page re-runs the backend's per-row
+ * response builder, so the dashboard's two ranges could fire ~40 sequential
+ * requests. One page covers a day/week of a single Counselor. If a range can
+ * exceed 100 rows, add a server-side per-day aggregate rather than looping here.
  */
-async function fetchAllRows(range, isCancelled) {
-  const rows = [];
-  let page = 1;
-  let total = Infinity;
-  while (!isCancelled() && page <= MAX_PAGES) {
-    const data = await request(`/appointments?page=${page}&page_size=${PAGE_SIZE}&${range}`);
-    const batch = data?.items ?? [];
-    rows.push(...batch);
-    total = typeof data?.total === "number" ? data.total : rows.length;
-    if (batch.length < PAGE_SIZE || rows.length >= total) break;
-    page += 1;
-  }
-  return rows;
+async function fetchRows(range) {
+  const data = await request(`/appointments?page=1&page_size=${PAGE_SIZE}&${range}`);
+  return data?.items ?? [];
 }
 
 export function useCounselorDashboard(user) {
@@ -91,7 +82,7 @@ export function useCounselorDashboard(user) {
     const range = `starts_after=${encodeURIComponent(manilaMidnight(today))}`
       + `&ends_before=${encodeURIComponent(manilaMidnight(addDays(today, 1)))}`;
 
-    fetchAllRows(range, () => cancelled)
+    fetchRows(range)
       .then((rows) => {
         if (cancelled) return;
         setItems(rows
@@ -115,7 +106,7 @@ export function useCounselorDashboard(user) {
     const range = `starts_after=${encodeURIComponent(manilaMidnight(monday))}`
       + `&ends_before=${encodeURIComponent(manilaMidnight(addDays(monday, 7)))}`;
 
-    fetchAllRows(range, () => cancelled)
+    fetchRows(range)
       .then((rows) => {
         if (cancelled) return;
         const myCases = Array(7).fill(0);

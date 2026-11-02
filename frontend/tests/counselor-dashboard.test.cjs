@@ -143,17 +143,17 @@ test("weekly volume counts the current Manila week and skips cancelled/rejected"
   assert.match(body, /Sun: 0/);
 });
 
-test("weekly volume requests the Mon-Sun range and reads every page", async (t) => {
+test("weekly volume requests the Mon-Sun range in a single page", async (t) => {
   const monday = mondayOf(manilaToday());
   const week = Array.from({ length: 101 }, (_, i) => appointmentAt(i + 1, addDays(monday, i % 7), 8));
   const calls = setup(t, { week });
   await mount(t);
-  await waitFor(() => calls.some((call) => call.params.starts_after
-    && call.params.page === "2" && spanDays(call.params) === 7));
+  await waitFor(() => calls.some((call) => call.params.starts_after && spanDays(call.params) === 7));
 
-  const firstPage = calls.find((call) => call.params.starts_after
-    && call.params.page === "1" && spanDays(call.params) === 7);
-  assert.ok(firstPage, "a seven-day range is requested");
+  const weekCalls = calls.filter((call) => call.params.starts_after && spanDays(call.params) === 7);
+  assert.equal(weekCalls.length, 1, "the week is read in a single request, not a page loop");
+  const firstPage = weekCalls[0];
+  assert.equal(firstPage.params.page, "1");
   assert.equal(firstPage.params.page_size, "100");
   assert.equal(firstPage.params.starts_after, new Date(`${monday}T00:00:00+08:00`).toISOString());
   assert.equal(firstPage.params.ends_before,

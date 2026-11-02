@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -22,16 +22,26 @@ def service_with(existing):
     service = object.__new__(AppointmentsService)
     service.repository = Mock()
     service.repository.active_weekly_schedules.return_value = [schedule()]
-    service.repository.overlapping_availability_blocks.return_value = []
-    service.repository.find_slot_exact.return_value = existing
+    # Materialization now prefetches the range once instead of per-slot reads.
+    service.repository.availability_blocks_in_range.return_value = []
+    service.repository.slots_in_range.return_value = [existing] if existing is not None else []
     return service
 
 
+def existing_slot(**overrides):
+    # Generated 08:00-09:00 Asia/Manila on 2026-09-17 is 00:00-01:00 UTC.
+    return SimpleNamespace(
+        counselor_user_id=25,
+        campus_id=1,
+        starts_at=datetime(2026, 9, 17, 0, 0),
+        ends_at=datetime(2026, 9, 17, 1, 0),
+        **overrides,
+    )
+
+
 def test_active_schedule_updates_matching_available_slot_mode():
-    existing = SimpleNamespace(
-        status="AVAILABLE",
-        delivery_mode="FACE_TO_FACE",
-        weekly_schedule_id=None,
+    existing = existing_slot(
+        status="AVAILABLE", delivery_mode="FACE_TO_FACE", weekly_schedule_id=None
     )
     service = service_with(existing)
 
@@ -44,10 +54,8 @@ def test_active_schedule_updates_matching_available_slot_mode():
 
 
 def test_active_schedule_does_not_change_reserved_slot():
-    existing = SimpleNamespace(
-        status="RESERVED",
-        delivery_mode="FACE_TO_FACE",
-        weekly_schedule_id=None,
+    existing = existing_slot(
+        status="RESERVED", delivery_mode="FACE_TO_FACE", weekly_schedule_id=None
     )
     service = service_with(existing)
 
@@ -72,8 +80,8 @@ def test_newly_extended_schedule_materializes_each_full_future_slot():
         slot_duration_minutes=60,
         delivery_mode="BOTH",
     )]
-    service.repository.overlapping_availability_blocks.return_value = []
-    service.repository.find_slot_exact.return_value = None
+    service.repository.availability_blocks_in_range.return_value = []
+    service.repository.slots_in_range.return_value = []
 
     service.ensure_schedule_slots(date(2026, 9, 16), date(2026, 9, 16), 25)
 

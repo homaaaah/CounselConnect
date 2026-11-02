@@ -26,11 +26,13 @@ export function useSession() {
     setSessionActivityHandler(() => {
       setState(previous => {
         if (!previous.user || !previous.absoluteExpiresAt) return previous;
-        const idle = Math.min(
-          Date.now() + 60 * 60_000,
-          new Date(previous.absoluteExpiresAt).getTime(),
-        );
-        return { ...previous, idleExpiresAt: new Date(idle).toISOString() };
+        const absoluteMs = new Date(previous.absoluteExpiresAt).getTime();
+        const idleMs = Math.min(Date.now() + 60 * 60_000, absoluteMs);
+        // ponytail: idle only feeds the expiry warning, so refresh it at most
+        // once a minute instead of re-rendering the whole app on every response.
+        const bucket = Math.floor(idleMs / 60_000);
+        if (previous.idleBucket === bucket) return previous;
+        return { ...previous, idleExpiresAt: new Date(idleMs).toISOString(), idleBucket: bucket };
       });
     });
     return () => {

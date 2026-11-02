@@ -210,18 +210,49 @@ class AppointmentsRepository(BaseRepository[Appointment]):
         return block
 
     def find_slot(self, slot_id, *, lock=False):
-        stmt = select(AvailabilitySlot).where(AvailabilitySlot.slot_id == slot_id)
         if lock:
-            stmt = stmt.with_for_update().execution_options(populate_existing=True)
-        return self.session.scalar(stmt)
+            return self.session.scalar(
+                select(AvailabilitySlot)
+                .where(AvailabilitySlot.slot_id == slot_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        # session.get() reuses the identity map, so a list can preload slots once
+        # (see preload_appointment_refs) instead of one SELECT per row.
+        return self.session.get(AvailabilitySlot, slot_id)
 
-    def find_slot_exact(self, counselor_id, campus_id, starts_at, ends_at):
-        return self.session.scalar(select(AvailabilitySlot).where(
-            AvailabilitySlot.counselor_user_id == counselor_id,
-            AvailabilitySlot.campus_id == campus_id,
-            AvailabilitySlot.starts_at == starts_at,
-            AvailabilitySlot.ends_at == ends_at,
+    def slots_in_range(self, counselor_ids, starts_after, ends_before):
+        """All-status slots starting in the range, for schedule materialization."""
+        return list(self.session.scalars(
+            select(AvailabilitySlot).where(
+                AvailabilitySlot.counselor_user_id.in_(counselor_ids),
+                AvailabilitySlot.starts_at >= starts_after,
+                AvailabilitySlot.starts_at < ends_before,
+            )
         ))
+
+    def availability_blocks_in_range(self, counselor_ids, starts_at, ends_at):
+        return list(self.session.scalars(
+            select(CounselorAvailabilityBlock).where(
+                CounselorAvailabilityBlock.counselor_user_id.in_(counselor_ids),
+                CounselorAvailabilityBlock.starts_at < ends_at,
+                CounselorAvailabilityBlock.ends_at > starts_at,
+            )
+        ))
+
+    def preload_appointment_refs(self, appointments):
+        """Warm the identity map so list responses avoid per-row slot/user reads."""
+        slot_ids = {item.availability_slot_id for item in appointments}
+        user_ids = {item.student_user_id for item in appointments}
+        user_ids.update(item.counselor_user_id for item in appointments)
+        if slot_ids:
+            list(self.session.scalars(
+                select(AvailabilitySlot).where(AvailabilitySlot.slot_id.in_(slot_ids))
+            ))
+        if user_ids:
+            list(self.session.scalars(
+                select(User).where(User.user_id.in_(user_ids))
+            ))
 
     def lock_appointment(self, appointment_id):
         return self.session.scalar(

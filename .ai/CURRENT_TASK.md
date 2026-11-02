@@ -1,4 +1,75 @@
-# Current work: Facial observation prototype
+# Current work: Performance — request fan-out and per-request re-renders
+
+## Task: Reduce dashboard request fan-out and per-request re-renders (2026-11-02)
+
+**Status: COMPLETED**
+**Risk: MEDIUM** for the frontend + `appointment_response` changes; **HIGH** for the
+`ensure_schedule_slots` materialization rewrite (scheduling path).
+**Route:** `appointments` (`.ai/CONTEXT_MAP.md`).
+
+Objective: remove the recently added request amplification that slowed the system:
+1. The Counselor dashboard stops fanning out up to 40 sequential `/appointments`
+   requests (`fetchAllRows`) and issues one bounded request per range.
+2. `useSession` stops writing state — and re-rendering the whole app — on every
+   successful API response.
+3. `appointment_response` skips the two chat-activity queries unless the
+   appointment is CONFIRMED.
+4. `ensure_schedule_slots` prefetches blocks and existing slots once per call
+   instead of running two queries per candidate slot.
+5. `list_appointments` preloads slots/users once per page and `find_slot` reuses
+   the identity map, removing per-row slot/student reads.
+
+Scope in: `frontend/src/features/counselor/useCounselorDashboard.js`,
+`frontend/src/features/auth/useSession.js`,
+`backend/app/modules/appointments/service.py`,
+`backend/app/modules/appointments/repository.py`,
+`backend/app/tests/unit/test_schedule_slot_materialization.py`.
+Scope out: endpoint contracts, schema, timer/poll cadence.
+
+Acceptance criteria:
+- One `/appointments` request per dashboard range (no client page loop).
+- Session activity handler refreshes idle at most once a minute, not per response.
+- `/appointments` response shape unchanged; non-CONFIRMED rows skip chat queries.
+- Scheduling materialization behaviour unchanged (blocked-date skip, AVAILABLE
+  mode/schedule update, RESERVED untouched, flush only when something changed).
+
+## Result
+
+Implemented all five changes. Verification recorded below.
+
+## Verification
+
+- `node --test tests/counselor-dashboard.test.cjs tests/session.test.cjs tests/session-records.test.cjs` — 35 passed, 0 failed.
+- Full frontend `node --test tests/**/*.test.cjs` — 176 passed, 14 failed. All 14 failures are outside the
+  changed files and pre-existing in the working tree: facial-observation (9; removed exports/movement
+  vs stale tests), appointment-call expression cue (3), appointments calendar date-drift (2, today
+  2026-11-02). Dashboard, session, and session-records suites all pass.
+- `pytest app/tests/unit -q` — 179 passed, 51 skipped.
+- `pytest app/tests/integration/test_appointments.py -q` — 68 skipped (live-DB marker not enabled here).
+- `python -m py_compile app/modules/appointments/service.py` — passed.
+- `git diff --check` could not run: the shell cwd is not the repo (paths contain `[1]`/`[0]` and `git`
+  reports "not a repository"); changed regions were inspected directly instead.
+- Round 2: `pytest app/tests/unit -q` — 179 passed, 51 skipped (includes the rewritten
+  `test_schedule_slot_materialization.py` against the new prefetch interface).
+- Round 2: `python -m py_compile` on `service.py` and `repository.py` — passed.
+- Round 2: `pytest app/tests/integration/test_appointments.py -q` — 68 skipped
+  (needs `COUNSELCONNECT_TEST_DATABASE_URL` and a dedicated `counselconnect_test` schema;
+  not provisioned in this environment).
+- Round 2: fresh read-only review (independent explore-agent) of the HIGH-risk scheduling
+  change — no correctness regressions found. Two cleanups applied: removed the now-dead
+  `find_slot_exact`, and extended `preload_appointment_refs` to warm counselor users too.
+  Unit suite rerun after cleanup: 179 passed, 51 skipped; py_compile clean.
+
+Behavior preserved: `has_activity` is consumed only by the CONFIRMED-only `can_reschedule` /
+`can_change_mode` fields (service.py:496-497), so skipping it for other statuses changes no response field.
+
+Limitations: the dashboard reads at most 100 rows per range — a Counselor-week over 100 rows
+undercounts the chart (named ceiling; add a server-side per-day aggregate if it binds). Session idle
+refreshes at most once a minute; still accurate for the 5-minute expiry warning.
+
+---
+
+# Prior work: Facial observation prototype
 
 ## Task: MediaPipe facial observation prototype (2026-10-28)
 
